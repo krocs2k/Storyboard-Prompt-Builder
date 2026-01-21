@@ -1,8 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
+import {
+  Document,
+  Packer,
+  Paragraph,
+  Table,
+  TableRow,
+  TableCell,
+  TextRun,
+  WidthType,
+  AlignmentType,
+  HeadingLevel,
+  BorderStyle,
+  ShadingType,
+  VerticalAlign,
+} from 'docx';
 
 export async function POST(request: NextRequest) {
   try {
-    const { dialogueLines, title, format = 'csv' } = await request.json();
+    const { dialogueLines, title } = await request.json();
     
     if (!dialogueLines || !Array.isArray(dialogueLines) || dialogueLines.length === 0) {
       return NextResponse.json(
@@ -13,87 +28,232 @@ export async function POST(request: NextRequest) {
 
     const safeTitle = (title || 'Screenplay').replace(/[^a-zA-Z0-9\s-]/g, '').trim();
     
-    if (format === 'csv') {
-      // Create CSV content with proper escaping
-      const escapeCSV = (field: string) => {
-        if (field.includes('"') || field.includes(',') || field.includes('\n')) {
-          return `"${field.replace(/"/g, '""')}"`;
-        }
-        return field;
-      };
+    // Create table rows
+    const tableRows: TableRow[] = [];
+    
+    // Header row with styling
+    const headerRow = new TableRow({
+      tableHeader: true,
+      children: [
+        new TableCell({
+          width: { size: 1800, type: WidthType.DXA },
+          shading: { fill: '2D3748', type: ShadingType.SOLID },
+          verticalAlign: VerticalAlign.CENTER,
+          children: [
+            new Paragraph({
+              alignment: AlignmentType.CENTER,
+              children: [
+                new TextRun({
+                  text: 'Character',
+                  bold: true,
+                  color: 'FFFFFF',
+                  size: 24,
+                }),
+              ],
+            }),
+          ],
+        }),
+        new TableCell({
+          width: { size: 5400, type: WidthType.DXA },
+          shading: { fill: '2D3748', type: ShadingType.SOLID },
+          verticalAlign: VerticalAlign.CENTER,
+          children: [
+            new Paragraph({
+              alignment: AlignmentType.CENTER,
+              children: [
+                new TextRun({
+                  text: 'Dialogue',
+                  bold: true,
+                  color: 'FFFFFF',
+                  size: 24,
+                }),
+              ],
+            }),
+          ],
+        }),
+        new TableCell({
+          width: { size: 3600, type: WidthType.DXA },
+          shading: { fill: '2D3748', type: ShadingType.SOLID },
+          verticalAlign: VerticalAlign.CENTER,
+          children: [
+            new Paragraph({
+              alignment: AlignmentType.CENTER,
+              children: [
+                new TextRun({
+                  text: 'Delivery Direction',
+                  bold: true,
+                  color: 'FFFFFF',
+                  size: 24,
+                }),
+              ],
+            }),
+          ],
+        }),
+      ],
+    });
+    tableRows.push(headerRow);
 
-      const headers = ['Character', 'Dialogue', 'Delivery Direction'];
-      const rows = dialogueLines.map((line: { character: string; dialogue: string; delivery: string }) => [
-        escapeCSV(line.character || ''),
-        escapeCSV(line.dialogue || ''),
-        escapeCSV(line.delivery || '')
-      ].join(','));
+    // Data rows
+    dialogueLines.forEach((line: { character: string; dialogue: string; delivery: string }, index: number) => {
+      const isEvenRow = index % 2 === 0;
+      const rowShading = isEvenRow ? 'F7FAFC' : 'FFFFFF';
       
-      const csvContent = [headers.join(','), ...rows].join('\n');
-      
-      return new NextResponse(csvContent, {
-        headers: {
-          'Content-Type': 'text/csv; charset=utf-8',
-          'Content-Disposition': `attachment; filename="${safeTitle}_VoiceOver.csv"`,
-        },
+      const dataRow = new TableRow({
+        children: [
+          new TableCell({
+            width: { size: 1800, type: WidthType.DXA },
+            shading: { fill: rowShading, type: ShadingType.SOLID },
+            verticalAlign: VerticalAlign.TOP,
+            children: [
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: line.character || '',
+                    bold: true,
+                    size: 22,
+                    color: '1A202C',
+                  }),
+                ],
+              }),
+            ],
+          }),
+          new TableCell({
+            width: { size: 5400, type: WidthType.DXA },
+            shading: { fill: rowShading, type: ShadingType.SOLID },
+            verticalAlign: VerticalAlign.TOP,
+            children: [
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: line.dialogue || '',
+                    size: 22,
+                    color: '2D3748',
+                  }),
+                ],
+              }),
+            ],
+          }),
+          new TableCell({
+            width: { size: 3600, type: WidthType.DXA },
+            shading: { fill: rowShading, type: ShadingType.SOLID },
+            verticalAlign: VerticalAlign.TOP,
+            children: [
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: line.delivery || '',
+                    italics: true,
+                    size: 20,
+                    color: '718096',
+                  }),
+                ],
+              }),
+            ],
+          }),
+        ],
       });
-    } else {
-      // Create formatted text table
-      const maxCharLen = Math.max(15, ...dialogueLines.map((l: { character: string }) => l.character.length));
-      const maxDialogueLen = Math.min(60, Math.max(20, ...dialogueLines.map((l: { dialogue: string }) => l.dialogue.length)));
-      const maxDeliveryLen = Math.min(50, Math.max(20, ...dialogueLines.map((l: { delivery: string }) => l.delivery.length)));
+      tableRows.push(dataRow);
+    });
 
-      const divider = '+' + '-'.repeat(maxCharLen + 2) + '+' + '-'.repeat(maxDialogueLen + 2) + '+' + '-'.repeat(maxDeliveryLen + 2) + '+';
-      
-      const headerRow = '| ' + 'Character'.padEnd(maxCharLen) + ' | ' + 'Dialogue'.padEnd(maxDialogueLen) + ' | ' + 'Delivery Direction'.padEnd(maxDeliveryLen) + ' |';
-      
-      const wrapText = (text: string, maxLen: number): string[] => {
-        const words = text.split(' ');
-        const lines: string[] = [];
-        let currentLine = '';
-        
-        for (const word of words) {
-          if (currentLine.length + word.length + 1 <= maxLen) {
-            currentLine += (currentLine ? ' ' : '') + word;
-          } else {
-            if (currentLine) lines.push(currentLine);
-            currentLine = word.length > maxLen ? word.substring(0, maxLen) : word;
-          }
-        }
-        if (currentLine) lines.push(currentLine);
-        return lines.length ? lines : [''];
-      };
+    // Create the table
+    const table = new Table({
+      width: { size: 100, type: WidthType.PERCENTAGE },
+      rows: tableRows,
+      borders: {
+        top: { style: BorderStyle.SINGLE, size: 1, color: 'CBD5E0' },
+        bottom: { style: BorderStyle.SINGLE, size: 1, color: 'CBD5E0' },
+        left: { style: BorderStyle.SINGLE, size: 1, color: 'CBD5E0' },
+        right: { style: BorderStyle.SINGLE, size: 1, color: 'CBD5E0' },
+        insideHorizontal: { style: BorderStyle.SINGLE, size: 1, color: 'E2E8F0' },
+        insideVertical: { style: BorderStyle.SINGLE, size: 1, color: 'E2E8F0' },
+      },
+    });
 
-      let textContent = `VOICE-OVER SCRIPT: ${safeTitle}\n`;
-      textContent += `Generated: ${new Date().toLocaleDateString()}\n`;
-      textContent += `Total Lines: ${dialogueLines.length}\n\n`;
-      textContent += divider + '\n';
-      textContent += headerRow + '\n';
-      textContent += divider + '\n';
-      
-      for (const line of dialogueLines) {
-        const charLines = wrapText(line.character || '', maxCharLen);
-        const dialogueLineArr = wrapText(line.dialogue || '', maxDialogueLen);
-        const deliveryLines = wrapText(line.delivery || '', maxDeliveryLen);
-        
-        const maxRows = Math.max(charLines.length, dialogueLineArr.length, deliveryLines.length);
-        
-        for (let i = 0; i < maxRows; i++) {
-          const charPart = (charLines[i] || '').padEnd(maxCharLen);
-          const dialoguePart = (dialogueLineArr[i] || '').padEnd(maxDialogueLen);
-          const deliveryPart = (deliveryLines[i] || '').padEnd(maxDeliveryLen);
-          textContent += `| ${charPart} | ${dialoguePart} | ${deliveryPart} |\n`;
-        }
-        textContent += divider + '\n';
-      }
-      
-      return new NextResponse(textContent, {
-        headers: {
-          'Content-Type': 'text/plain; charset=utf-8',
-          'Content-Disposition': `attachment; filename="${safeTitle}_VoiceOver.txt"`,
+    // Create the document
+    const doc = new Document({
+      creator: 'Storyboard Prompt Builder',
+      title: `${safeTitle} - Voice-Over Script`,
+      description: 'Voice-over script with dialogue and delivery directions',
+      sections: [
+        {
+          properties: {
+            page: {
+              margin: {
+                top: 1440,
+                right: 1440,
+                bottom: 1440,
+                left: 1440,
+              },
+            },
+          },
+          children: [
+            // Title
+            new Paragraph({
+              heading: HeadingLevel.HEADING_1,
+              alignment: AlignmentType.CENTER,
+              spacing: { after: 200 },
+              children: [
+                new TextRun({
+                  text: `${safeTitle}`,
+                  bold: true,
+                  size: 48,
+                  color: '1A202C',
+                }),
+              ],
+            }),
+            // Subtitle
+            new Paragraph({
+              alignment: AlignmentType.CENTER,
+              spacing: { after: 400 },
+              children: [
+                new TextRun({
+                  text: 'Voice-Over Script',
+                  size: 28,
+                  color: '4A5568',
+                }),
+              ],
+            }),
+            // Info line
+            new Paragraph({
+              alignment: AlignmentType.CENTER,
+              spacing: { after: 600 },
+              children: [
+                new TextRun({
+                  text: `Generated: ${new Date().toLocaleDateString()}  |  Total Lines: ${dialogueLines.length}`,
+                  size: 20,
+                  color: '718096',
+                }),
+              ],
+            }),
+            // Table
+            table,
+            // Footer note
+            new Paragraph({
+              alignment: AlignmentType.CENTER,
+              spacing: { before: 400 },
+              children: [
+                new TextRun({
+                  text: 'Generated by Storyboard Prompt Builder',
+                  size: 18,
+                  italics: true,
+                  color: 'A0AEC0',
+                }),
+              ],
+            }),
+          ],
         },
-      });
-    }
+      ],
+    });
+
+    // Generate the DOCX buffer
+    const buffer = await Packer.toBuffer(doc);
+    
+    return new NextResponse(buffer, {
+      headers: {
+        'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'Content-Disposition': `attachment; filename="${safeTitle}_VoiceOver.docx"`,
+      },
+    });
   } catch (error) {
     console.error('Voice-over export error:', error);
     return NextResponse.json(

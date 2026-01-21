@@ -174,7 +174,7 @@ export default function ScreenplayAnalyzer({
     onRecommendationsApply(selections);
   };
 
-  const downloadVoiceOver = async (format: 'csv' | 'txt') => {
+  const downloadVoiceOver = async () => {
     if (dialogueLines.length === 0) return;
     
     setDownloadingVO(true);
@@ -185,7 +185,6 @@ export default function ScreenplayAnalyzer({
         body: JSON.stringify({
           dialogueLines,
           title: analysis?.title || 'Screenplay',
-          format
         }),
       });
 
@@ -195,7 +194,7 @@ export default function ScreenplayAnalyzer({
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `${(analysis?.title || 'Screenplay').replace(/[^a-zA-Z0-9\s-]/g, '')}_VoiceOver.${format}`;
+      a.download = `${(analysis?.title || 'Screenplay').replace(/[^a-zA-Z0-9\s-]/g, '')}_VoiceOver.docx`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -445,24 +444,14 @@ export default function ScreenplayAnalyzer({
                         <Mic className="w-5 h-5 text-amber-400" />
                         <h3 className="text-lg font-semibold text-white">Voice-Over Script ({dialogueLines.length} lines)</h3>
                       </div>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => downloadVoiceOver('csv')}
-                          disabled={downloadingVO}
-                          className="px-3 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 disabled:bg-slate-700 border border-amber-500/50 disabled:border-slate-600 rounded-lg text-amber-400 disabled:text-slate-500 text-sm transition-colors flex items-center gap-1.5"
-                        >
-                          {downloadingVO ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-                          CSV
-                        </button>
-                        <button
-                          onClick={() => downloadVoiceOver('txt')}
-                          disabled={downloadingVO}
-                          className="px-3 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 disabled:bg-slate-700 border border-amber-500/50 disabled:border-slate-600 rounded-lg text-amber-400 disabled:text-slate-500 text-sm transition-colors flex items-center gap-1.5"
-                        >
-                          {downloadingVO ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-                          TXT
-                        </button>
-                      </div>
+                      <button
+                        onClick={downloadVoiceOver}
+                        disabled={downloadingVO}
+                        className="px-4 py-2 bg-amber-500/20 hover:bg-amber-500/30 disabled:bg-slate-700 border border-amber-500/50 disabled:border-slate-600 rounded-lg text-amber-400 disabled:text-slate-500 text-sm transition-colors flex items-center gap-2"
+                      >
+                        {downloadingVO ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                        Download DOCX
+                      </button>
                     </div>
                     
                     {/* Dialogue Table Preview */}
