@@ -6,7 +6,7 @@ import {
   Palette, Frame, Sun, Camera, Sparkles, FileText, Copy, Check, 
   Trash2, Film, Aperture, Image as ImageIcon, Save, History,
   FolderOpen, Plus, Download, Loader2, Clapperboard, Upload,
-  LayoutGrid, Users, MapPin, ChevronDown, X, FolderPlus, Edit3, Grid3X3, Mic
+  LayoutGrid, Users, MapPin, ChevronDown, X, FolderPlus, Edit3, Grid3X3, Mic, RefreshCw
 } from 'lucide-react';
 import { SectionCard } from './section-card';
 import { SelectionButton } from './selection-button';
@@ -102,6 +102,32 @@ export function PromptBuilder() {
   const [newProjectName, setNewProjectName] = useState('');
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
   const [savingProject, setSavingProject] = useState(false);
+
+  // Reset session - clears all state for a fresh start
+  const resetSession = useCallback(() => {
+    setSelections({
+      imageType: null,
+      shotType: null,
+      subjectAction: '',
+      environment: '',
+      lighting: null,
+      atmosphere: '',
+      camera: null,
+      focalLength: null,
+      lensType: null,
+      filmStock: null,
+      aspectRatio: '',
+      photographer: null,
+      movie: null,
+      filter: null,
+    });
+    setScreenplay(null);
+    setCharacterPrompts([]);
+    setEnvironmentPrompts([]);
+    setDialogueLines([]);
+    setStoryboard(null);
+    setCurrentProject(null);
+  }, []);
 
   // Load folders and projects on mount
   useEffect(() => {
@@ -695,6 +721,13 @@ export function PromptBuilder() {
             >
               <Grid3X3 size={20} />
               Image Grid Cutter
+            </button>
+            <button
+              onClick={resetSession}
+              className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-rose-500 to-rose-600 hover:from-rose-400 hover:to-rose-500 text-white font-semibold rounded-xl shadow-lg shadow-rose-500/30 transition-all"
+            >
+              <RefreshCw size={20} />
+              New Session
             </button>
           </motion.div>
 
