@@ -104,7 +104,8 @@ export default function ScreenplayAnalyzer({
         selections.imageType = { id: value.toLowerCase().replace(/\s+/g, '-'), name: value };
         break;
       case 'cameraBody':
-        selections.cameraBody = { id: value.toLowerCase().replace(/\s+/g, '-'), name: value };
+        // Use 'camera' key to match prompt-builder's Selections interface
+        (selections as Record<string, unknown>).camera = { id: value.toLowerCase().replace(/\s+/g, '-'), name: value };
         break;
       case 'focalLength':
         selections.focalLength = { id: value.toLowerCase().replace(/\s+/g, '-'), name: value };
@@ -142,7 +143,8 @@ export default function ScreenplayAnalyzer({
       selections.imageType = { id: r.imageType.recommended.toLowerCase().replace(/\s+/g, '-'), name: r.imageType.recommended };
     }
     if (r.cameraBody?.recommended) {
-      selections.cameraBody = { id: r.cameraBody.recommended.toLowerCase().replace(/\s+/g, '-'), name: r.cameraBody.recommended };
+      // Use 'camera' key to match prompt-builder's Selections interface
+      (selections as Record<string, unknown>).camera = { id: r.cameraBody.recommended.toLowerCase().replace(/\s+/g, '-'), name: r.cameraBody.recommended };
     }
     if (r.focalLength?.recommended) {
       selections.focalLength = { id: r.focalLength.recommended.toLowerCase().replace(/\s+/g, '-'), name: r.focalLength.recommended };
