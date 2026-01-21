@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
         'Authorization': `Bearer ${process.env.ABACUSAI_API_KEY}`
       },
       body: JSON.stringify({
-        model: 'gemini-3-flash',
+        model: 'llama4-maverick',
         messages: [
           {
             role: 'system',
