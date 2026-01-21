@@ -196,6 +196,21 @@ ${styleContext}
 - Underground Facility: Dark, cavernous archive with mysterious artifacts
 - Interview Room: Concrete walls, single overhead light, metal chair, stark and clinical
 
+=== VOICE PROMPTS FOR HUME.AI (CHARACTERS ONLY) ===
+For EACH character, also create a detailed VOICE PROMPT that can be used by hume.ai to generate a custom voice. The voice prompt should describe:
+
+1. **Pitch & Range**: Low/medium/high pitch, vocal range, register
+2. **Tone & Quality**: Raspy, smooth, gravelly, nasal, breathy, resonant, warm, cold, thin, rich, husky, silky
+3. **Pace & Rhythm**: Speaking speed (slow, measured, rapid), pauses, cadence, rhythmic patterns
+4. **Accent & Dialect**: Regional accent, international accent, speech patterns unique to background
+5. **Age Quality**: How age affects the voice (youthful energy, mature depth, elderly weathering)
+6. **Emotional Undertone**: Default emotional quality (anxious, confident, weary, haunted, authoritative)
+7. **Distinctive Characteristics**: Vocal quirks, breath patterns, tendency to trail off, emphatic delivery, whisper quality, etc.
+8. **Character-Specific Context**: How their experiences/trauma/personality manifest in their voice
+
+Example Voice Prompt:
+"A deep, gravelly male voice with a slow, deliberate pace. Low pitch with rich resonance, carrying the weight of decades of classified secrets. Slightly husky quality with occasional whispered emphasis on key words. Measured pauses between phrases create tension. Subtle hints of a Midwestern American accent, weathered by age. Authoritative yet conspiratorial tone, as if sharing forbidden knowledge. Breath audible before important revelations."
+
 IMPORTANT: Create prompts for EVERY character and EVERY location. Each prompt MUST follow the exact template structure.
 
 Respond in JSON format:
@@ -203,7 +218,8 @@ Respond in JSON format:
   "characterPrompts": [
     {
       "name": "CHARACTER NAME",
-      "prompt": "THE COMPLETE CONSTRUCTED PROMPT with all [BRACKETED] sections filled in"
+      "prompt": "THE COMPLETE CONSTRUCTED PROMPT with all [BRACKETED] sections filled in",
+      "voicePrompt": "DETAILED VOICE DESCRIPTION for hume.ai voice generation"
     }
   ],
   "environmentPrompts": [

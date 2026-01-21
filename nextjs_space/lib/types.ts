@@ -64,6 +64,7 @@ export interface Environment {
 export interface CharacterPrompt {
   name: string;
   prompt: string;
+  voicePrompt?: string;
 }
 
 export interface EnvironmentPrompt {
