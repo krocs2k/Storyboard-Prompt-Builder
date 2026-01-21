@@ -3,7 +3,6 @@ import sharp from 'sharp';
 import archiver from 'archiver';
 import { promises as fs } from 'fs';
 import path from 'path';
-import { Readable } from 'stream';
 
 const TEMP_DIR = '/tmp/image-grid-cutter';
 const ZIP_DIR = '/tmp/image-grid-zips';
@@ -47,30 +46,6 @@ function parseAspectRatio(ratio: string): { width: number; height: number } {
   return { width: w, height: h };
 }
 
-// Calculate grid dimensions based on total count and aspect ratio
-function calculateGridDimensions(totalCount: number, aspectRatio: { width: number; height: number }): { cols: number; rows: number } {
-  // Find the best grid that matches the aspect ratio
-  const targetRatio = aspectRatio.width / aspectRatio.height;
-  
-  let bestCols = 1;
-  let bestRows = totalCount;
-  let bestRatioDiff = Infinity;
-  
-  for (let cols = 1; cols <= totalCount; cols++) {
-    const rows = Math.ceil(totalCount / cols);
-    const gridRatio = cols / rows;
-    const ratioDiff = Math.abs(gridRatio - targetRatio);
-    
-    if (ratioDiff < bestRatioDiff && cols * rows >= totalCount) {
-      bestRatioDiff = ratioDiff;
-      bestCols = cols;
-      bestRows = rows;
-    }
-  }
-  
-  return { cols: bestCols, rows: bestRows };
-}
-
 export async function POST(request: NextRequest) {
   try {
     await ensureDirs();
@@ -79,7 +54,8 @@ export async function POST(request: NextRequest) {
     const formData = await request.formData();
     const files = formData.getAll('images') as File[];
     const aspectRatioStr = formData.get('aspectRatio') as string || '16:9';
-    const totalCount = parseInt(formData.get('totalCount') as string) || 4;
+    const rows = parseInt(formData.get('rows') as string) || 2;
+    const cols = parseInt(formData.get('cols') as string) || 2;
     const outputFormat = (formData.get('outputFormat') as string) || 'jpg';
     
     if (!files || files.length === 0) {
@@ -89,15 +65,15 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    if (totalCount < 1 || totalCount > 100) {
+    if (rows < 1 || rows > 20 || cols < 1 || cols > 20) {
       return NextResponse.json(
-        { error: 'Total count must be between 1 and 100' },
+        { error: 'Rows and columns must be between 1 and 20' },
         { status: 400 }
       );
     }
     
     const aspectRatio = parseAspectRatio(aspectRatioStr);
-    const grid = calculateGridDimensions(totalCount, aspectRatio);
+    const targetAspectRatio = aspectRatio.width / aspectRatio.height;
     
     // Create unique session ID for this operation
     const sessionId = `${Date.now()}-${Math.random().toString(36).substring(7)}`;
@@ -105,7 +81,7 @@ export async function POST(request: NextRequest) {
     await fs.mkdir(sessionDir, { recursive: true });
     
     const cutImages: { filename: string; buffer: Buffer }[] = [];
-    let imageIndex = 0;
+    let totalSegments = 0;
     
     // Process each uploaded image
     for (let fileIdx = 0; fileIdx < files.length; fileIdx++) {
@@ -117,24 +93,47 @@ export async function POST(request: NextRequest) {
       const imgWidth = metadata.width || 1920;
       const imgHeight = metadata.height || 1080;
       
-      // Calculate segment dimensions
-      const segmentWidth = Math.floor(imgWidth / grid.cols);
-      const segmentHeight = Math.floor(imgHeight / grid.rows);
+      // Calculate cell dimensions (evenly distributed across the image)
+      const cellWidth = Math.floor(imgWidth / cols);
+      const cellHeight = Math.floor(imgHeight / rows);
+      
+      // Calculate the segment dimensions within each cell based on aspect ratio
+      // The segment should fit within the cell while maintaining the target aspect ratio
+      let segmentWidth: number;
+      let segmentHeight: number;
+      
+      const cellAspectRatio = cellWidth / cellHeight;
+      
+      if (cellAspectRatio > targetAspectRatio) {
+        // Cell is wider than target - constrain by height
+        segmentHeight = cellHeight;
+        segmentWidth = Math.floor(cellHeight * targetAspectRatio);
+      } else {
+        // Cell is taller than target - constrain by width
+        segmentWidth = cellWidth;
+        segmentHeight = Math.floor(cellWidth / targetAspectRatio);
+      }
       
       // Cut the image into segments
-      for (let row = 0; row < grid.rows; row++) {
-        for (let col = 0; col < grid.cols; col++) {
-          if (imageIndex >= totalCount) break;
+      for (let row = 0; row < rows; row++) {
+        for (let col = 0; col < cols; col++) {
+          // Calculate cell position
+          const cellLeft = col * cellWidth;
+          const cellTop = row * cellHeight;
           
-          const left = col * segmentWidth;
-          const top = row * segmentHeight;
+          // Center the segment within the cell
+          const offsetX = Math.floor((cellWidth - segmentWidth) / 2);
+          const offsetY = Math.floor((cellHeight - segmentHeight) / 2);
           
-          // Extract segment
+          const left = cellLeft + offsetX;
+          const top = cellTop + offsetY;
+          
+          // Extract segment with the target aspect ratio
           let segment = sharp(buffer).extract({
-            left,
-            top,
-            width: segmentWidth,
-            height: segmentHeight
+            left: Math.max(0, left),
+            top: Math.max(0, top),
+            width: Math.min(segmentWidth, imgWidth - left),
+            height: Math.min(segmentHeight, imgHeight - top)
           });
           
           // Convert to requested format
@@ -147,12 +146,12 @@ export async function POST(request: NextRequest) {
             outputBuffer = await segment.jpeg({ quality: 95 }).toBuffer();
           }
           
-          const filename = `image_${String(fileIdx + 1).padStart(2, '0')}_segment_${String(imageIndex + 1).padStart(3, '0')}.${ext}`;
+          const segmentNum = row * cols + col + 1;
+          const filename = `image_${String(fileIdx + 1).padStart(2, '0')}_row${String(row + 1).padStart(2, '0')}_col${String(col + 1).padStart(2, '0')}.${ext}`;
           cutImages.push({ filename, buffer: outputBuffer });
           
-          imageIndex++;
+          totalSegments++;
         }
-        if (imageIndex >= totalCount) break;
       }
     }
     
@@ -187,9 +186,9 @@ export async function POST(request: NextRequest) {
         'Content-Type': 'application/zip',
         'Content-Disposition': `attachment; filename="${zipFilename}"`,
         'X-Zip-Filename': zipFilename,
-        'X-Total-Segments': String(cutImages.length),
-        'X-Grid-Cols': String(grid.cols),
-        'X-Grid-Rows': String(grid.rows)
+        'X-Total-Segments': String(totalSegments),
+        'X-Grid-Cols': String(cols),
+        'X-Grid-Rows': String(rows)
       }
     });
   } catch (error) {

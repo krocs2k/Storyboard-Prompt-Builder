@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Upload, X, Grid3X3, Scissors, Download, Trash2, Image as ImageIcon,
@@ -13,11 +13,6 @@ interface UploadedImage {
   file: File;
   preview: string;
   name: string;
-}
-
-interface GridPreview {
-  cols: number;
-  rows: number;
 }
 
 const ASPECT_RATIOS = [
@@ -44,48 +39,21 @@ interface ImageGridCutterProps {
 export default function ImageGridCutter({ isOpen, onClose }: ImageGridCutterProps) {
   const [images, setImages] = useState<UploadedImage[]>([]);
   const [aspectRatio, setAspectRatio] = useState('16:9');
-  const [totalCount, setTotalCount] = useState(4);
+  const [rows, setRows] = useState(2);
+  const [cols, setCols] = useState(2);
   const [outputFormat, setOutputFormat] = useState('jpg');
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [gridPreview, setGridPreview] = useState<GridPreview>({ cols: 2, rows: 2 });
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Calculate grid preview based on aspect ratio and count
-  const calculateGrid = useCallback((count: number, ratio: string) => {
-    const [w, h] = ratio.split(':').map(Number);
-    const targetRatio = w / h;
-    
-    let bestCols = 1;
-    let bestRows = count;
-    let bestRatioDiff = Infinity;
-    
-    for (let cols = 1; cols <= count; cols++) {
-      const rows = Math.ceil(count / cols);
-      const gridRatio = cols / rows;
-      const ratioDiff = Math.abs(gridRatio - targetRatio);
-      
-      if (ratioDiff < bestRatioDiff && cols * rows >= count) {
-        bestRatioDiff = ratioDiff;
-        bestCols = cols;
-        bestRows = rows;
-      }
-    }
-    
-    setGridPreview({ cols: bestCols, rows: bestRows });
-  }, []);
-
-  // Update grid preview when count or ratio changes
-  const handleCountChange = (count: number) => {
-    const validCount = Math.max(1, Math.min(100, count));
-    setTotalCount(validCount);
-    calculateGrid(validCount, aspectRatio);
+  // Handle row/column changes with validation
+  const handleRowsChange = (value: number) => {
+    setRows(Math.max(1, Math.min(20, value)));
   };
 
-  const handleRatioChange = (ratio: string) => {
-    setAspectRatio(ratio);
-    calculateGrid(totalCount, ratio);
+  const handleColsChange = (value: number) => {
+    setCols(Math.max(1, Math.min(20, value)));
   };
 
   // Handle file selection
@@ -148,7 +116,8 @@ export default function ImageGridCutter({ isOpen, onClose }: ImageGridCutterProp
         formData.append('images', img.file);
       });
       formData.append('aspectRatio', aspectRatio);
-      formData.append('totalCount', String(totalCount));
+      formData.append('rows', String(rows));
+      formData.append('cols', String(cols));
       formData.append('outputFormat', outputFormat);
 
       const response = await fetch('/api/image-grid-cutter', {
@@ -164,7 +133,7 @@ export default function ImageGridCutter({ isOpen, onClose }: ImageGridCutterProp
       // Get the ZIP file
       const blob = await response.blob();
       const filename = response.headers.get('X-Zip-Filename') || `grid-cut-${Date.now()}.zip`;
-      const totalSegments = response.headers.get('X-Total-Segments') || String(totalCount);
+      const totalSegments = response.headers.get('X-Total-Segments') || String(rows * cols);
       const gridCols = response.headers.get('X-Grid-Cols');
       const gridRows = response.headers.get('X-Grid-Rows');
 
@@ -237,32 +206,46 @@ export default function ImageGridCutter({ isOpen, onClose }: ImageGridCutterProp
                     Grid Settings
                   </h3>
 
+                  {/* Grid Dimensions */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-sm text-slate-400 mb-2">Columns</label>
+                      <input
+                        type="number"
+                        min={1}
+                        max={20}
+                        value={cols}
+                        onChange={(e) => handleColsChange(parseInt(e.target.value) || 1)}
+                        className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:border-amber-500 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm text-slate-400 mb-2">Rows</label>
+                      <input
+                        type="number"
+                        min={1}
+                        max={20}
+                        value={rows}
+                        onChange={(e) => handleRowsChange(parseInt(e.target.value) || 1)}
+                        className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:border-amber-500 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                  <p className="text-xs text-slate-500 -mt-2">Grid: {cols} × {rows} = {cols * rows} segments per image</p>
+
                   {/* Aspect Ratio */}
                   <div>
-                    <label className="block text-sm text-slate-400 mb-2">Aspect Ratio</label>
+                    <label className="block text-sm text-slate-400 mb-2">Segment Aspect Ratio</label>
                     <select
                       value={aspectRatio}
-                      onChange={(e) => handleRatioChange(e.target.value)}
+                      onChange={(e) => setAspectRatio(e.target.value)}
                       className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:border-amber-500 focus:outline-none"
                     >
                       {ASPECT_RATIOS.map(r => (
                         <option key={r.value} value={r.value}>{r.label}</option>
                       ))}
                     </select>
-                  </div>
-
-                  {/* Total Count */}
-                  <div>
-                    <label className="block text-sm text-slate-400 mb-2">Total Image Count</label>
-                    <input
-                      type="number"
-                      min={1}
-                      max={100}
-                      value={totalCount}
-                      onChange={(e) => handleCountChange(parseInt(e.target.value) || 1)}
-                      className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:border-amber-500 focus:outline-none"
-                    />
-                    <p className="text-xs text-slate-500 mt-1">Grid will be {gridPreview.cols} × {gridPreview.rows} = {gridPreview.cols * gridPreview.rows} segments</p>
+                    <p className="text-xs text-slate-500 mt-1">Each segment will be cropped to this aspect ratio</p>
                   </div>
 
                   {/* Output Format */}
@@ -284,33 +267,29 @@ export default function ImageGridCutter({ isOpen, onClose }: ImageGridCutterProp
                 <div className="bg-slate-800/50 rounded-xl p-4">
                   <h3 className="text-sm font-medium text-slate-400 mb-3">Grid Preview</h3>
                   <div 
-                    className="border-2 border-amber-500/50 rounded-lg overflow-hidden"
-                    style={{ 
-                      aspectRatio: aspectRatio.replace(':', '/'),
-                      maxHeight: '150px'
-                    }}
+                    className="border-2 border-amber-500/50 rounded-lg overflow-hidden bg-slate-700/50"
+                    style={{ maxHeight: '180px' }}
                   >
                     <div 
-                      className="w-full h-full grid gap-[1px] bg-amber-500/30"
+                      className="w-full h-full grid gap-[2px] p-1"
                       style={{ 
-                        gridTemplateColumns: `repeat(${gridPreview.cols}, 1fr)`,
-                        gridTemplateRows: `repeat(${gridPreview.rows}, 1fr)`
+                        gridTemplateColumns: `repeat(${cols}, 1fr)`,
+                        gridTemplateRows: `repeat(${rows}, 1fr)`
                       }}
                     >
-                      {Array.from({ length: gridPreview.cols * gridPreview.rows }).map((_, i) => (
+                      {Array.from({ length: cols * rows }).map((_, i) => (
                         <div 
                           key={i} 
-                          className={`bg-slate-700 flex items-center justify-center text-xs ${
-                            i < totalCount ? 'text-amber-400' : 'text-slate-500'
-                          }`}
+                          className="bg-slate-600 rounded-sm flex items-center justify-center text-xs text-amber-400 border border-amber-500/30"
+                          style={{ aspectRatio: aspectRatio.replace(':', '/') }}
                         >
-                          {i < totalCount ? i + 1 : ''}
+                          {i + 1}
                         </div>
                       ))}
                     </div>
                   </div>
                   <p className="text-xs text-slate-500 mt-2 text-center">
-                    {totalCount} segments will be extracted
+                    {cols * rows} segments per image • Each segment: {aspectRatio} aspect ratio
                   </p>
                 </div>
 
