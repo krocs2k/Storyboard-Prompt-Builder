@@ -168,11 +168,42 @@ export function PromptBuilder() {
 
   const copyToClipboard = async () => {
     try {
-      await navigator?.clipboard?.writeText(constructedPrompt);
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(constructedPrompt);
+      } else {
+        // Fallback for browsers that don't support clipboard API
+        const textArea = document.createElement('textarea');
+        textArea.value = constructedPrompt;
+        textArea.style.position = 'fixed';
+        textArea.style.left = '-999999px';
+        textArea.style.top = '-999999px';
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        document.execCommand('copy');
+        textArea.remove();
+      }
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch (err) {
       console.error('Failed to copy:', err);
+      // Try fallback even on error
+      try {
+        const textArea = document.createElement('textarea');
+        textArea.value = constructedPrompt;
+        textArea.style.position = 'fixed';
+        textArea.style.left = '-999999px';
+        textArea.style.top = '-999999px';
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        document.execCommand('copy');
+        textArea.remove();
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      } catch (fallbackErr) {
+        console.error('Fallback copy also failed:', fallbackErr);
+      }
     }
   };
 
