@@ -25,49 +25,65 @@ export async function POST(request: NextRequest) {
         messages: [
           {
             role: 'system',
-            content: `You are an expert at creating detailed image generation prompts for characters and environments based on screenplays and visual style specifications.`
+            content: `You are an expert at creating highly detailed, production-ready image generation prompts for film and television production. Your prompts must be comprehensive enough to generate consistent character and environment visuals across an entire production.`
           },
           {
             role: 'user',
-            content: `Based on this screenplay and visual style specifications, create detailed image generation prompts for each character and environment.
+            content: `Create DETAILED image generation prompts for EVERY character and environment in this "CRYPTID JOURNAL" screenplay.
 
-SCREENPLAY EXCERPT:
-${screenplay.substring(0, 8000)}
+SCREENPLAY:
+${screenplay.substring(0, 10000)}
 
-CHARACTERS TO CREATE PROMPTS FOR:
+CHARACTERS FROM SCREENPLAY:
 ${JSON.stringify(characters, null, 2)}
 
-ENVIRONMENTS TO CREATE PROMPTS FOR:
+ENVIRONMENTS FROM SCREENPLAY:
 ${JSON.stringify(environments, null, 2)}
 
-VISUAL STYLE SPECIFICATIONS:
+VISUAL STYLE SPECIFICATIONS (Sections 1-5 Configuration):
 ${styleContext}
 
-For each CHARACTER, create a detailed prompt that includes:
-- Physical appearance (age, build, hair, eyes, skin tone)
-- Clothing and accessories
-- Expression and demeanor
-- The visual style elements specified above
+=== CHARACTER PROMPT REQUIREMENTS ===
+For EACH character, create a comprehensive prompt including:
+- Full physical description: exact age, height, body type/build, face shape
+- Hair: color, length, style, texture
+- Eyes: color, shape, expression
+- Skin: tone, texture, any distinguishing marks
+- Facial features: nose, lips, jaw, eyebrows
+- Clothing: specific garments, colors, textures, condition, era-appropriate
+- Accessories: jewelry, glasses, watches, etc.
+- Posture and body language
+- Emotional state and expression
+- Apply ALL visual style specifications from Sections 1-5
 
-For each ENVIRONMENT, create a detailed prompt that includes:
-- Location type and setting
-- Time of day and lighting conditions
-- Atmosphere and mood
-- Key props and details
-- The visual style elements specified above
+=== ENVIRONMENT PROMPT REQUIREMENTS ===
+For EACH location, create a comprehensive prompt including:
+- Location type and architectural style
+- Dimensions and spatial layout
+- Wall/floor/ceiling materials and colors
+- Lighting: sources, direction, color temperature, shadow quality, practical lights
+- Time of day and natural light (if applicable)
+- Weather and atmospheric conditions
+- Specific props and set dressing (list at least 5-10 items)
+- Textures and surfaces
+- Mood and atmosphere
+- Any supernatural/eerie elements
+- Apply ALL visual style specifications from Sections 1-5
+
+IMPORTANT: Create prompts for EVERY character mentioned (including The Host, Interviewee, and all re-enactment characters) and EVERY location (including Underground Facility, Interview Room, and all re-enactment locations).
 
 Respond in JSON format:
 {
   "characterPrompts": [
     {
       "name": "CHARACTER NAME",
-      "prompt": "Full detailed prompt for image generation"
+      "prompt": "Complete detailed image generation prompt with all visual specifications applied"
     }
   ],
   "environmentPrompts": [
     {
-      "name": "ENVIRONMENT NAME",
-      "prompt": "Full detailed prompt for image generation"
+      "name": "ENVIRONMENT NAME", 
+      "prompt": "Complete detailed image generation prompt with all visual specifications applied"
     }
   ]
 }
@@ -77,7 +93,7 @@ Respond with raw JSON only.`
         ],
         response_format: { type: 'json_object' },
         stream: true,
-        max_tokens: 6000,
+        max_tokens: 8000,
       }),
     });
 

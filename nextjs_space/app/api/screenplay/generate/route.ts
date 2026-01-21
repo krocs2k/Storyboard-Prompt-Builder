@@ -1,31 +1,48 @@
 import { NextRequest } from 'next/server';
 
-const GHOSTLY_ENCOUNTERS_SYSTEM_PROMPT = `You are an expert screenplay writer specializing in paranormal documentary-style television shows like "Ghostly Encounters". Your task is to transform real testimonials or story concepts into engaging, dramatic screenplays.
+const CRYPTID_JOURNAL_SYSTEM_PROMPT = `You are an expert screenplay writer for "CRYPTID JOURNAL", a paranormal documentary series with a unique format. The show features a government informant HOST who provides "soft disclosure" from a hidden underground top-secret storage facility.
 
-Format Guidelines:
-- Use standard screenplay format with SCENE HEADINGS (INT./EXT. LOCATION - TIME)
-- Include detailed action descriptions and character dialogue
-- Create a compelling host introduction that sets the tone
-- Add dramatic re-enactment scenes based on the testimonial
-- Include interview-style segments with witnesses
-- Create a thoughtful host wrap-up
-- Change all names to protect privacy
-- Add disclaimer about names being changed
+SHOW FORMAT & TONE:
+- NON-INTERACTIVE format - no direct interaction between host and interviewees
+- Dark, mysterious, conspiratorial atmosphere
+- The Host speaks as if revealing classified information
+- Re-enactments are SILENT (no dialogue) - narrated by the interviewee's voice-over
+- Build drama, suspense, and entertainment value
 
-Structure:
-1. HOST INTRO - Sets up the episode theme, mentions names have been changed
-2. WITNESS INTRODUCTION - Brief intro of the person sharing their story
-3. RE-ENACTMENT SCENES - Dramatic recreation of the events
-4. INTERVIEW CUTAWAYS - Witness reactions and commentary
-5. CLIMAX - The most intense paranormal moment
-6. RESOLUTION - How the story concluded
-7. HOST WRAP-UP - Reflection on the experience, closing thoughts
+EPISODE STRUCTURE:
+1. COLD OPEN - Brief mysterious teaser of the most dramatic moment
+2. HOST INTRO (Underground Facility) - The Host, in shadows, introduces the case from a secret government archive room filled with filing cabinets and strange artifacts. Mentions this is "declassified testimony" and names have been changed for protection.
+3. INTERVIEWEE INTRODUCTION - Cut to the WITNESS sitting alone in a stark, dimly-lit interview room (concrete walls, single overhead light, metal chair). They begin telling their story directly to camera.
+4. RE-ENACTMENT SEQUENCES - Silent dramatic recreations of events as the interviewee narrates via voice-over. Highly cinematic, atmospheric. NO DIALOGUE during re-enactments.
+5. INTERVIEW CUTBACKS - During particularly dramatic moments, cut back to the interviewee in the dim room reacting, pausing, showing emotion as they recount events.
+6. CLIMAX RE-ENACTMENT - The most intense paranormal encounter, all silent with interviewee V.O.
+7. AFTERMATH - Interviewee describes what happened after, the impact on their life
+8. HOST WRAP-UP (Underground Facility) - Host gives ominous closing remarks, hints at larger implications, suggests there's more the public doesn't know
+
+SCREENPLAY FORMAT:
+- Standard screenplay format with SCENE HEADINGS (INT./EXT. LOCATION - TIME)
+- Use (V.O.) for interviewee voice-over during re-enactments
+- Mark HOST scenes clearly in the underground facility
+- Mark INTERVIEW ROOM scenes for witness segments
+- RE-ENACTMENT scenes should have NO DIALOGUE - only action descriptions and V.O.
+
+CREATIVE DIRECTION:
+- Transform source material into a COMPELLING narrative with dramatic structure
+- Add suspense, tension, and atmospheric details
+- Create vivid, cinematic re-enactment descriptions
+- Make the interviewee's account feel authentic and emotionally resonant
+- The Host should feel mysterious, knowledgeable, slightly ominous
+- Change ALL names for privacy
 
 Pacing: Approximately 1 page = 1 minute of screen time.
 
-Always include detailed descriptions for:
-- Each CHARACTER (age, appearance, demeanor, clothing)
-- Each ENVIRONMENT (location details, atmosphere, lighting, props)`;
+REQUIRED OUTPUT SECTIONS:
+After the screenplay, include:
+---CHARACTER DESCRIPTIONS---
+For EACH character provide: Full name, age, physical appearance (height, build, hair color/style, eye color, skin tone, distinguishing features), clothing/wardrobe, demeanor, emotional state, mannerisms
+
+---ENVIRONMENT DESCRIPTIONS---
+For EACH location provide: Detailed physical description, lighting conditions, atmosphere/mood, specific props and set dressing, sounds, textures, colors, time of day, weather if applicable`;
 
 export async function POST(request: NextRequest) {
   try {
@@ -47,27 +64,45 @@ export async function POST(request: NextRequest) {
           { status: 400, headers: { 'Content-Type': 'application/json' } }
         );
       }
-      userPrompt = `Transform this testimonial/transcript into a ${runtime}-minute "Ghostly Encounters" style screenplay:
+      userPrompt = `Transform this testimonial/transcript into a ${runtime}-minute "CRYPTID JOURNAL" episode screenplay:
 
 TRANSCRIPT:
 ${transcript}
 
-Requirements:
-1. Extract the core paranormal story from the transcript
-2. Create compelling dramatic re-enactments
-3. Change ALL names to protect privacy
-4. Add host intro mentioning this is based on reported incidents and names have been changed
-5. Total runtime should be approximately ${runtime} minutes (${runtime} pages)
-6. Include CHARACTER DESCRIPTIONS section with detailed descriptions for each character
-7. Include ENVIRONMENT DESCRIPTIONS section with detailed descriptions for each location
+REQUIREMENTS:
+1. Extract and adapt the core paranormal/cryptid story from the transcript
+2. Take CREATIVE LIBERTY to craft a compelling narrative with drama, suspense, and entertainment value
+3. Follow the CRYPTID JOURNAL format strictly:
+   - Cold open teaser
+   - Host intro from underground facility (mysterious government informant tone)
+   - Interviewee in dim interview room telling their story
+   - Silent re-enactments with interviewee voice-over narration (NO DIALOGUE in re-enactments)
+   - Cut back to interviewee during dramatic moments
+   - Ominous host wrap-up
+4. Change ALL names to protect privacy
+5. Total runtime: approximately ${runtime} minutes (${runtime} pages)
+6. Make EVERY character and environment visually specific and detailed
 
-Provide the complete screenplay followed by:
+Provide the complete screenplay, then REQUIRED sections:
 
 ---CHARACTER DESCRIPTIONS---
-[List each character with detailed physical description, age, demeanor, clothing]
+For EACH character (including Host, Interviewee, and ALL re-enactment characters):
+- Full name
+- Age
+- Physical appearance: height, build, hair color/style, eye color, skin tone, facial features
+- Clothing/wardrobe details
+- Demeanor and mannerisms
+- Emotional state
 
 ---ENVIRONMENT DESCRIPTIONS---
-[List each location with detailed atmosphere, lighting, props, mood]`;
+For EACH location (Underground Facility, Interview Room, ALL re-enactment locations):
+- Detailed physical description
+- Lighting conditions (specific sources, color temperature, shadows)
+- Atmosphere and mood
+- Props and set dressing
+- Sounds and textures
+- Time of day
+- Weather/environmental conditions if applicable`;
     } else if (sourceType === 'concept') {
       if (!storyConcept) {
         return new Response(
@@ -75,26 +110,44 @@ Provide the complete screenplay followed by:
           { status: 400, headers: { 'Content-Type': 'application/json' } }
         );
       }
-      userPrompt = `Create a ${runtime}-minute "Ghostly Encounters" style screenplay based on this concept:
+      userPrompt = `Create a ${runtime}-minute "CRYPTID JOURNAL" episode screenplay based on this concept:
 
 CONCEPT:
 ${storyConcept}
 
-Requirements:
-1. Create a compelling paranormal narrative
-2. Use fictional but realistic-sounding names
-3. Add host intro mentioning stories are based on reported incidents
-4. Total runtime should be approximately ${runtime} minutes (${runtime} pages)
-5. Include CHARACTER DESCRIPTIONS section with detailed descriptions for each character
-6. Include ENVIRONMENT DESCRIPTIONS section with detailed descriptions for each location
+REQUIREMENTS:
+1. Craft a compelling paranormal/cryptid narrative with drama, suspense, and entertainment value
+2. Follow the CRYPTID JOURNAL format strictly:
+   - Cold open teaser
+   - Host intro from underground facility (mysterious government informant tone)
+   - Interviewee in dim interview room telling their story
+   - Silent re-enactments with interviewee voice-over narration (NO DIALOGUE in re-enactments)
+   - Cut back to interviewee during dramatic moments
+   - Ominous host wrap-up
+3. Use fictional but realistic names
+4. Total runtime: approximately ${runtime} minutes (${runtime} pages)
+5. Make EVERY character and environment visually specific and detailed
 
-Provide the complete screenplay followed by:
+Provide the complete screenplay, then REQUIRED sections:
 
 ---CHARACTER DESCRIPTIONS---
-[List each character with detailed physical description, age, demeanor, clothing]
+For EACH character (including Host, Interviewee, and ALL re-enactment characters):
+- Full name
+- Age
+- Physical appearance: height, build, hair color/style, eye color, skin tone, facial features
+- Clothing/wardrobe details
+- Demeanor and mannerisms
+- Emotional state
 
 ---ENVIRONMENT DESCRIPTIONS---
-[List each location with detailed atmosphere, lighting, props, mood]`;
+For EACH location (Underground Facility, Interview Room, ALL re-enactment locations):
+- Detailed physical description
+- Lighting conditions (specific sources, color temperature, shadows)
+- Atmosphere and mood
+- Props and set dressing
+- Sounds and textures
+- Time of day
+- Weather/environmental conditions if applicable`;
     } else {
       return new Response(
         JSON.stringify({ error: 'Invalid source type' }),
@@ -111,7 +164,7 @@ Provide the complete screenplay followed by:
       body: JSON.stringify({
         model: 'gpt-4.1',
         messages: [
-          { role: 'system', content: GHOSTLY_ENCOUNTERS_SYSTEM_PROMPT },
+          { role: 'system', content: CRYPTID_JOURNAL_SYSTEM_PROMPT },
           { role: 'user', content: userPrompt }
         ],
         stream: true,

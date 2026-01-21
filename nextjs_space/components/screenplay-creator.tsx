@@ -272,7 +272,7 @@ export default function ScreenplayCreator({ onScreenplayCreated, onClose }: Scre
                 className="space-y-6"
               >
                 <p className="text-slate-300 text-center mb-8">
-                  Choose how you want to create your screenplay in the style of "Ghostly Encounters"
+                  Choose how you want to create your screenplay for "CRYPTID JOURNAL"
                 </p>
 
                 {/* Runtime Selector */}

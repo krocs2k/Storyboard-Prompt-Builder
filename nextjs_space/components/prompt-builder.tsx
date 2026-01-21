@@ -359,10 +359,22 @@ export function PromptBuilder() {
     downloadAsDoc(content, 'character-environment-prompts.doc');
   };
 
+  const downloadScreenplay = () => {
+    if (!screenplay) return;
+    let content = `CRYPTID JOURNAL SCREENPLAY\n`;
+    content += `==========================\n\n`;
+    content += `Title: ${screenplay.title}\n`;
+    content += `Runtime: ${screenplay.runtime} minutes\n`;
+    content += `Source: ${screenplay.sourceType === 'youtube' ? 'YouTube Testimonial' : 'Story Concept'}\n`;
+    content += `\n${'='.repeat(50)}\n\n`;
+    content += screenplay.content;
+    downloadAsDoc(content, `${screenplay.title.replace(/[^a-zA-Z0-9]/g, '_')}_screenplay.doc`);
+  };
+
   const downloadStoryboard = () => {
     if (!storyboard) return;
-    let content = 'STORYBOARD BLOCKS AND SHOTLIST\n';
-    content += '==============================\n\n';
+    let content = 'CRYPTID JOURNAL - STORYBOARD BLOCKS AND SHOTLIST\n';
+    content += '================================================\n\n';
     content += 'STORYBOARD BLOCKS\n';
     content += '-----------------\n\n';
     storyboard.blocks.forEach(block => {
@@ -385,7 +397,7 @@ export function PromptBuilder() {
         content += `  Prompt: ${shot.prompt}\n\n`;
       });
     });
-    downloadAsDoc(content, 'storyboard-shotlist.doc');
+    downloadAsDoc(content, 'cryptid_journal_storyboard_shotlist.doc');
   };
 
   const updateSelection = useCallback(<K extends keyof Selections>(key: K, value: Selections[K]) => {
@@ -778,11 +790,27 @@ export function PromptBuilder() {
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-xl font-bold text-purple-400 flex items-center gap-2">
                   <Clapperboard size={24} />
-                  Screenplay: {screenplay.title}
+                  CRYPTID JOURNAL: {screenplay.title}
                 </h3>
                 <span className="px-3 py-1 bg-purple-500/20 rounded-full text-purple-300 text-sm">
                   {screenplay.runtime} min
                 </span>
+              </div>
+              
+              {/* Download Screenplay Button - First action available */}
+              <div className="bg-slate-900/50 rounded-lg p-4 mb-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="text-white font-medium">Screenplay Ready</h4>
+                    <p className="text-slate-400 text-sm">Download the screenplay before proceeding to prompts.</p>
+                  </div>
+                  <button
+                    onClick={downloadScreenplay}
+                    className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-400 hover:to-purple-500 text-white font-medium rounded-lg transition-all"
+                  >
+                    <Download size={18} /> Download Screenplay
+                  </button>
+                </div>
               </div>
               
               <div className="grid md:grid-cols-2 gap-4 mb-6">
@@ -816,27 +844,43 @@ export function PromptBuilder() {
                 </div>
               </div>
 
+              {/* Workflow Info */}
+              <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-4 mb-6">
+                <h4 className="text-amber-400 font-medium mb-2">Workflow</h4>
+                <ol className="text-slate-300 text-sm space-y-1 list-decimal list-inside">
+                  <li>Review and configure Sections 1-5 above based on your visual preferences</li>
+                  <li>Click &quot;Create Character & Environment Prompts&quot; to generate detailed prompts for all characters and environments</li>
+                  <li>Click &quot;Create Storyboard&quot; to generate 30-second storyboard blocks and shotlist</li>
+                  <li>Download prompts and storyboard as DOC files</li>
+                  <li>Save your project for future editing</li>
+                </ol>
+              </div>
+
               {/* Character & Environment Prompts */}
-              <div className="flex flex-wrap gap-3 mb-6">
-                <button
-                  onClick={generateCharacterEnvironmentPrompts}
-                  disabled={generatingPrompts}
-                  className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-400 hover:to-purple-500 disabled:from-slate-600 disabled:to-slate-700 text-white font-medium rounded-lg transition-all"
-                >
-                  {generatingPrompts ? (
-                    <><Loader2 size={18} className="animate-spin" /> Generating...</>
-                  ) : (
-                    <><Sparkles size={18} /> Create Character & Environment Prompts</>
-                  )}
-                </button>
-                {characterPrompts.length > 0 && (
+              <div className="border-t border-slate-700 pt-6">
+                <h4 className="text-lg font-semibold text-white mb-4">Step 1: Character & Environment Prompts</h4>
+                <p className="text-slate-400 text-sm mb-4">Generate detailed image prompts for all characters and environments based on your Section 1-5 configuration.</p>
+                <div className="flex flex-wrap gap-3 mb-6">
                   <button
-                    onClick={downloadCharacterEnvironmentPrompts}
-                    className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white font-medium rounded-lg transition-all"
+                    onClick={generateCharacterEnvironmentPrompts}
+                    disabled={generatingPrompts}
+                    className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-400 hover:to-purple-500 disabled:from-slate-600 disabled:to-slate-700 text-white font-medium rounded-lg transition-all"
                   >
-                    <Download size={18} /> Download Prompts
+                    {generatingPrompts ? (
+                      <><Loader2 size={18} className="animate-spin" /> Generating...</>
+                    ) : (
+                      <><Sparkles size={18} /> Create Character & Environment Prompts</>
+                    )}
                   </button>
-                )}
+                  {characterPrompts.length > 0 && (
+                    <button
+                      onClick={downloadCharacterEnvironmentPrompts}
+                      className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white font-medium rounded-lg transition-all"
+                    >
+                      <Download size={18} /> Download Prompts
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* Show Generated Prompts */}
@@ -859,6 +903,8 @@ export function PromptBuilder() {
 
               {/* Storyboard Generation */}
               <div className="border-t border-slate-700 pt-6">
+                <h4 className="text-lg font-semibold text-white mb-4">Step 2: Storyboard & Shotlist</h4>
+                <p className="text-slate-400 text-sm mb-4">Generate 30-second storyboard blocks with detailed prompts, organized into a shotlist by location.</p>
                 <div className="flex flex-wrap gap-3">
                   <button
                     onClick={generateStoryboard}

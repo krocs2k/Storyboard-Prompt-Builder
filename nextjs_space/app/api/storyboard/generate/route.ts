@@ -29,27 +29,37 @@ export async function POST(request: NextRequest) {
         messages: [
           {
             role: 'system',
-            content: `You are an expert storyboard artist and cinematographer. Your task is to break down screenplays into detailed storyboard blocks, each representing approximately 30 seconds of screen time. Create vivid, actionable image generation prompts for each block.`
+            content: `You are an expert storyboard artist and cinematographer specializing in paranormal documentary series. Your task is to break down "CRYPTID JOURNAL" screenplays into detailed storyboard blocks, each representing approximately 30 seconds of screen time. Create vivid, atmospheric, and cinematic image generation prompts for each block that capture the show's dark, mysterious tone.`
           },
           {
             role: 'user',
-            content: `Break down this screenplay into ${blockCount} storyboard blocks (each ~30 seconds of screen time).
+            content: `Break down this "CRYPTID JOURNAL" screenplay into ${blockCount} storyboard blocks (each ~30 seconds of screen time).
 
 SCREENPLAY:
 ${screenplay.substring(0, 12000)}
 
-VISUAL STYLE SPECIFICATIONS:
+VISUAL STYLE SPECIFICATIONS (from Sections 1-5):
 ${styleContext}
+
+CRYPTID JOURNAL VISUAL GUIDELINES:
+- Underground Facility (Host scenes): Dark, shadowy, industrial, mysterious artifacts visible, dramatic low-key lighting
+- Interview Room: Stark, clinical, single overhead light, deep shadows, concrete walls, isolated feeling
+- Re-enactments: Atmospheric, cinematic, dramatic lighting shifts for tension, supernatural elements when appropriate
 
 For each storyboard block, provide:
 1. Block number and timestamp range
-2. Scene/location
-3. Action description
-4. Detailed image generation prompt incorporating the visual style
-5. Shot type recommendation
-6. Lighting notes
+2. Scene/location (HOST FACILITY, INTERVIEW ROOM, or RE-ENACTMENT location)
+3. Detailed action description
+4. Comprehensive image generation prompt incorporating:
+   - ALL visual style specifications from Sections 1-5
+   - Character positions and expressions
+   - Lighting mood and sources
+   - Atmospheric elements
+   - Any supernatural/eerie visual elements
+5. Shot type recommendation (vary between wide, medium, close-up, etc.)
+6. Specific lighting notes for that block
 
-Also create a SHOTLIST organized by location for efficient filming.
+Also create a SHOTLIST organized by location for efficient filming/production.
 
 Respond in JSON format:
 {
@@ -58,13 +68,13 @@ Respond in JSON format:
       "blockNumber": 1,
       "timestampStart": "00:00",
       "timestampEnd": "00:30",
-      "scene": "INT. BEDROOM - NIGHT",
-      "location": "Bedroom",
+      "scene": "INT. UNDERGROUND FACILITY - NIGHT",
+      "location": "Underground Facility",
       "action": "Description of what happens",
-      "prompt": "Detailed image generation prompt with all style specifications",
+      "prompt": "Comprehensive image generation prompt with all visual specifications applied, atmospheric details, character descriptions, lighting",
       "shotType": "MEDIUM SHOT",
-      "lighting": "LOW KEY LIGHTING",
-      "notes": "Any additional cinematography notes"
+      "lighting": "LOW KEY DRAMATIC LIGHTING with single harsh overhead source",
+      "notes": "Cinematography and mood notes"
     }
   ],
   "shotlist": {
@@ -72,8 +82,8 @@ Respond in JSON format:
       {
         "blockNumber": 1,
         "shotType": "MEDIUM SHOT",
-        "action": "Brief action",
-        "prompt": "The prompt"
+        "action": "Brief action description",
+        "prompt": "The full prompt"
       }
     ]
   },
