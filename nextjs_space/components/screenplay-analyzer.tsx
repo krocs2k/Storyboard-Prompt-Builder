@@ -38,10 +38,10 @@ export default function ScreenplayAnalyzer({
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
     if (selectedFile) {
-      const validTypes = ['.txt', '.doc', '.docx', '.pdf'];
+      const validTypes = ['.txt', '.md', '.doc', '.docx'];
       const ext = selectedFile.name.toLowerCase().slice(selectedFile.name.lastIndexOf('.'));
       if (!validTypes.includes(ext)) {
-        setError('Please upload a .txt, .doc, .docx, or .pdf file');
+        setError('Please upload a .txt, .md, .doc, or .docx file');
         return;
       }
       setFile(selectedFile);
@@ -53,10 +53,10 @@ export default function ScreenplayAnalyzer({
     e.preventDefault();
     const droppedFile = e.dataTransfer.files[0];
     if (droppedFile) {
-      const validTypes = ['.txt', '.doc', '.docx', '.pdf'];
+      const validTypes = ['.txt', '.md', '.doc', '.docx'];
       const ext = droppedFile.name.toLowerCase().slice(droppedFile.name.lastIndexOf('.'));
       if (!validTypes.includes(ext)) {
-        setError('Please upload a .txt, .doc, .docx, or .pdf file');
+        setError('Please upload a .txt, .md, .doc, or .docx file');
         return;
       }
       setFile(droppedFile);
@@ -259,7 +259,7 @@ export default function ScreenplayAnalyzer({
                   <input
                     ref={fileInputRef}
                     type="file"
-                    accept=".txt,.doc,.docx,.pdf"
+                    accept=".txt,.md,.doc,.docx"
                     onChange={handleFileSelect}
                     className="hidden"
                   />
@@ -274,7 +274,7 @@ export default function ScreenplayAnalyzer({
                       <Upload className="w-12 h-12 text-slate-500 mb-4" />
                       <p className="text-white font-medium">Drop your screenplay here</p>
                       <p className="text-slate-400 text-sm mt-2">or click to browse</p>
-                      <p className="text-slate-500 text-xs mt-4">Supports .txt, .doc, .docx, .pdf</p>
+                      <p className="text-slate-500 text-xs mt-4">Supports .txt, .md, .doc, .docx</p>
                     </div>
                   )}
                 </div>

@@ -16,15 +16,16 @@ export async function POST(request: NextRequest) {
     let screenplayContent = '';
     const fileName = file.name.toLowerCase();
     
-    if (fileName.endsWith('.txt')) {
+    if (fileName.endsWith('.txt') || fileName.endsWith('.md')) {
+      // Plain text and Markdown files
       screenplayContent = await file.text();
-    } else if (fileName.endsWith('.doc') || fileName.endsWith('.docx')) {
-      // Mammoth supports both .doc and .docx formats
+    } else if (fileName.endsWith('.docx')) {
+      // DOCX files - mammoth supports these well
       const buffer = await file.arrayBuffer();
       const result = await mammoth.extractRawText({ buffer: Buffer.from(buffer) });
       screenplayContent = result.value;
-    } else if (fileName.endsWith('.pdf')) {
-      // For PDF, we'll use the LLM to extract and analyze
+    } else if (fileName.endsWith('.doc')) {
+      // Legacy DOC files - use LLM to extract
       const buffer = await file.arrayBuffer();
       const base64String = Buffer.from(buffer).toString('base64');
       
@@ -44,12 +45,12 @@ export async function POST(request: NextRequest) {
                   type: 'file',
                   file: {
                     filename: file.name,
-                    file_data: `data:application/pdf;base64,${base64String}`
+                    file_data: `data:application/msword;base64,${base64String}`
                   }
                 },
                 {
                   type: 'text',
-                  text: 'Extract the full text content from this screenplay PDF.'
+                  text: 'Extract the full text content from this document. Return only the text content.'
                 }
               ]
             }
@@ -59,14 +60,14 @@ export async function POST(request: NextRequest) {
       });
 
       if (!response.ok) {
-        throw new Error('Failed to extract PDF content');
+        throw new Error('Failed to extract DOC content');
       }
 
       const data = await response.json();
       screenplayContent = data.choices[0].message.content;
     } else {
       return NextResponse.json(
-        { error: 'Unsupported file format. Please upload .txt, .doc, .docx, or .pdf' },
+        { error: 'Unsupported file format. Please upload .txt, .md, .doc, or .docx' },
         { status: 400 }
       );
     }
