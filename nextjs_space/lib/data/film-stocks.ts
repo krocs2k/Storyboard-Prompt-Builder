@@ -1,0 +1,52 @@
+export interface FilmStock {
+  id: string;
+  name: string;
+  description: string;
+  image?: string;
+}
+
+export const filmStocks: FilmStock[] = [
+  { id: 'kodak-50d', name: 'Kodak Vision3 50D 5203', description: 'daylight balanced, fine grain, high dynamic range, natural color, clean highlights, cinema realism' },
+  { id: 'kodak-200t', name: 'Kodak Vision3 200T 5213', description: 'tungsten balanced, moderate grain, warm color response, soft highlight rolloff, cinematic tones' },
+  { id: 'kodak-250d', name: 'Kodak Vision3 250D 5207', description: 'daylight balanced, natural contrast, smooth skin tones, balanced color palette, versatile exterior look' },
+  { id: 'kodak-500t', name: 'Kodak Vision3 500T 5219', description: 'tungsten balanced, low-light optimized, wide dynamic range, soft film grain, warm and cinematic', image: 'https://cdn.abacus.ai/images/7daf986e-3045-4099-b3ef-5626ad2ef786.png' },
+  { id: 'kodak-5245', name: 'Kodak EXR 5245 (discontinued)', description: 'daylight balanced, fine grain, moderate contrast, natural color, classic 90s cinema feel' },
+  { id: 'kodak-5298', name: 'Kodak EXR 5298 (discontinued)', description: 'tungsten balanced, medium grain, warm tones, lower saturation, vintage cinematic palette' },
+  { id: 'kodak-5248', name: 'Kodak 5248 (discontinued)', description: 'daylight balanced, fine grain, pastel color palette, lower contrast, early Hollywood film texture' },
+  { id: 'kodak-5279', name: 'Kodak 5279 (discontinued)', description: 'tungsten balanced, grainy high ISO look, warm highlights, gritty cinematic style' },
+  { id: 'fuji-250d', name: 'Fuji Eterna 250D 8563', description: 'daylight balanced, pastel color palette, soft contrast, cool greens, subtle halation' },
+  { id: 'fuji-250t', name: 'Fuji Eterna 250T 8553', description: 'tungsten balanced, medium grain, softer saturation, filmic color bias, balanced highlights' },
+  { id: 'fuji-500t', name: 'Fuji Eterna 500T 8573', description: 'tungsten balanced, low-light friendly, slightly cooler tones, smoother shadow detail' },
+  { id: 'fuji-reala', name: 'Fuji Reala 500D', description: 'daylight balanced, accurate skin replication, balanced saturation, softer contrast' },
+  { id: 'fuji-velvia-motion', name: 'Fuji Velvia Motion (rare)', description: 'high saturation, punchy contrast, strong greens and reds, vivid cinematic landscapes' },
+  { id: 'agfa-xt320', name: 'Agfa XT320', description: 'neutral-to-warm balance, lower contrast, smooth grain, European cinema palette' },
+  { id: 'portra-160', name: 'Kodak Portra 160', description: 'natural skin tones, low contrast, pastel palette, fine grain, smooth highlight rolloff' },
+  { id: 'portra-400', name: 'Kodak Portra 400', description: 'balanced saturation, fine grain for ISO 400, warm skin tones, broad dynamic range' },
+  { id: 'portra-800', name: 'Kodak Portra 800', description: 'warm tones, medium grain, low-light capability, soft contrast, filmic color warmth' },
+  { id: 'ektar-100', name: 'Kodak Ektar 100', description: 'ultra-fine grain, high saturation, vivid reds and blues, punchy contrast, landscape-friendly' },
+  { id: 'gold-200', name: 'Kodak Gold 200', description: 'warm consumer palette, medium grain, nostalgic tones, moderate contrast, 90s photo feel' },
+  { id: 'ultramax-400', name: 'Kodak Ultramax 400', description: 'warm color shift, medium grain, stronger saturation, casual film snapshot aesthetic' },
+  { id: 'colorplus-200', name: 'Kodak ColorPlus 200', description: 'warm bias, vintage consumer look, medium grain, muted contrast, nostalgic pastel tones' },
+  { id: 'tri-x', name: 'Kodak Tri-X 400', description: 'iconic B&W, medium-to-high grain, strong contrast, pronounced grain structure, documentary photojournalism' },
+  { id: 'tmax-100', name: 'Kodak T-Max 100', description: 'fine grain B&W, high resolution, smooth tonal transitions, modern monochrome aesthetic' },
+  { id: 'tmax-400', name: 'Kodak T-Max 400', description: 'clean grain for ISO 400, high acutance, modern contrast, professional monochrome look' },
+  { id: 'velvia-50', name: 'Fujifilm Velvia 50', description: 'high saturation, deep greens, vivid landscapes, punchy contrast, fine grain' },
+  { id: 'velvia-100', name: 'Fujifilm Velvia 100', description: 'saturated palette, rich reds and greens, sharper contrast, landscape favorite' },
+  { id: 'provia-100f', name: 'Fujifilm Provia 100F', description: 'neutral-to-cool color, medium contrast, fine grain, natural skin tones for slide film' },
+  { id: 'astia-100f', name: 'Fujifilm Astia 100F', description: 'low contrast slide film, soft skin tones, natural color, subtle highlights, fashion portrait favorite' },
+  { id: 'superia-400', name: 'Fujifilm Superia 400', description: 'cool film palette, medium grain, high color saturation, strong greens, consumer 90s look' },
+  { id: 'natura-1600', name: 'Fujifilm Natura 1600', description: 'high ISO film, muted contrast, pastel tones, visible grain, low-light urban aesthetic' },
+  { id: 'acros-100', name: 'Fujifilm Acros 100', description: 'B&W, very fine grain, smooth tones, modern contrast, crisp edges, minimalist monochrome' },
+  { id: 'hp5', name: 'Ilford HP5+ 400', description: 'B&W, medium grain, wide exposure latitude, classic documentary style, strong tonal range' },
+  { id: 'delta-100', name: 'Ilford Delta 100', description: 'B&W, fine grain, smooth grayscale, high resolution, clean modern monochrome' },
+  { id: 'delta-3200', name: 'Ilford Delta 3200', description: 'B&W, high grain texture, moody low-light, cinematic contrast, gritty aesthetic' },
+  { id: 'fp4', name: 'Ilford FP4+ 125', description: 'B&W, fine grain, medium contrast, classic traditional monochrome look' },
+  { id: 'pan-f', name: 'Ilford Pan F 50', description: 'ultra-fine grain, very sharp, high detail, crisp monochrome, low ISO clarity' },
+  { id: 'agfa-vista', name: 'Agfa Vista 200', description: 'warm tones, mild saturation, medium grain, soft contrast, European consumer look' },
+  { id: 'apx-100', name: 'Agfa APX 100', description: 'B&W, fine grain, classic contrast, crisp detail, traditional monochrome aesthetic' },
+  { id: 'apx-400', name: 'Agfa APX 400', description: 'B&W, medium grain, punchy contrast, photojournalistic feel' },
+  { id: 'cinestill-50d', name: 'CineStill 50D', description: 'daylight balanced, cinematic color, fine grain, halation around highlights, filmic digital emulation look' },
+  { id: 'cinestill-800t', name: 'CineStill 800T', description: 'tungsten balanced, warm/orange halation, cinematic low-light, medium-heavy grain' },
+  { id: 'imax-5219', name: '65mm IMAX Kodak 5219 (Reformatted)', description: 'ultra fine grain, massive dynamic range, photoreal cinematic scale, pristine highlight rolloff' },
+  { id: 'imax-5247', name: '65mm IMAX Kodak 5247 (Historical)', description: 'fine grain, warm tones, natural contrast, classic IMAX documentary look' },
+];
