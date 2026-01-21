@@ -4,9 +4,9 @@ import { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Upload, FileText, Loader2, X, CheckCircle, AlertCircle,
-  Camera, Sun, Film, Palette, Sparkles
+  Camera, Sun, Film, Palette, Sparkles, Download, Mic
 } from 'lucide-react';
-import { AnalysisRecommendations, SelectionState } from '@/lib/types';
+import { AnalysisRecommendations, SelectionState, DialogueLine } from '@/lib/types';
 
 interface ScreenplayAnalyzerProps {
   onAnalysisComplete: (data: {
@@ -31,6 +31,8 @@ export default function ScreenplayAnalyzer({
   const [error, setError] = useState('');
   const [analysis, setAnalysis] = useState<AnalysisRecommendations | null>(null);
   const [screenplay, setScreenplay] = useState('');
+  const [dialogueLines, setDialogueLines] = useState<DialogueLine[]>([]);
+  const [downloadingVO, setDownloadingVO] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -82,6 +84,7 @@ export default function ScreenplayAnalyzer({
 
       setScreenplay(data.screenplay);
       setAnalysis(data.analysis);
+      setDialogueLines(data.dialogueLines || []);
 
       onAnalysisComplete({
         screenplay: data.screenplay,
@@ -169,6 +172,39 @@ export default function ScreenplayAnalyzer({
     }
 
     onRecommendationsApply(selections);
+  };
+
+  const downloadVoiceOver = async (format: 'csv' | 'txt') => {
+    if (dialogueLines.length === 0) return;
+    
+    setDownloadingVO(true);
+    try {
+      const response = await fetch('/api/screenplay/voiceover', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          dialogueLines,
+          title: analysis?.title || 'Screenplay',
+          format
+        }),
+      });
+
+      if (!response.ok) throw new Error('Failed to download voice-over script');
+
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${(analysis?.title || 'Screenplay').replace(/[^a-zA-Z0-9\s-]/g, '')}_VoiceOver.${format}`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to download voice-over script');
+    } finally {
+      setDownloadingVO(false);
+    }
   };
 
   return (
@@ -400,6 +436,63 @@ export default function ScreenplayAnalyzer({
                     </div>
                   </div>
                 </div>
+
+                {/* Voice-Over Script */}
+                {dialogueLines.length > 0 && (
+                  <div className="bg-slate-800/50 rounded-xl p-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center gap-2">
+                        <Mic className="w-5 h-5 text-amber-400" />
+                        <h3 className="text-lg font-semibold text-white">Voice-Over Script ({dialogueLines.length} lines)</h3>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => downloadVoiceOver('csv')}
+                          disabled={downloadingVO}
+                          className="px-3 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 disabled:bg-slate-700 border border-amber-500/50 disabled:border-slate-600 rounded-lg text-amber-400 disabled:text-slate-500 text-sm transition-colors flex items-center gap-1.5"
+                        >
+                          {downloadingVO ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                          CSV
+                        </button>
+                        <button
+                          onClick={() => downloadVoiceOver('txt')}
+                          disabled={downloadingVO}
+                          className="px-3 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 disabled:bg-slate-700 border border-amber-500/50 disabled:border-slate-600 rounded-lg text-amber-400 disabled:text-slate-500 text-sm transition-colors flex items-center gap-1.5"
+                        >
+                          {downloadingVO ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                          TXT
+                        </button>
+                      </div>
+                    </div>
+                    
+                    {/* Dialogue Table Preview */}
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-slate-700">
+                            <th className="text-left py-2 px-3 text-amber-400 font-medium w-28">Character</th>
+                            <th className="text-left py-2 px-3 text-amber-400 font-medium">Dialogue</th>
+                            <th className="text-left py-2 px-3 text-amber-400 font-medium w-48">Delivery</th>
+                          </tr>
+                        </thead>
+                        <tbody className="max-h-64 overflow-y-auto">
+                          {dialogueLines.slice(0, 10).map((line, i) => (
+                            <tr key={i} className="border-b border-slate-700/50 hover:bg-slate-900/30">
+                              <td className="py-2 px-3 text-white font-medium align-top">{line.character}</td>
+                              <td className="py-2 px-3 text-slate-300 align-top">{line.dialogue}</td>
+                              <td className="py-2 px-3 text-slate-400 italic text-xs align-top">{line.delivery}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      {dialogueLines.length > 10 && (
+                        <p className="text-slate-500 text-xs mt-2 text-center">
+                          Showing 10 of {dialogueLines.length} lines. Download for full script.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 <button
                   onClick={onClose}

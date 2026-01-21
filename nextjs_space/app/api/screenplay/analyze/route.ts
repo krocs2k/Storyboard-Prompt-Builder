@@ -152,10 +152,77 @@ Respond with raw JSON only.`
     const analysisData = await analysisResponse.json();
     const analysis = JSON.parse(analysisData.choices[0].message.content);
     
+    // Extract dialogue with delivery instructions
+    const dialogueResponse = await fetch('https://apps.abacus.ai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${process.env.ABACUSAI_API_KEY}`
+      },
+      body: JSON.stringify({
+        model: 'gemini-3-flash',
+        messages: [
+          {
+            role: 'system',
+            content: `You are an expert dialogue director extracting voice-over scripts from screenplays. Extract ALL dialogue lines and provide clear, concise delivery direction for voice actors.
+
+For each line of dialogue, provide:
+1. CHARACTER - The character's name exactly as written
+2. DIALOGUE - The exact dialogue text (clean it up if needed but preserve meaning)
+3. DELIVERY - A brief, clear direction for how the line should be performed. Keep under 100 characters. Be specific about emotion, tone, pacing, and intent.
+
+Examples of good delivery directions:
+- "Whispered, terrified, barely audible"
+- "Loud, authoritative, commanding attention"
+- "Soft, nostalgic, with a hint of regret"
+- "Fast-paced, panicked, out of breath"
+- "Cold, detached, matter-of-fact"
+- "Warm, reassuring, like comforting a child"
+- "Sarcastic, with bitter undertone"
+- "Trembling voice, fighting back tears"`
+          },
+          {
+            role: 'user',
+            content: `Extract ALL dialogue from this screenplay for voice-over recording:
+
+${screenplayContent.substring(0, 20000)}
+
+Return JSON format:
+{
+  "dialogueLines": [
+    {
+      "character": "CHARACTER NAME",
+      "dialogue": "The exact dialogue text",
+      "delivery": "Brief delivery direction under 100 chars"
+    }
+  ]
+}
+
+Include EVERY line of dialogue in order of appearance. Respond with raw JSON only.`
+          }
+        ],
+        response_format: { type: 'json_object' },
+        max_tokens: 8000,
+      }),
+    });
+
+    let dialogueLines: Array<{ character: string; dialogue: string; delivery: string }> = [];
+    
+    if (dialogueResponse.ok) {
+      try {
+        const dialogueData = await dialogueResponse.json();
+        const dialogueResult = JSON.parse(dialogueData.choices[0].message.content);
+        dialogueLines = dialogueResult.dialogueLines || [];
+      } catch (e) {
+        console.error('Failed to parse dialogue:', e);
+      }
+    }
+    
     return NextResponse.json({
       success: true,
       screenplay: screenplayContent,
-      analysis
+      analysis,
+      dialogueLines
     });
   } catch (error) {
     console.error('Screenplay analysis error:', error);

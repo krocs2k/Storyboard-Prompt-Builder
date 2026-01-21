@@ -72,6 +72,12 @@ export interface EnvironmentPrompt {
   prompt: string;
 }
 
+export interface DialogueLine {
+  character: string;
+  dialogue: string;
+  delivery: string;
+}
+
 export interface StoryboardBlock {
   blockNumber: number;
   timestampStart: string;
