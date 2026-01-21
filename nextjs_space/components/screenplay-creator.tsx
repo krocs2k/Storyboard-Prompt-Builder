@@ -4,7 +4,7 @@ import { useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Youtube, Lightbulb, Clock, Loader2, ChevronRight, RefreshCw,
-  CheckCircle, FileText, Download, X
+  CheckCircle, FileText, Download, X, Upload, Link, ClipboardPaste
 } from 'lucide-react';
 import { StoryConcept } from '@/lib/types';
 
@@ -34,6 +34,8 @@ export default function ScreenplayCreator({ onScreenplayCreated, onClose }: Scre
   const [progress, setProgress] = useState('');
   const [screenplay, setScreenplay] = useState('');
   const [error, setError] = useState('');
+  const [transcriptMode, setTranscriptMode] = useState<'auto' | 'manual'>('manual');
+  const [manualTranscript, setManualTranscript] = useState('');
 
   const fetchTranscript = useCallback(async () => {
     setLoading(true);
@@ -194,9 +196,17 @@ export default function ScreenplayCreator({ onScreenplayCreated, onClose }: Scre
   };
 
   const handleYoutubeSubmit = async () => {
-    const transcript = await fetchTranscript();
-    if (transcript) {
-      await generateScreenplay('youtube', transcript);
+    if (transcriptMode === 'manual') {
+      if (manualTranscript.trim()) {
+        await generateScreenplay('youtube', manualTranscript.trim());
+      } else {
+        setError('Please paste the transcript text');
+      }
+    } else {
+      const transcript = await fetchTranscript();
+      if (transcript) {
+        await generateScreenplay('youtube', transcript);
+      }
     }
   };
 
@@ -322,22 +332,104 @@ export default function ScreenplayCreator({ onScreenplayCreated, onClose }: Scre
                   <ChevronRight className="w-4 h-4 rotate-180" /> Back
                 </button>
 
-                <div className="bg-slate-800/50 rounded-xl p-6">
-                  <label className="flex items-center gap-2 text-amber-400 font-medium mb-4">
-                    <Youtube className="w-5 h-5 text-red-400" />
-                    YouTube Video URL
-                  </label>
-                  <input
-                    type="url"
-                    value={youtubeUrl}
-                    onChange={(e) => setYoutubeUrl(e.target.value)}
-                    placeholder="https://www.youtube.com/watch?v=..."
-                    className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:border-amber-500 focus:outline-none"
-                  />
-                  <p className="text-slate-500 text-sm mt-2">
-                    The video must have captions/subtitles enabled. The transcript will be extracted and transformed into a screenplay.
-                  </p>
+                {/* Transcript Source Toggle */}
+                <div className="bg-slate-800/50 rounded-xl p-4">
+                  <label className="text-amber-400 font-medium mb-3 block">Transcript Source</label>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setTranscriptMode('manual')}
+                      className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-lg font-medium transition-all ${
+                        transcriptMode === 'manual'
+                          ? 'bg-amber-500 text-slate-900'
+                          : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                      }`}
+                    >
+                      <ClipboardPaste className="w-4 h-4" />
+                      Import Transcript
+                    </button>
+                    <button
+                      onClick={() => setTranscriptMode('auto')}
+                      className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-lg font-medium transition-all ${
+                        transcriptMode === 'auto'
+                          ? 'bg-amber-500 text-slate-900'
+                          : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                      }`}
+                    >
+                      <Link className="w-4 h-4" />
+                      Auto-Extract from URL
+                    </button>
+                  </div>
                 </div>
+
+                {/* Manual Transcript Import */}
+                {transcriptMode === 'manual' && (
+                  <div className="bg-slate-800/50 rounded-xl p-6">
+                    <label className="flex items-center gap-2 text-amber-400 font-medium mb-4">
+                      <ClipboardPaste className="w-5 h-5" />
+                      Paste YouTube Transcript
+                    </label>
+                    <textarea
+                      value={manualTranscript}
+                      onChange={(e) => setManualTranscript(e.target.value)}
+                      placeholder="Paste the full transcript text here...
+
+To get the transcript from YouTube:
+1. Open the video on YouTube
+2. Click the '...' (More) button below the video
+3. Click 'Show transcript'
+4. Copy all the text and paste it here"
+                      rows={10}
+                      className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:border-amber-500 focus:outline-none resize-none font-mono text-sm"
+                    />
+                    <div className="flex items-center justify-between mt-2">
+                      <p className="text-slate-500 text-sm">
+                        Paste the transcript directly from YouTube for best results
+                      </p>
+                      {manualTranscript && (
+                        <span className="text-slate-400 text-xs">
+                          {manualTranscript.split(/\s+/).filter(w => w).length} words
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Auto-Extract URL Input */}
+                {transcriptMode === 'auto' && (
+                  <div className="bg-slate-800/50 rounded-xl p-6">
+                    <label className="flex items-center gap-2 text-amber-400 font-medium mb-4">
+                      <Youtube className="w-5 h-5 text-red-400" />
+                      YouTube Video URL
+                    </label>
+                    <input
+                      type="url"
+                      value={youtubeUrl}
+                      onChange={(e) => setYoutubeUrl(e.target.value)}
+                      placeholder="https://www.youtube.com/watch?v=..."
+                      className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:border-amber-500 focus:outline-none"
+                    />
+                    <p className="text-slate-500 text-sm mt-2">
+                      ⚠️ Auto-extraction requires the video to have captions/subtitles enabled. If this fails, use "Import Transcript" instead.
+                    </p>
+                  </div>
+                )}
+
+                {/* Optional: YouTube URL for reference when using manual mode */}
+                {transcriptMode === 'manual' && (
+                  <div className="bg-slate-800/50 rounded-xl p-6">
+                    <label className="flex items-center gap-2 text-slate-400 font-medium mb-4">
+                      <Youtube className="w-5 h-5 text-red-400" />
+                      YouTube URL (optional, for reference)
+                    </label>
+                    <input
+                      type="url"
+                      value={youtubeUrl}
+                      onChange={(e) => setYoutubeUrl(e.target.value)}
+                      placeholder="https://www.youtube.com/watch?v=..."
+                      className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:border-amber-500 focus:outline-none"
+                    />
+                  </div>
+                )}
 
                 <div className="bg-slate-800/50 rounded-xl p-6">
                   <label className="flex items-center gap-2 text-amber-400 font-medium mb-4">
@@ -356,7 +448,7 @@ export default function ScreenplayCreator({ onScreenplayCreated, onClose }: Scre
 
                 <button
                   onClick={handleYoutubeSubmit}
-                  disabled={!youtubeUrl || loading}
+                  disabled={(transcriptMode === 'auto' && !youtubeUrl) || (transcriptMode === 'manual' && !manualTranscript.trim()) || loading}
                   className="w-full py-4 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 disabled:from-slate-600 disabled:to-slate-700 text-slate-900 disabled:text-slate-500 font-semibold rounded-xl transition-all flex items-center justify-center gap-2"
                 >
                   {loading ? (
