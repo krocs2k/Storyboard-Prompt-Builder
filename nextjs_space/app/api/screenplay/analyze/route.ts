@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import mammoth from 'mammoth';
+import WordExtractor from 'word-extractor';
 
 export async function POST(request: NextRequest) {
   try {
@@ -25,46 +26,11 @@ export async function POST(request: NextRequest) {
       const result = await mammoth.extractRawText({ buffer: Buffer.from(buffer) });
       screenplayContent = result.value;
     } else if (fileName.endsWith('.doc')) {
-      // Legacy DOC files - use LLM to extract
+      // Legacy DOC files - use word-extractor library
       const buffer = await file.arrayBuffer();
-      const base64String = Buffer.from(buffer).toString('base64');
-      
-      const response = await fetch('https://apps.abacus.ai/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${process.env.ABACUSAI_API_KEY}`
-        },
-        body: JSON.stringify({
-          model: 'gemini-3-flash',
-          messages: [
-            {
-              role: 'user',
-              content: [
-                {
-                  type: 'file',
-                  file: {
-                    filename: file.name,
-                    file_data: `data:application/msword;base64,${base64String}`
-                  }
-                },
-                {
-                  type: 'text',
-                  text: 'Extract the full text content from this document. Return only the text content.'
-                }
-              ]
-            }
-          ],
-          max_tokens: 8000,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to extract DOC content');
-      }
-
-      const data = await response.json();
-      screenplayContent = data.choices[0].message.content;
+      const extractor = new WordExtractor();
+      const extracted = await extractor.extract(Buffer.from(buffer));
+      screenplayContent = extracted.getBody();
     } else {
       return NextResponse.json(
         { error: 'Unsupported file format. Please upload .txt, .md, .doc, or .docx' },
