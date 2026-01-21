@@ -378,17 +378,17 @@ export function PromptBuilder() {
     content += 'STORYBOARD BLOCKS\n';
     content += '-----------------\n\n';
     storyboard.blocks.forEach(block => {
-      content += `BLOCK ${block.blockNumber} (${block.timestampStart} - ${block.timestampEnd})\n`;
+      content += `BLOCK ${block.blockNumber || 'N/A'} (${block.timestampStart || '00:00'} - ${block.timestampEnd || '00:30'})\n`;
       content += `${'='.repeat(50)}\n`;
-      content += `Scene: ${block.scene}\n`;
-      content += `Location: ${block.location}\n\n`;
+      content += `Scene: ${block.scene || 'N/A'}\n`;
+      content += `Location: ${block.location || 'N/A'}\n\n`;
       
       // Section 2 & 3 breakdown (Constructed Prompt components)
       content += `--- SECTION 2: SUBJECT & FRAMING ---\n`;
-      content += `Shot Type: ${block.shotType}\n`;
+      content += `Shot Type: ${block.shotType || 'N/A'}\n`;
       if (block.subjectAction) {
         content += `Subject & Action: ${block.subjectAction}\n`;
-      } else {
+      } else if (block.action) {
         content += `Action: ${block.action}\n`;
       }
       if (block.environment) {
@@ -397,14 +397,14 @@ export function PromptBuilder() {
       content += '\n';
       
       content += `--- SECTION 3: LIGHTING & MOOD ---\n`;
-      content += `Lighting: ${block.lighting}\n`;
+      content += `Lighting: ${block.lighting || 'N/A'}\n`;
       if (block.atmosphere) {
         content += `Atmosphere/Mood: ${block.atmosphere}\n`;
       }
       content += '\n';
       
       content += `--- CONSTRUCTED PROMPT ---\n`;
-      content += `${block.prompt}\n`;
+      content += `${block.prompt || 'No prompt generated'}\n`;
       
       if (block.notes) {
         content += `\n--- NOTES ---\n`;
@@ -414,13 +414,13 @@ export function PromptBuilder() {
     });
     content += '\nSHOTLIST BY LOCATION\n';
     content += '====================\n\n';
-    Object.entries(storyboard.shotlist).forEach(([location, shots]) => {
-      content += `\n${location.toUpperCase()}\n`;
-      content += '-'.repeat(location.length) + '\n\n';
-      shots.forEach(shot => {
-        content += `  Block ${shot.blockNumber}: ${shot.shotType}\n`;
-        content += `  Action: ${shot.action}\n`;
-        content += `  Prompt: ${shot.prompt}\n\n`;
+    Object.entries(storyboard.shotlist || {}).forEach(([location, shots]) => {
+      content += `\n${(location || 'UNKNOWN').toUpperCase()}\n`;
+      content += '-'.repeat((location || 'UNKNOWN').length) + '\n\n';
+      (shots || []).forEach(shot => {
+        content += `  Block ${shot.blockNumber || 'N/A'}: ${shot.shotType || 'N/A'}\n`;
+        content += `  Action: ${shot.action || 'N/A'}\n`;
+        content += `  Prompt: ${shot.prompt || 'No prompt'}\n\n`;
       });
     });
     downloadAsDoc(content, 'cryptid_journal_storyboard_shotlist.doc');
@@ -849,7 +849,7 @@ export function PromptBuilder() {
                     {screenplay.characters.map((char, i) => (
                       <div key={i} className="text-slate-300 text-sm">
                         <span className="font-medium">{char.name}</span>
-                        <span className="text-slate-500"> - {char.description.substring(0, 50)}...</span>
+                        <span className="text-slate-500"> - {char.description ? char.description.substring(0, 50) : 'No description'}...</span>
                       </div>
                     ))}
                   </div>
@@ -863,7 +863,7 @@ export function PromptBuilder() {
                     {screenplay.environments.map((env, i) => (
                       <div key={i} className="text-slate-300 text-sm">
                         <span className="font-medium">{env.name}</span>
-                        <span className="text-slate-500"> - {env.description.substring(0, 50)}...</span>
+                        <span className="text-slate-500"> - {env.description ? env.description.substring(0, 50) : 'No description'}...</span>
                       </div>
                     ))}
                   </div>
@@ -917,7 +917,7 @@ export function PromptBuilder() {
                     {characterPrompts.slice(0, 2).map((cp, i) => (
                       <div key={i} className="bg-slate-800/50 rounded p-3">
                         <p className="text-purple-300 font-medium text-sm">{cp.name}</p>
-                        <p className="text-slate-400 text-xs mt-1">{cp.prompt.substring(0, 150)}...</p>
+                        <p className="text-slate-400 text-xs mt-1">{cp.prompt ? cp.prompt.substring(0, 150) : 'No prompt'}...</p>
                       </div>
                     ))}
                     {characterPrompts.length > 2 && (
@@ -969,7 +969,7 @@ export function PromptBuilder() {
                             <span className="text-cyan-400 font-medium text-sm">Block {block.blockNumber}</span>
                             <span className="text-slate-500 text-xs">{block.timestampStart}</span>
                           </div>
-                          <p className="text-slate-300 text-xs">{block.action.substring(0, 80)}...</p>
+                          <p className="text-slate-300 text-xs">{block.action ? block.action.substring(0, 80) : (block.subjectAction ? block.subjectAction.substring(0, 80) : 'No action')}...</p>
                           <p className="text-slate-500 text-xs mt-1">{block.shotType}</p>
                         </div>
                       ))}
