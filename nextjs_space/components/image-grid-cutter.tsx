@@ -167,7 +167,6 @@ export default function ImageGridCutter({ isOpen, onClose }: ImageGridCutterProp
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
-        onClick={(e) => e.target === e.currentTarget && onClose()}
       >
         <motion.div
           initial={{ scale: 0.9, opacity: 0 }}
@@ -183,7 +182,7 @@ export default function ImageGridCutter({ isOpen, onClose }: ImageGridCutterProp
               </div>
               <div>
                 <h2 className="text-xl font-bold text-white">Image Grid Cutter</h2>
-                <p className="text-sm text-slate-400">Cut images into grid segments</p>
+                <p className="text-sm text-slate-400">Cut images into full-bleed grid segments</p>
               </div>
             </div>
             <button
@@ -245,7 +244,7 @@ export default function ImageGridCutter({ isOpen, onClose }: ImageGridCutterProp
                         <option key={r.value} value={r.value}>{r.label}</option>
                       ))}
                     </select>
-                    <p className="text-xs text-slate-500 mt-1">Each segment will be cropped to this aspect ratio</p>
+                    <p className="text-xs text-slate-500 mt-1">Each full-bleed segment will be resized to this aspect ratio</p>
                   </div>
 
                   {/* Output Format */}
@@ -289,7 +288,7 @@ export default function ImageGridCutter({ isOpen, onClose }: ImageGridCutterProp
                     </div>
                   </div>
                   <p className="text-xs text-slate-500 mt-2 text-center">
-                    {cols * rows} segments per image • Each segment: {aspectRatio} aspect ratio
+                    {cols * rows} full-bleed segments per image • Output: {aspectRatio} aspect ratio
                   </p>
                 </div>
 

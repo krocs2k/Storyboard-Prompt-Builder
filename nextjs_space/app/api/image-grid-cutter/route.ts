@@ -93,47 +93,39 @@ export async function POST(request: NextRequest) {
       const imgWidth = metadata.width || 1920;
       const imgHeight = metadata.height || 1080;
       
-      // Calculate cell dimensions (evenly distributed across the image)
+      // Calculate cell dimensions (evenly distributed across the entire image - full bleed)
       const cellWidth = Math.floor(imgWidth / cols);
       const cellHeight = Math.floor(imgHeight / rows);
       
-      // Calculate the segment dimensions within each cell based on aspect ratio
-      // The segment should fit within the cell while maintaining the target aspect ratio
-      let segmentWidth: number;
-      let segmentHeight: number;
-      
-      const cellAspectRatio = cellWidth / cellHeight;
-      
-      if (cellAspectRatio > targetAspectRatio) {
-        // Cell is wider than target - constrain by height
-        segmentHeight = cellHeight;
-        segmentWidth = Math.floor(cellHeight * targetAspectRatio);
-      } else {
-        // Cell is taller than target - constrain by width
-        segmentWidth = cellWidth;
-        segmentHeight = Math.floor(cellWidth / targetAspectRatio);
-      }
-      
-      // Cut the image into segments
+      // Cut the image into segments - full bleed with no margins
       for (let row = 0; row < rows; row++) {
         for (let col = 0; col < cols; col++) {
-          // Calculate cell position
-          const cellLeft = col * cellWidth;
-          const cellTop = row * cellHeight;
+          // Calculate cell position (full bleed - extract entire cell)
+          const left = col * cellWidth;
+          const top = row * cellHeight;
           
-          // Center the segment within the cell
-          const offsetX = Math.floor((cellWidth - segmentWidth) / 2);
-          const offsetY = Math.floor((cellHeight - segmentHeight) / 2);
+          // For the last column/row, extend to edge to avoid gaps
+          const extractWidth = (col === cols - 1) ? imgWidth - left : cellWidth;
+          const extractHeight = (row === rows - 1) ? imgHeight - top : cellHeight;
           
-          const left = cellLeft + offsetX;
-          const top = cellTop + offsetY;
-          
-          // Extract segment with the target aspect ratio
+          // Extract the full cell (full bleed)
           let segment = sharp(buffer).extract({
-            left: Math.max(0, left),
-            top: Math.max(0, top),
-            width: Math.min(segmentWidth, imgWidth - left),
-            height: Math.min(segmentHeight, imgHeight - top)
+            left,
+            top,
+            width: extractWidth,
+            height: extractHeight
+          });
+          
+          // Resize to match target aspect ratio (cover mode - crops to fill)
+          const outputWidth = extractWidth;
+          const outputHeight = Math.round(extractWidth / targetAspectRatio);
+          
+          // If the target aspect ratio requires different dimensions, resize with cover
+          segment = segment.resize({
+            width: outputWidth,
+            height: outputHeight,
+            fit: 'cover',
+            position: 'center'
           });
           
           // Convert to requested format
@@ -146,7 +138,6 @@ export async function POST(request: NextRequest) {
             outputBuffer = await segment.jpeg({ quality: 95 }).toBuffer();
           }
           
-          const segmentNum = row * cols + col + 1;
           const filename = `image_${String(fileIdx + 1).padStart(2, '0')}_row${String(row + 1).padStart(2, '0')}_col${String(col + 1).padStart(2, '0')}.${ext}`;
           cutImages.push({ filename, buffer: outputBuffer });
           
