@@ -18,7 +18,8 @@ export async function POST(request: NextRequest) {
     
     if (fileName.endsWith('.txt')) {
       screenplayContent = await file.text();
-    } else if (fileName.endsWith('.docx')) {
+    } else if (fileName.endsWith('.doc') || fileName.endsWith('.docx')) {
+      // Mammoth supports both .doc and .docx formats
       const buffer = await file.arrayBuffer();
       const result = await mammoth.extractRawText({ buffer: Buffer.from(buffer) });
       screenplayContent = result.value;
@@ -65,7 +66,7 @@ export async function POST(request: NextRequest) {
       screenplayContent = data.choices[0].message.content;
     } else {
       return NextResponse.json(
-        { error: 'Unsupported file format. Please upload .txt, .docx, or .pdf' },
+        { error: 'Unsupported file format. Please upload .txt, .doc, .docx, or .pdf' },
         { status: 400 }
       );
     }

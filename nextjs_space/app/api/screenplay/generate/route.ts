@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
 
+// CRYPTID JOURNAL format - used ONLY for YouTube-sourced content
 const CRYPTID_JOURNAL_SYSTEM_PROMPT = `You are an expert screenplay writer for "CRYPTID JOURNAL", a paranormal documentary series with a unique format. The show features a government informant HOST who provides "soft disclosure" from a hidden underground top-secret storage facility.
 
 SHOW FORMAT & TONE:
@@ -44,6 +45,33 @@ For EACH character provide: Full name, age, physical appearance (height, build, 
 ---ENVIRONMENT DESCRIPTIONS---
 For EACH location provide: Detailed physical description, lighting conditions, atmosphere/mood, specific props and set dressing, sounds, textures, colors, time of day, weather if applicable`;
 
+// Standard screenplay format - used for story idea/concept sources
+const STANDARD_SCREENPLAY_SYSTEM_PROMPT = `You are an expert screenplay writer specializing in crafting compelling narratives for film and television. You write professional screenplays in standard industry format.
+
+SCREENPLAY FORMAT:
+- Standard screenplay format with SCENE HEADINGS (INT./EXT. LOCATION - TIME)
+- Proper character introductions with action lines
+- Natural, compelling dialogue
+- Clear action descriptions that are visually descriptive
+- Professional formatting with scene transitions
+
+CREATIVE DIRECTION:
+- Create a compelling narrative with proper dramatic structure (setup, confrontation, resolution)
+- Develop well-rounded characters with clear motivations
+- Build tension, drama, and emotional engagement
+- Write visually descriptive action lines for cinematic storytelling
+- Craft authentic dialogue that reveals character
+
+Pacing: Approximately 1 page = 1 minute of screen time.
+
+REQUIRED OUTPUT SECTIONS:
+After the screenplay, include:
+---CHARACTER DESCRIPTIONS---
+For EACH character provide: Full name, age, physical appearance (height, build, hair color/style, eye color, skin tone, distinguishing features), clothing/wardrobe, demeanor, emotional state, mannerisms
+
+---ENVIRONMENT DESCRIPTIONS---
+For EACH location provide: Detailed physical description, lighting conditions, atmosphere/mood, specific props and set dressing, sounds, textures, colors, time of day, weather if applicable`;
+
 export async function POST(request: NextRequest) {
   try {
     const { sourceType, transcript, storyIdea, storyConcept, runtime } = await request.json();
@@ -56,14 +84,17 @@ export async function POST(request: NextRequest) {
     }
 
     let userPrompt = '';
+    let systemPrompt = '';
     
     if (sourceType === 'youtube') {
+      // YouTube sources use CRYPTID JOURNAL format
       if (!transcript) {
         return new Response(
           JSON.stringify({ error: 'Transcript is required for YouTube source' }),
           { status: 400, headers: { 'Content-Type': 'application/json' } }
         );
       }
+      systemPrompt = CRYPTID_JOURNAL_SYSTEM_PROMPT;
       userPrompt = `Transform this testimonial/transcript into a ${runtime}-minute "CRYPTID JOURNAL" episode screenplay:
 
 TRANSCRIPT:
@@ -104,34 +135,35 @@ For EACH location (Underground Facility, Interview Room, ALL re-enactment locati
 - Time of day
 - Weather/environmental conditions if applicable`;
     } else if (sourceType === 'concept') {
+      // Story idea sources use STANDARD screenplay format (no CRYPTID JOURNAL modifications)
       if (!storyConcept) {
         return new Response(
           JSON.stringify({ error: 'Story concept is required' }),
           { status: 400, headers: { 'Content-Type': 'application/json' } }
         );
       }
-      userPrompt = `Create a ${runtime}-minute "CRYPTID JOURNAL" episode screenplay based on this concept:
+      systemPrompt = STANDARD_SCREENPLAY_SYSTEM_PROMPT;
+      userPrompt = `Create a ${runtime}-minute screenplay based on this story concept:
 
 CONCEPT:
 ${storyConcept}
 
 REQUIREMENTS:
-1. Craft a compelling paranormal/cryptid narrative with drama, suspense, and entertainment value
-2. Follow the CRYPTID JOURNAL format strictly:
-   - Cold open teaser
-   - Host intro from underground facility (mysterious government informant tone)
-   - Interviewee in dim interview room telling their story
-   - Silent re-enactments with interviewee voice-over narration (NO DIALOGUE in re-enactments)
-   - Cut back to interviewee during dramatic moments
-   - Ominous host wrap-up
-3. Use fictional but realistic names
-4. Total runtime: approximately ${runtime} minutes (${runtime} pages)
-5. Make EVERY character and environment visually specific and detailed
+1. Craft a compelling narrative with proper dramatic structure
+2. Use standard screenplay format:
+   - Scene headings (INT./EXT. LOCATION - TIME)
+   - Character introductions with action descriptions
+   - Natural dialogue
+   - Cinematic action lines
+3. Create well-developed characters with clear motivations
+4. Build tension and emotional engagement throughout
+5. Total runtime: approximately ${runtime} minutes (${runtime} pages)
+6. Make EVERY character and environment visually specific and detailed
 
 Provide the complete screenplay, then REQUIRED sections:
 
 ---CHARACTER DESCRIPTIONS---
-For EACH character (including Host, Interviewee, and ALL re-enactment characters):
+For EACH character:
 - Full name
 - Age
 - Physical appearance: height, build, hair color/style, eye color, skin tone, facial features
@@ -140,7 +172,7 @@ For EACH character (including Host, Interviewee, and ALL re-enactment characters
 - Emotional state
 
 ---ENVIRONMENT DESCRIPTIONS---
-For EACH location (Underground Facility, Interview Room, ALL re-enactment locations):
+For EACH location:
 - Detailed physical description
 - Lighting conditions (specific sources, color temperature, shadows)
 - Atmosphere and mood
@@ -164,7 +196,7 @@ For EACH location (Underground Facility, Interview Room, ALL re-enactment locati
       body: JSON.stringify({
         model: 'gpt-4.1',
         messages: [
-          { role: 'system', content: CRYPTID_JOURNAL_SYSTEM_PROMPT },
+          { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt }
         ],
         stream: true,
