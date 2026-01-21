@@ -379,21 +379,47 @@ export function PromptBuilder() {
     content += '-----------------\n\n';
     storyboard.blocks.forEach(block => {
       content += `BLOCK ${block.blockNumber} (${block.timestampStart} - ${block.timestampEnd})\n`;
+      content += `${'='.repeat(50)}\n`;
       content += `Scene: ${block.scene}\n`;
-      content += `Action: ${block.action}\n`;
+      content += `Location: ${block.location}\n\n`;
+      
+      // Section 2 & 3 breakdown (Constructed Prompt components)
+      content += `--- SECTION 2: SUBJECT & FRAMING ---\n`;
       content += `Shot Type: ${block.shotType}\n`;
-      content += `Lighting: ${block.lighting}\n`;
-      content += `Prompt: ${block.prompt}\n`;
-      if (block.notes) content += `Notes: ${block.notes}\n`;
+      if (block.subjectAction) {
+        content += `Subject & Action: ${block.subjectAction}\n`;
+      } else {
+        content += `Action: ${block.action}\n`;
+      }
+      if (block.environment) {
+        content += `Environment: ${block.environment}\n`;
+      }
       content += '\n';
+      
+      content += `--- SECTION 3: LIGHTING & MOOD ---\n`;
+      content += `Lighting: ${block.lighting}\n`;
+      if (block.atmosphere) {
+        content += `Atmosphere/Mood: ${block.atmosphere}\n`;
+      }
+      content += '\n';
+      
+      content += `--- CONSTRUCTED PROMPT ---\n`;
+      content += `${block.prompt}\n`;
+      
+      if (block.notes) {
+        content += `\n--- NOTES ---\n`;
+        content += `${block.notes}\n`;
+      }
+      content += '\n\n';
     });
     content += '\nSHOTLIST BY LOCATION\n';
-    content += '--------------------\n\n';
+    content += '====================\n\n';
     Object.entries(storyboard.shotlist).forEach(([location, shots]) => {
-      content += `\n${location}\n`;
-      content += '-'.repeat(location.length) + '\n';
+      content += `\n${location.toUpperCase()}\n`;
+      content += '-'.repeat(location.length) + '\n\n';
       shots.forEach(shot => {
-        content += `  Block ${shot.blockNumber}: ${shot.shotType} - ${shot.action}\n`;
+        content += `  Block ${shot.blockNumber}: ${shot.shotType}\n`;
+        content += `  Action: ${shot.action}\n`;
         content += `  Prompt: ${shot.prompt}\n\n`;
       });
     });

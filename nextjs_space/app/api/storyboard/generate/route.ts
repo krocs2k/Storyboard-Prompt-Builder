@@ -1,5 +1,111 @@
 import { NextRequest } from 'next/server';
 
+interface SelectionItem {
+  name: string;
+  description?: string;
+}
+
+interface Selections {
+  imageType?: SelectionItem | null;
+  shotType?: SelectionItem | null;
+  lighting?: SelectionItem | null;
+  camera?: SelectionItem | null;
+  focalLength?: SelectionItem | null;
+  lensType?: SelectionItem | null;
+  filmStock?: SelectionItem | null;
+  photographer?: SelectionItem | null;
+  movie?: SelectionItem | null;
+  filter?: SelectionItem | null;
+  aspectRatio?: string;
+}
+
+// Build a single prompt following the exact Constructed Prompt structure from Section 6
+function buildConstructedPrompt(
+  selections: Selections | null,
+  subjectAction: string,
+  environment: string,
+  atmosphere: string,
+  shotTypeOverride?: string
+): string {
+  const parts: string[] = [];
+  
+  parts.push('Create a sequence of 9 cinematic film stills that tell a short story');
+  
+  if (selections?.imageType) {
+    parts.push(`, a ${selections.imageType.name} image of a`);
+  }
+  
+  // Use override shot type from storyboard block, or fall back to selections
+  const shotType = shotTypeOverride || selections?.shotType?.name;
+  if (shotType) {
+    parts.push(` ${shotType} of`);
+  }
+  
+  // SECTION 2: Subject & Action (populated from storyboard block)
+  if (subjectAction) {
+    parts.push(` ${subjectAction}`);
+  }
+  
+  // SECTION 2: Environment (populated from storyboard block)
+  if (environment) {
+    parts.push(`, set in ${environment}`);
+  }
+  
+  // SECTION 3: Lighting
+  if (selections?.lighting) {
+    parts.push(`, illuminated by ${selections.lighting.name} with ${selections.lighting.description || ''}`);
+  }
+  
+  // SECTION 3: Atmosphere / Mood (populated from storyboard block)
+  if (atmosphere) {
+    parts.push(`, creating an ${atmosphere} atmosphere and mood`);
+  }
+  
+  // SECTION 4: Camera Body
+  if (selections?.camera) {
+    parts.push(`. ${selections.camera.name} with ${selections.camera.description || ''}`);
+  }
+  
+  // SECTION 4: Focal Length & Lens Type
+  if (selections?.focalLength || selections?.lensType) {
+    const focalPart = selections?.focalLength?.name || '';
+    const lensPart = selections?.lensType?.name || '';
+    const lensDesc = selections?.lensType?.description || '';
+    if (focalPart || lensPart) {
+      parts.push(`. ${focalPart} ${lensPart}${lensDesc ? ` with ${lensDesc}` : ''}`);
+    }
+  }
+  
+  // SECTION 4: Film Stock
+  if (selections?.filmStock) {
+    parts.push(`. ${selections.filmStock.name} with ${selections.filmStock.description || ''}`);
+  }
+  
+  // SECTION 5: Photographer Style
+  if (selections?.photographer) {
+    parts.push(`. In the style of photographer ${selections.photographer.name} with ${selections.photographer.description || ''}`);
+  }
+  
+  // SECTION 5: Movie Style
+  if (selections?.movie) {
+    parts.push(`. With the visual aesthetic of the movie ${selections.movie.name} with ${selections.movie.description || ''}`);
+  }
+  
+  // SECTION 5: Filter Effect
+  if (selections?.filter) {
+    parts.push(`. Applied effects: ${selections.filter.name}, ${selections.filter.description || ''}`);
+  }
+  
+  // SECTION 4: Aspect Ratio
+  if (selections?.aspectRatio) {
+    parts.push(`. Aspect ratio: ${selections.aspectRatio}`);
+  }
+  
+  parts.push('. No blurred faces.');
+  
+  return parts.join('');
+}
+
 export async function POST(request: NextRequest) {
   try {
     const { screenplay, selections, runtime } = await request.json();
@@ -15,8 +121,17 @@ export async function POST(request: NextRequest) {
     const totalSeconds = (runtime || 15) * 60;
     const blockCount = Math.ceil(totalSeconds / 30);
 
-    // Build the style context from selections
+    // Build the style context from selections for the LLM reference
     const styleContext = buildStyleContext(selections);
+    
+    // Build an example constructed prompt to show the LLM the exact format
+    const examplePrompt = buildConstructedPrompt(
+      selections,
+      '[SUBJECT performing ACTION]',
+      '[ENVIRONMENT DESCRIPTION]',
+      '[ATMOSPHERE/MOOD]',
+      'MEDIUM SHOT'
+    );
 
     const response = await fetch('https://apps.abacus.ai/v1/chat/completions', {
       method: 'POST',
@@ -29,7 +144,9 @@ export async function POST(request: NextRequest) {
         messages: [
           {
             role: 'system',
-            content: `You are an expert storyboard artist and cinematographer specializing in paranormal documentary series. Your task is to break down "CRYPTID JOURNAL" screenplays into detailed storyboard blocks, each representing approximately 30 seconds of screen time. Create vivid, atmospheric, and cinematic image generation prompts for each block that capture the show's dark, mysterious tone.`
+            content: `You are an expert storyboard artist and cinematographer specializing in paranormal documentary series. Your task is to break down "CRYPTID JOURNAL" screenplays into detailed storyboard blocks, each representing approximately 30 seconds of screen time.
+
+CRITICAL: Each storyboard block prompt MUST follow the EXACT Constructed Prompt structure below. You will fill in the [BRACKETED] sections with specific content from each scene while keeping all other visual specifications exactly as provided.`
           },
           {
             role: 'user',
@@ -38,29 +155,38 @@ export async function POST(request: NextRequest) {
 SCREENPLAY:
 ${screenplay.substring(0, 12000)}
 
-VISUAL STYLE SPECIFICATIONS (from Sections 1-5):
+=== CONSTRUCTED PROMPT TEMPLATE ===
+Each storyboard block prompt MUST follow this EXACT structure:
+
+${examplePrompt}
+
+=== WHAT YOU MUST FILL IN FOR EACH BLOCK ===
+For each storyboard block, you will populate these bracketed sections with scene-specific content:
+
+1. [SUBJECT performing ACTION] - Replace with the specific character(s) and their action from that 30-second segment
+   Examples: "The Host, a shadowy figure in a dark suit, emerging from behind ancient filing cabinets"
+   Examples: "The Interviewee, a middle-aged woman with haunted eyes, recounting her experience"
+   Examples: "A young man fleeing through fog-shrouded woods, terror etched on his face"
+
+2. [ENVIRONMENT DESCRIPTION] - Replace with the specific location details
+   Examples: "a cavernous underground archive with towering shelves of mysterious artifacts"
+   Examples: "a stark concrete interview room with a single harsh overhead light"
+   Examples: "a moonlit forest clearing with twisted ancient oaks and rolling fog"
+
+3. [ATMOSPHERE/MOOD] - Replace with the emotional tone of that moment
+   Examples: "ominous and foreboding"
+   Examples: "tense and claustrophobic"
+   Examples: "terrifying and chaotic"
+
+=== VISUAL STYLE SPECIFICATIONS (KEEP THESE EXACTLY AS SHOWN) ===
 ${styleContext}
 
-CRYPTID JOURNAL VISUAL GUIDELINES:
+=== CRYPTID JOURNAL LOCATION GUIDELINES ===
 - Underground Facility (Host scenes): Dark, shadowy, industrial, mysterious artifacts visible, dramatic low-key lighting
 - Interview Room: Stark, clinical, single overhead light, deep shadows, concrete walls, isolated feeling
 - Re-enactments: Atmospheric, cinematic, dramatic lighting shifts for tension, supernatural elements when appropriate
 
-For each storyboard block, provide:
-1. Block number and timestamp range
-2. Scene/location (HOST FACILITY, INTERVIEW ROOM, or RE-ENACTMENT location)
-3. Detailed action description
-4. Comprehensive image generation prompt incorporating:
-   - ALL visual style specifications from Sections 1-5
-   - Character positions and expressions
-   - Lighting mood and sources
-   - Atmospheric elements
-   - Any supernatural/eerie visual elements
-5. Shot type recommendation (vary between wide, medium, close-up, etc.)
-6. Specific lighting notes for that block
-
-Also create a SHOTLIST organized by location for efficient filming/production.
-
+=== OUTPUT FORMAT ===
 Respond in JSON format:
 {
   "blocks": [
@@ -70,10 +196,12 @@ Respond in JSON format:
       "timestampEnd": "00:30",
       "scene": "INT. UNDERGROUND FACILITY - NIGHT",
       "location": "Underground Facility",
-      "action": "Description of what happens",
-      "prompt": "Comprehensive image generation prompt with all visual specifications applied, atmospheric details, character descriptions, lighting",
+      "subjectAction": "The specific subject and action description",
+      "environment": "The specific environment description",
+      "atmosphere": "The specific atmosphere/mood",
       "shotType": "MEDIUM SHOT",
-      "lighting": "LOW KEY DRAMATIC LIGHTING with single harsh overhead source",
+      "lighting": "Specific lighting notes for this block",
+      "prompt": "THE COMPLETE CONSTRUCTED PROMPT with all [BRACKETED] sections filled in with this block's specific content",
       "notes": "Cinematography and mood notes"
     }
   ],
@@ -83,7 +211,7 @@ Respond in JSON format:
         "blockNumber": 1,
         "shotType": "MEDIUM SHOT",
         "action": "Brief action description",
-        "prompt": "The full prompt"
+        "prompt": "The full constructed prompt"
       }
     ]
   },
@@ -95,12 +223,17 @@ Respond in JSON format:
   }
 }
 
+IMPORTANT: 
+- The "prompt" field must be the COMPLETE constructed prompt following the exact template structure
+- Vary shot types appropriately (wide, medium, close-up, extreme close-up, over-the-shoulder, etc.)
+- Keep visual specifications consistent across all blocks
+
 Respond with raw JSON only.`
           }
         ],
         response_format: { type: 'json_object' },
         stream: true,
-        max_tokens: 10000,
+        max_tokens: 15000,
       }),
     });
 
@@ -183,50 +316,40 @@ Respond with raw JSON only.`
   }
 }
 
-function buildStyleContext(selections: Record<string, unknown> | null): string {
+function buildStyleContext(selections: Selections | null): string {
   if (!selections) return 'Use cinematic photorealistic style.';
   
   const parts: string[] = [];
   
   if (selections.imageType) {
-    const it = selections.imageType as { name: string };
-    parts.push(`Image Style: ${it.name}`);
+    parts.push(`Image Style: ${selections.imageType.name}`);
   }
   if (selections.shotType) {
-    const st = selections.shotType as { name: string };
-    parts.push(`Default Shot Type: ${st.name}`);
+    parts.push(`Default Shot Type: ${selections.shotType.name}`);
   }
   if (selections.lighting) {
-    const lt = selections.lighting as { name: string; description: string };
-    parts.push(`Lighting: ${lt.name} - ${lt.description || ''}`);
+    parts.push(`Lighting: ${selections.lighting.name} - ${selections.lighting.description || ''}`);
   }
-  if (selections.cameraBody) {
-    const cb = selections.cameraBody as { name: string; description: string };
-    parts.push(`Camera: ${cb.name} - ${cb.description || ''}`);
+  if (selections.camera) {
+    parts.push(`Camera: ${selections.camera.name} - ${selections.camera.description || ''}`);
   }
   if (selections.focalLength) {
-    const fl = selections.focalLength as { name: string; description: string };
-    parts.push(`Focal Length: ${fl.name} - ${fl.description || ''}`);
+    parts.push(`Focal Length: ${selections.focalLength.name} - ${selections.focalLength.description || ''}`);
   }
   if (selections.lensType) {
-    const lens = selections.lensType as { name: string; description: string };
-    parts.push(`Lens: ${lens.name} - ${lens.description || ''}`);
+    parts.push(`Lens: ${selections.lensType.name} - ${selections.lensType.description || ''}`);
   }
   if (selections.filmStock) {
-    const fs = selections.filmStock as { name: string; description: string };
-    parts.push(`Film Stock: ${fs.name} - ${fs.description || ''}`);
+    parts.push(`Film Stock: ${selections.filmStock.name} - ${selections.filmStock.description || ''}`);
   }
   if (selections.photographer) {
-    const ph = selections.photographer as { name: string; description: string };
-    parts.push(`Photographer Style: ${ph.name} - ${ph.description || ''}`);
+    parts.push(`Photographer Style: ${selections.photographer.name} - ${selections.photographer.description || ''}`);
   }
   if (selections.movie) {
-    const mv = selections.movie as { name: string; description: string };
-    parts.push(`Movie Style: ${mv.name} - ${mv.description || ''}`);
+    parts.push(`Movie Style: ${selections.movie.name} - ${selections.movie.description || ''}`);
   }
   if (selections.filter) {
-    const ft = selections.filter as { name: string; description: string };
-    parts.push(`Filter Effect: ${ft.name} - ${ft.description || ''}`);
+    parts.push(`Filter Effect: ${selections.filter.name} - ${selections.filter.description || ''}`);
   }
   if (selections.aspectRatio) {
     parts.push(`Aspect Ratio: ${selections.aspectRatio}`);

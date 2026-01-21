@@ -78,6 +78,10 @@ export interface StoryboardBlock {
   scene: string;
   location: string;
   action: string;
+  // New fields following Section 2 & 3 Constructed Prompt structure
+  subjectAction?: string;  // Section 2: Subject & Action
+  environment?: string;    // Section 2: Environment
+  atmosphere?: string;     // Section 3: Atmosphere / Mood
   prompt: string;
   shotType: string;
   lighting: string;
