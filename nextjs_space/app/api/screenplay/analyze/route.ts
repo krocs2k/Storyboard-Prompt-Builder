@@ -26,11 +26,29 @@ export async function POST(request: NextRequest) {
       const result = await mammoth.extractRawText({ buffer: Buffer.from(buffer) });
       screenplayContent = result.value;
     } else if (fileName.endsWith('.doc')) {
-      // Legacy DOC files - use word-extractor library
+      // DOC files - could be binary or text with .doc extension
       const buffer = await file.arrayBuffer();
-      const extractor = new WordExtractor();
-      const extracted = await extractor.extract(Buffer.from(buffer));
-      screenplayContent = extracted.getBody();
+      const uint8Array = new Uint8Array(buffer);
+      
+      // Check for Microsoft Compound Document magic bytes (D0 CF 11 E0)
+      const isBinaryDoc = uint8Array[0] === 0xD0 && uint8Array[1] === 0xCF && 
+                          uint8Array[2] === 0x11 && uint8Array[3] === 0xE0;
+      
+      if (isBinaryDoc) {
+        // True binary DOC file - use word-extractor
+        try {
+          const extractor = new WordExtractor();
+          const extracted = await extractor.extract(Buffer.from(buffer));
+          screenplayContent = extracted.getBody();
+        } catch (err) {
+          console.error('Word extractor failed:', err);
+          // Fallback: try reading as text
+          screenplayContent = new TextDecoder('utf-8').decode(uint8Array);
+        }
+      } else {
+        // Text file with .doc extension - read as plain text
+        screenplayContent = new TextDecoder('utf-8').decode(uint8Array);
+      }
     } else {
       return NextResponse.json(
         { error: 'Unsupported file format. Please upload .txt, .md, .doc, or .docx' },
