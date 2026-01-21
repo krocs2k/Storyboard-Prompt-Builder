@@ -56,6 +56,17 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Check if we got content
+    if (!screenplayContent || screenplayContent.trim().length === 0) {
+      return NextResponse.json(
+        { error: 'Could not extract text from the file. The file may be empty or corrupted.' },
+        { status: 400 }
+      );
+    }
+    
+    console.log('Screenplay content extracted, length:', screenplayContent.length);
+    console.log('First 200 chars:', screenplayContent.substring(0, 200));
+
     // Analyze the screenplay and generate recommendations
     const analysisResponse = await fetch('https://apps.abacus.ai/v1/chat/completions', {
       method: 'POST',
@@ -64,7 +75,7 @@ export async function POST(request: NextRequest) {
         'Authorization': `Bearer ${process.env.ABACUSAI_API_KEY}`
       },
       body: JSON.stringify({
-        model: 'gemini-3-flash',
+        model: 'gpt-4.1',
         messages: [
           {
             role: 'system',
@@ -131,11 +142,26 @@ Respond with raw JSON only.`
     });
 
     if (!analysisResponse.ok) {
-      throw new Error('Failed to analyze screenplay');
+      const errorText = await analysisResponse.text();
+      console.error('Analysis API error:', analysisResponse.status, errorText);
+      throw new Error(`Failed to analyze screenplay: ${analysisResponse.status}`);
     }
 
     const analysisData = await analysisResponse.json();
-    const analysis = JSON.parse(analysisData.choices[0].message.content);
+    console.log('Analysis response received:', JSON.stringify(analysisData).substring(0, 500));
+    
+    if (!analysisData.choices?.[0]?.message?.content) {
+      console.error('Invalid analysis response structure:', analysisData);
+      throw new Error('Invalid response from analysis API');
+    }
+    
+    let analysis;
+    try {
+      analysis = JSON.parse(analysisData.choices[0].message.content);
+    } catch (parseError) {
+      console.error('Failed to parse analysis JSON:', analysisData.choices[0].message.content);
+      throw new Error('Failed to parse analysis response');
+    }
     
     // Extract dialogue with delivery instructions
     const dialogueResponse = await fetch('https://apps.abacus.ai/v1/chat/completions', {
@@ -145,7 +171,7 @@ Respond with raw JSON only.`
         'Authorization': `Bearer ${process.env.ABACUSAI_API_KEY}`
       },
       body: JSON.stringify({
-        model: 'gemini-3-flash',
+        model: 'gpt-4.1',
         messages: [
           {
             role: 'system',

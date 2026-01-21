@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
         'Authorization': `Bearer ${process.env.ABACUSAI_API_KEY}`
       },
       body: JSON.stringify({
-        model: 'llama4-maverick',
+        model: 'gpt-4.1',
         messages: [
           {
             role: 'system',
