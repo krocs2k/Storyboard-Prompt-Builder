@@ -6,7 +6,7 @@ import {
   Palette, Frame, Sun, Camera, Sparkles, FileText, Copy, Check, 
   Trash2, Film, Aperture, Image as ImageIcon, Save, History,
   FolderOpen, Plus, Download, Loader2, Clapperboard, Upload,
-  LayoutGrid, Users, MapPin, ChevronDown, X, FolderPlus, Edit3
+  LayoutGrid, Users, MapPin, ChevronDown, X, FolderPlus, Edit3, Grid3X3
 } from 'lucide-react';
 import { SectionCard } from './section-card';
 import { SelectionButton } from './selection-button';
@@ -15,6 +15,7 @@ import { TextInput } from './text-input';
 import { DropdownSelect } from './dropdown-select';
 import ScreenplayCreator from './screenplay-creator';
 import ScreenplayAnalyzer from './screenplay-analyzer';
+import ImageGridCutter from './image-grid-cutter';
 import {
   imageTypes, shotTypes, lightingSources, cameraBodies, focalLengths,
   lensTypes, filmStocks, aspectRatios, photographerStyles, movieStyles, filterEffects,
@@ -70,6 +71,7 @@ export function PromptBuilder() {
   const [showScreenplayCreator, setShowScreenplayCreator] = useState(false);
   const [showAnalyzer, setShowAnalyzer] = useState(false);
   const [showProjectManager, setShowProjectManager] = useState(false);
+  const [showGridCutter, setShowGridCutter] = useState(false);
   const [screenplay, setScreenplay] = useState<{
     title: string;
     content: string;
@@ -631,6 +633,13 @@ export function PromptBuilder() {
               <FolderOpen size={20} />
               Projects
             </button>
+            <button
+              onClick={() => setShowGridCutter(true)}
+              className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-white font-semibold rounded-xl shadow-lg shadow-emerald-500/30 transition-all"
+            >
+              <Grid3X3 size={20} />
+              Image Grid Cutter
+            </button>
           </motion.div>
 
           {/* Current Project Indicator */}
@@ -1060,6 +1069,12 @@ export function PromptBuilder() {
           />
         )}
       </AnimatePresence>
+
+      {/* Image Grid Cutter Modal */}
+      <ImageGridCutter
+        isOpen={showGridCutter}
+        onClose={() => setShowGridCutter(false)}
+      />
 
       {/* Project Manager Modal */}
       <AnimatePresence>
