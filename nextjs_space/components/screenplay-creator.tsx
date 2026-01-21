@@ -4,7 +4,7 @@ import { useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Youtube, Lightbulb, Clock, Loader2, ChevronRight, RefreshCw,
-  CheckCircle, FileText, X
+  CheckCircle, FileText, X, AlertCircle, ClipboardPaste
 } from 'lucide-react';
 import { StoryConcept } from '@/lib/types';
 
@@ -34,18 +34,31 @@ export default function ScreenplayCreator({ onScreenplayCreated, onClose }: Scre
   const [progress, setProgress] = useState('');
   const [screenplay, setScreenplay] = useState('');
   const [error, setError] = useState('');
+  const [showManualInput, setShowManualInput] = useState(false);
+  const [manualTranscript, setManualTranscript] = useState('');
 
-  const fetchTranscript = useCallback(async () => {
+  const fetchTranscript = useCallback(async (useManual = false) => {
     setLoading(true);
     setError('');
     try {
       const response = await fetch('/api/youtube-transcript', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: youtubeUrl }),
+        body: JSON.stringify({ 
+          url: youtubeUrl,
+          manualTranscript: useManual ? manualTranscript : undefined
+        }),
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error);
+      
+      if (!response.ok) {
+        if (data.error === 'AUTO_EXTRACT_FAILED') {
+          setShowManualInput(true);
+          setError('Automatic extraction failed. Please paste the transcript manually below.');
+          return null;
+        }
+        throw new Error(data.message || data.error);
+      }
       return data.transcript;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch transcript');
@@ -53,7 +66,7 @@ export default function ScreenplayCreator({ onScreenplayCreated, onClose }: Scre
     } finally {
       setLoading(false);
     }
-  }, [youtubeUrl]);
+  }, [youtubeUrl, manualTranscript]);
 
   const generateConcepts = useCallback(async () => {
     setLoading(true);
@@ -195,8 +208,21 @@ export default function ScreenplayCreator({ onScreenplayCreated, onClose }: Scre
 
   const handleYoutubeSubmit = async () => {
     setProgress('Fetching transcript from YouTube...');
-    const transcript = await fetchTranscript();
+    const transcript = await fetchTranscript(false);
     if (transcript) {
+      await generateScreenplay('youtube', transcript);
+    }
+  };
+
+  const handleManualTranscriptSubmit = async () => {
+    if (!manualTranscript.trim()) {
+      setError('Please paste the transcript text');
+      return;
+    }
+    setProgress('Processing transcript...');
+    const transcript = await fetchTranscript(true);
+    if (transcript) {
+      setShowManualInput(false);
       await generateScreenplay('youtube', transcript);
     }
   };
@@ -317,7 +343,7 @@ export default function ScreenplayCreator({ onScreenplayCreated, onClose }: Scre
                 className="space-y-6"
               >
                 <button
-                  onClick={() => setMode('select')}
+                  onClick={() => { setMode('select'); setShowManualInput(false); setError(''); }}
                   className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors"
                 >
                   <ChevronRight className="w-4 h-4 rotate-180" /> Back
@@ -331,7 +357,7 @@ export default function ScreenplayCreator({ onScreenplayCreated, onClose }: Scre
                   <input
                     type="url"
                     value={youtubeUrl}
-                    onChange={(e) => setYoutubeUrl(e.target.value)}
+                    onChange={(e) => { setYoutubeUrl(e.target.value); setShowManualInput(false); setError(''); }}
                     placeholder="https://www.youtube.com/watch?v=..."
                     className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:border-amber-500 focus:outline-none"
                   />
@@ -339,6 +365,53 @@ export default function ScreenplayCreator({ onScreenplayCreated, onClose }: Scre
                     The transcript will be automatically extracted from the video.
                   </p>
                 </div>
+
+                {/* Manual Transcript Input - Shows when auto-extract fails */}
+                {showManualInput && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-6"
+                  >
+                    <div className="flex items-start gap-3 mb-4">
+                      <AlertCircle className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
+                      <div>
+                        <h4 className="text-amber-400 font-medium">Manual Transcript Required</h4>
+                        <p className="text-slate-400 text-sm mt-1">
+                          YouTube is blocking automatic extraction. Please copy the transcript from the video and paste it below.
+                        </p>
+                      </div>
+                    </div>
+                    
+                    <div className="bg-slate-900/50 rounded-lg p-4 mb-4">
+                      <p className="text-slate-300 text-sm font-medium mb-2">How to get the transcript:</p>
+                      <ol className="text-slate-400 text-sm space-y-1 list-decimal list-inside">
+                        <li>Open the video on YouTube</li>
+                        <li>Click the <strong>...</strong> (More) button below the video</li>
+                        <li>Click <strong>Show transcript</strong></li>
+                        <li>Click the three dots in the transcript panel and select <strong>Toggle timestamps</strong> to hide timestamps (optional)</li>
+                        <li>Select all text and copy (Ctrl/Cmd + A, then Ctrl/Cmd + C)</li>
+                      </ol>
+                    </div>
+                    
+                    <label className="flex items-center gap-2 text-amber-400 font-medium mb-2">
+                      <ClipboardPaste className="w-4 h-4" />
+                      Paste Transcript Here
+                    </label>
+                    <textarea
+                      value={manualTranscript}
+                      onChange={(e) => setManualTranscript(e.target.value)}
+                      placeholder="Paste the transcript text here..."
+                      rows={8}
+                      className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:border-amber-500 focus:outline-none resize-none font-mono text-sm"
+                    />
+                    {manualTranscript && (
+                      <p className="text-slate-500 text-xs mt-2">
+                        {manualTranscript.split(/\s+/).filter(w => w).length} words
+                      </p>
+                    )}
+                  </motion.div>
+                )}
 
                 <div className="bg-slate-800/50 rounded-xl p-6">
                   <label className="flex items-center gap-2 text-amber-400 font-medium mb-4">
@@ -355,17 +428,31 @@ export default function ScreenplayCreator({ onScreenplayCreated, onClose }: Scre
                   />
                 </div>
 
-                <button
-                  onClick={handleYoutubeSubmit}
-                  disabled={!youtubeUrl || loading}
-                  className="w-full py-4 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 disabled:from-slate-600 disabled:to-slate-700 text-slate-900 disabled:text-slate-500 font-semibold rounded-xl transition-all flex items-center justify-center gap-2"
-                >
-                  {loading ? (
-                    <><Loader2 className="w-5 h-5 animate-spin" /> Importing Transcript...</>
-                  ) : (
-                    <><FileText className="w-5 h-5" /> Generate Screenplay</>
-                  )}
-                </button>
+                {showManualInput ? (
+                  <button
+                    onClick={handleManualTranscriptSubmit}
+                    disabled={!manualTranscript.trim() || loading}
+                    className="w-full py-4 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 disabled:from-slate-600 disabled:to-slate-700 text-slate-900 disabled:text-slate-500 font-semibold rounded-xl transition-all flex items-center justify-center gap-2"
+                  >
+                    {loading ? (
+                      <><Loader2 className="w-5 h-5 animate-spin" /> Processing...</>
+                    ) : (
+                      <><FileText className="w-5 h-5" /> Generate Screenplay from Pasted Transcript</>
+                    )}
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleYoutubeSubmit}
+                    disabled={!youtubeUrl || loading}
+                    className="w-full py-4 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 disabled:from-slate-600 disabled:to-slate-700 text-slate-900 disabled:text-slate-500 font-semibold rounded-xl transition-all flex items-center justify-center gap-2"
+                  >
+                    {loading ? (
+                      <><Loader2 className="w-5 h-5 animate-spin" /> Importing Transcript...</>
+                    ) : (
+                      <><FileText className="w-5 h-5" /> Generate Screenplay</>
+                    )}
+                  </button>
+                )}
               </motion.div>
             )}
 
