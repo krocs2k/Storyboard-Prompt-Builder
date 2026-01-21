@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
           'Authorization': `Bearer ${process.env.ABACUSAI_API_KEY}`
         },
         body: JSON.stringify({
-          model: 'gpt-4.1',
+          model: 'gemini-3-flash',
           messages: [
             {
               role: 'user',
@@ -79,7 +79,7 @@ export async function POST(request: NextRequest) {
         'Authorization': `Bearer ${process.env.ABACUSAI_API_KEY}`
       },
       body: JSON.stringify({
-        model: 'gpt-4.1',
+        model: 'gemini-3-flash',
         messages: [
           {
             role: 'system',
