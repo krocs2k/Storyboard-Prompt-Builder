@@ -6,7 +6,7 @@ import {
   Palette, Frame, Sun, Camera, Sparkles, FileText, Copy, Check, 
   Trash2, Film, Aperture, Image as ImageIcon, Save, History,
   FolderOpen, Plus, Download, Loader2, Clapperboard, Upload,
-  LayoutGrid, Users, MapPin, ChevronDown, X, FolderPlus, Edit3, Grid3X3
+  LayoutGrid, Users, MapPin, ChevronDown, X, FolderPlus, Edit3, Grid3X3, Mic
 } from 'lucide-react';
 import { SectionCard } from './section-card';
 import { SelectionButton } from './selection-button';
@@ -24,7 +24,7 @@ import {
 } from '@/lib/data';
 import {
   Project, ProjectFolder, Screenplay, Storyboard,
-  CharacterPrompt, EnvironmentPrompt, StoryboardBlock, SelectionState
+  CharacterPrompt, EnvironmentPrompt, StoryboardBlock, SelectionState, DialogueLine
 } from '@/lib/types';
 
 type ModalType = 'imageType' | 'shotType' | 'lighting' | 'camera' | 'focalLength' | 'lensType' | 'filmStock' | 'photographer' | 'movie' | 'filter' | null;
@@ -84,6 +84,8 @@ export function PromptBuilder() {
   } | null>(null);
   const [characterPrompts, setCharacterPrompts] = useState<CharacterPrompt[]>([]);
   const [environmentPrompts, setEnvironmentPrompts] = useState<EnvironmentPrompt[]>([]);
+  const [dialogueLines, setDialogueLines] = useState<DialogueLine[]>([]);
+  const [downloadingVO, setDownloadingVO] = useState<'docx' | 'csv' | null>(null);
   const [storyboard, setStoryboard] = useState<{
     blocks: StoryboardBlock[];
     shotlist: Record<string, Array<{ blockNumber: number; shotType: string; action: string; prompt: string }>>;
@@ -371,6 +373,60 @@ export function PromptBuilder() {
     content += `\n${'='.repeat(50)}\n\n`;
     content += screenplay.content;
     downloadAsDoc(content, `${screenplay.title.replace(/[^a-zA-Z0-9]/g, '_')}_screenplay.doc`);
+  };
+
+  const downloadVoiceOver = async (format: 'docx' | 'csv') => {
+    if (dialogueLines.length === 0) return;
+    
+    setDownloadingVO(format);
+    try {
+      if (format === 'docx') {
+        const response = await fetch('/api/screenplay/voiceover', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            dialogueLines,
+            title: screenplay?.title || 'Screenplay',
+          }),
+        });
+
+        if (!response.ok) throw new Error('Failed to download voice-over script');
+
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${(screenplay?.title || 'Screenplay').replace(/[^a-zA-Z0-9\s-]/g, '')}_VoiceOver.docx`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      } else {
+        // Generate CSV
+        const csvContent = [
+          ['Character', 'Dialogue', 'Delivery Direction'].join(','),
+          ...dialogueLines.map(line => [
+            `"${line.character.replace(/"/g, '""')}"`,
+            `"${line.dialogue.replace(/"/g, '""')}"`,
+            `"${line.delivery.replace(/"/g, '""')}"`
+          ].join(','))
+        ].join('\n');
+        
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${(screenplay?.title || 'Screenplay').replace(/[^a-zA-Z0-9\s-]/g, '')}_VoiceOver.csv`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }
+    } catch (err) {
+      console.error('Failed to download voice-over script:', err);
+    } finally {
+      setDownloadingVO(null);
+    }
   };
 
   const downloadStoryboard = () => {
@@ -881,19 +937,72 @@ export function PromptBuilder() {
 
               {/* Workflow Info */}
               <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-4 mb-6">
-                <h4 className="text-amber-400 font-medium mb-2">Workflow</h4>
+                <h4 className="text-amber-400 font-medium mb-2">Post-Upload Workflow</h4>
                 <ol className="text-slate-300 text-sm space-y-1 list-decimal list-inside">
-                  <li>Review and configure Sections 1-5 above based on your visual preferences</li>
-                  <li>Click &quot;Create Character & Environment Prompts&quot; to generate detailed prompts for all characters and environments</li>
-                  <li>Click &quot;Create Storyboard&quot; to generate 30-second storyboard blocks and shotlist</li>
-                  <li>Download prompts and storyboard as DOC files</li>
-                  <li>Save your project for future editing</li>
+                  <li>Download Voice-Over Prompts for dialogue recording</li>
+                  <li>Generate Character & Environment image prompts</li>
+                  <li>Create Storyboard & Shotlist with visual prompts</li>
                 </ol>
               </div>
 
-              {/* Character & Environment Prompts */}
+              {/* Step 1: Voice-Over Prompts */}
               <div className="border-t border-slate-700 pt-6">
-                <h4 className="text-lg font-semibold text-white mb-4">Step 1: Character & Environment Prompts</h4>
+                <h4 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                  <span className="w-7 h-7 rounded-full bg-amber-500/20 flex items-center justify-center text-amber-400 text-sm font-bold">1</span>
+                  Voice-Over Prompts
+                </h4>
+                <p className="text-slate-400 text-sm mb-4">Download dialogue lines with delivery directions for voice-over recording.</p>
+                <div className="flex flex-wrap gap-3 mb-4">
+                  <button
+                    onClick={() => downloadVoiceOver('docx')}
+                    disabled={downloadingVO !== null || dialogueLines.length === 0}
+                    className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-pink-500 to-pink-600 hover:from-pink-400 hover:to-pink-500 disabled:from-slate-600 disabled:to-slate-700 text-white font-medium rounded-lg transition-all"
+                  >
+                    {downloadingVO === 'docx' ? (
+                      <><Loader2 size={18} className="animate-spin" /> Downloading...</>
+                    ) : (
+                      <><Mic size={18} /> Download DOCX</>
+                    )}
+                  </button>
+                  <button
+                    onClick={() => downloadVoiceOver('csv')}
+                    disabled={downloadingVO !== null || dialogueLines.length === 0}
+                    className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 disabled:bg-slate-800 text-white disabled:text-slate-500 font-medium rounded-lg transition-all"
+                  >
+                    {downloadingVO === 'csv' ? (
+                      <><Loader2 size={18} className="animate-spin" /> Downloading...</>
+                    ) : (
+                      <><Download size={18} /> Download CSV</>
+                    )}
+                  </button>
+                </div>
+                {dialogueLines.length > 0 && (
+                  <div className="bg-slate-900/50 rounded-lg p-4">
+                    <p className="text-slate-400 text-sm mb-2">{dialogueLines.length} dialogue lines extracted</p>
+                    <div className="space-y-2 max-h-32 overflow-y-auto">
+                      {dialogueLines.slice(0, 3).map((line, i) => (
+                        <div key={i} className="text-xs">
+                          <span className="text-pink-400 font-medium">{line.character}:</span>
+                          <span className="text-slate-300 ml-2">{line.dialogue.substring(0, 60)}...</span>
+                        </div>
+                      ))}
+                      {dialogueLines.length > 3 && (
+                        <p className="text-slate-500 text-xs">+{dialogueLines.length - 3} more lines...</p>
+                      )}
+                    </div>
+                  </div>
+                )}
+                {dialogueLines.length === 0 && (
+                  <p className="text-slate-500 text-sm italic">No dialogue lines available. Upload a screenplay with dialogue.</p>
+                )}
+              </div>
+
+              {/* Step 2: Character & Environment Prompts */}
+              <div className="border-t border-slate-700 pt-6 mt-6">
+                <h4 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                  <span className="w-7 h-7 rounded-full bg-amber-500/20 flex items-center justify-center text-amber-400 text-sm font-bold">2</span>
+                  Character & Environment Prompts
+                </h4>
                 <p className="text-slate-400 text-sm mb-4">Generate detailed image prompts for all characters and environments based on your Section 1-5 configuration.</p>
                 <div className="flex flex-wrap gap-3 mb-6">
                   <button
@@ -904,7 +1013,7 @@ export function PromptBuilder() {
                     {generatingPrompts ? (
                       <><Loader2 size={18} className="animate-spin" /> Generating...</>
                     ) : (
-                      <><Sparkles size={18} /> Create Character & Environment Prompts</>
+                      <><Users size={18} /> Create Character & Environment Prompts</>
                     )}
                   </button>
                   {characterPrompts.length > 0 && (
@@ -936,9 +1045,12 @@ export function PromptBuilder() {
                 </div>
               )}
 
-              {/* Storyboard Generation */}
-              <div className="border-t border-slate-700 pt-6">
-                <h4 className="text-lg font-semibold text-white mb-4">Step 2: Storyboard & Shotlist</h4>
+              {/* Step 3: Storyboard & Shotlist */}
+              <div className="border-t border-slate-700 pt-6 mt-6">
+                <h4 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                  <span className="w-7 h-7 rounded-full bg-amber-500/20 flex items-center justify-center text-amber-400 text-sm font-bold">3</span>
+                  Storyboard & Shotlist
+                </h4>
                 <p className="text-slate-400 text-sm mb-4">Generate 30-second storyboard blocks with detailed prompts, organized into a shotlist by location.</p>
                 <div className="flex flex-wrap gap-3">
                   <button
@@ -1060,6 +1172,10 @@ export function PromptBuilder() {
                 environments: data.environments,
                 sourceType: 'upload',
               });
+              // Store dialogue lines for Voice-Over extraction
+              if (data.dialogueLines) {
+                setDialogueLines(data.dialogueLines);
+              }
             }}
             onRecommendationsApply={(newSelections) => {
               setSelections(prev => ({ ...prev, ...newSelections } as Selections));
