@@ -172,6 +172,9 @@ export async function POST(request: NextRequest) {
     // Read ZIP file and return
     const zipBuffer = await fs.readFile(zipPath);
     
+    // Delete ZIP file immediately after reading
+    await fs.unlink(zipPath).catch(() => {});
+    
     return new Response(zipBuffer, {
       headers: {
         'Content-Type': 'application/zip',
