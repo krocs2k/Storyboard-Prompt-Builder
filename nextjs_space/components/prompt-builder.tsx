@@ -578,17 +578,19 @@ export function PromptBuilder() {
     
     // Environment
     if (selections?.environment) {
-      parts.push(`, set in ${selections?.environment ?? ''}`);
+      parts.push(`, set in ${selections?.environment ?? ''}.`);
     }
     
-    // Lighting source (name only)
+    // Lighting source and atmosphere combined
     if (selections?.lighting) {
-      parts.push(` illuminated by ${selections?.lighting?.name ?? ''}`);
-    }
-    
-    // Atmosphere / mood
-    if (selections?.atmosphere) {
-      parts.push(`, creating an ${selections?.atmosphere ?? ''} atmosphere and mood.`);
+      parts.push(` The scene is illuminated by ${selections?.lighting?.name ?? ''}`);
+      if (selections?.atmosphere) {
+        parts.push(`, creating a ${selections?.atmosphere ?? ''} atmosphere.`);
+      } else {
+        parts.push('.');
+      }
+    } else if (selections?.atmosphere) {
+      parts.push(` Creating a ${selections?.atmosphere ?? ''} atmosphere.`);
     }
     
     // Camera, lens, and film stock combined
@@ -620,14 +622,24 @@ export function PromptBuilder() {
       parts.push(` With the visual aesthetic of the movie ${selections?.movie?.name ?? ''} with ${selections?.movie?.description ?? ''}.`);
     }
     
-    // Filter effects
+    // Filter effects (supports multiple)
     if (selections?.filter) {
       parts.push(` Applied effects: ${selections?.filter?.name ?? ''}.`);
     }
     
     parts.push(' No blurred faces.');
     
-    return parts?.join('') ?? '';
+    // Clean up repeated punctuation
+    let result = parts?.join('') ?? '';
+    result = result.replace(/\.+/g, '.'); // Multiple periods to single
+    result = result.replace(/,+/g, ',');  // Multiple commas to single
+    result = result.replace(/\s+/g, ' '); // Multiple spaces to single
+    result = result.replace(/,\./g, '.'); // Comma followed by period
+    result = result.replace(/\.,/g, ','); // Period followed by comma
+    result = result.replace(/\. \./g, '.'); // Period space period
+    result = result.replace(/, ,/g, ','); // Comma space comma
+    
+    return result;
   }, [selections]);
 
   const copyToClipboard = async () => {
