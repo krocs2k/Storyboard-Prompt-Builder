@@ -9,3 +9,4 @@ export * from './aspect-ratios';
 export * from './photographer-styles';
 export * from './movie-styles';
 export * from './filter-effects';
+export * from './story-genres';

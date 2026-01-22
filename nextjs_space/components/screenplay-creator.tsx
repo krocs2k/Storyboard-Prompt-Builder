@@ -4,9 +4,26 @@ import { useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Youtube, Lightbulb, Clock, Loader2, ChevronRight, RefreshCw,
-  CheckCircle, FileText, X, AlertCircle, ClipboardPaste
+  CheckCircle, FileText, X, AlertCircle, ClipboardPaste, Download,
+  BookOpen, Sparkles, PenTool, Film
 } from 'lucide-react';
 import { StoryConcept } from '@/lib/types';
+import { storyGenres, StoryGenre } from '@/lib/data/story-genres';
+
+interface StoryIdea {
+  id: number;
+  title: string;
+  premise: string;
+}
+
+interface ConceptItem {
+  id: number;
+  title: string;
+  synopsis: string;
+  dramaticElement?: string;
+  paranormalElement?: string;
+  emotionalHook: string;
+}
 
 interface ScreenplayCreatorProps {
   onScreenplayCreated: (screenplay: {
@@ -22,20 +39,41 @@ interface ScreenplayCreatorProps {
   onClose: () => void;
 }
 
+type ConceptModeStep = 'genre' | 'ideas' | 'concepts' | 'generating' | 'complete';
+
 export default function ScreenplayCreator({ onScreenplayCreated, onClose }: ScreenplayCreatorProps) {
   const [mode, setMode] = useState<'select' | 'youtube' | 'concept'>('select');
+  const [conceptStep, setConceptStep] = useState<ConceptModeStep>('genre');
   const [runtime, setRuntime] = useState(15);
+  
+  // YouTube mode state
   const [youtubeUrl, setYoutubeUrl] = useState('');
-  const [storyIdea, setStoryIdea] = useState('');
-  const [concepts, setConcepts] = useState<StoryConcept[]>([]);
-  const [selectedConcept, setSelectedConcept] = useState<StoryConcept | null>(null);
+  const [showManualInput, setShowManualInput] = useState(false);
+  const [manualTranscript, setManualTranscript] = useState('');
+  
+  // Concept mode state
+  const [selectedGenre, setSelectedGenre] = useState<StoryGenre | null>(null);
+  const [storyIdeas, setStoryIdeas] = useState<StoryIdea[]>([]);
+  const [selectedIdea, setSelectedIdea] = useState<StoryIdea | null>(null);
+  const [customIdea, setCustomIdea] = useState('');
+  const [useCustomIdea, setUseCustomIdea] = useState(false);
+  const [concepts, setConcepts] = useState<ConceptItem[]>([]);
+  const [selectedConcept, setSelectedConcept] = useState<ConceptItem | null>(null);
+  
+  // Common state
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [progress, setProgress] = useState('');
   const [screenplay, setScreenplay] = useState('');
+  const [screenplayTitle, setScreenplayTitle] = useState('');
   const [error, setError] = useState('');
-  const [showManualInput, setShowManualInput] = useState(false);
-  const [manualTranscript, setManualTranscript] = useState('');
+  const [genreSearch, setGenreSearch] = useState('');
+
+  // Filter genres by search
+  const filteredGenres = storyGenres.filter(g => 
+    g.name.toLowerCase().includes(genreSearch.toLowerCase()) ||
+    g.description.toLowerCase().includes(genreSearch.toLowerCase())
+  );
 
   const fetchTranscript = useCallback(async (useManual = false) => {
     setLoading(true);
@@ -68,15 +106,45 @@ export default function ScreenplayCreator({ onScreenplayCreated, onClose }: Scre
     }
   }, [youtubeUrl, manualTranscript]);
 
+  const generateStoryIdeas = useCallback(async () => {
+    if (!selectedGenre) return;
+    setLoading(true);
+    setError('');
+    setStoryIdeas([]);
+    setSelectedIdea(null);
+    try {
+      const response = await fetch('/api/screenplay/ideas', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ genre: selectedGenre.id, genreName: selectedGenre.name }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error);
+      setStoryIdeas(data.ideas || []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to generate story ideas');
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedGenre]);
+
   const generateConcepts = useCallback(async () => {
+    const ideaText = useCustomIdea ? customIdea : (selectedIdea ? `${selectedIdea.title}: ${selectedIdea.premise}` : '');
+    if (!ideaText) return;
+    
     setLoading(true);
     setError('');
     setConcepts([]);
+    setSelectedConcept(null);
     try {
       const response = await fetch('/api/screenplay/concepts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ storyIdea, runtime }),
+        body: JSON.stringify({ 
+          storyIdea: ideaText, 
+          runtime,
+          genre: selectedGenre?.name 
+        }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error);
@@ -86,10 +154,11 @@ export default function ScreenplayCreator({ onScreenplayCreated, onClose }: Scre
     } finally {
       setLoading(false);
     }
-  }, [storyIdea, runtime]);
+  }, [useCustomIdea, customIdea, selectedIdea, runtime, selectedGenre]);
 
   const generateScreenplay = useCallback(async (sourceType: 'youtube' | 'concept', transcript?: string) => {
     setGenerating(true);
+    setConceptStep('generating');
     setProgress('Starting screenplay generation...');
     setScreenplay('');
     setError('');
@@ -97,7 +166,12 @@ export default function ScreenplayCreator({ onScreenplayCreated, onClose }: Scre
     try {
       const body = sourceType === 'youtube'
         ? { sourceType, transcript, runtime }
-        : { sourceType, storyConcept: `${selectedConcept?.title}\n\n${selectedConcept?.synopsis}\n\nParanormal Element: ${selectedConcept?.paranormalElement}\n\nEmotional Hook: ${selectedConcept?.emotionalHook}`, runtime };
+        : { 
+            sourceType, 
+            storyConcept: `Title: ${selectedConcept?.title}\n\nSynopsis: ${selectedConcept?.synopsis}\n\nDramatic Element: ${selectedConcept?.dramaticElement || selectedConcept?.paranormalElement}\n\nEmotional Hook: ${selectedConcept?.emotionalHook}`,
+            runtime,
+            genre: selectedGenre?.name
+          };
 
       const response = await fetch('/api/screenplay/generate', {
         method: 'POST',
@@ -134,10 +208,12 @@ export default function ScreenplayCreator({ onScreenplayCreated, onClose }: Scre
                 setProgress('Writing screenplay...');
               } else if (parsed.status === 'completed') {
                 setScreenplay(parsed.screenplay);
+                setScreenplayTitle(selectedConcept?.title || 'Untitled Screenplay');
+                setConceptStep('complete');
                 parseAndComplete(parsed.screenplay, sourceType);
                 return;
               }
-            } catch (e) {
+            } catch {
               // Skip invalid JSON
             }
           }
@@ -145,13 +221,13 @@ export default function ScreenplayCreator({ onScreenplayCreated, onClose }: Scre
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to generate screenplay');
+      setConceptStep('concepts');
     } finally {
       setGenerating(false);
     }
-  }, [runtime, selectedConcept]);
+  }, [runtime, selectedConcept, selectedGenre]);
 
   const parseAndComplete = (content: string, sourceType: 'youtube' | 'concept') => {
-    // Parse characters and environments from the screenplay
     const charactersMatch = content.match(/---CHARACTER DESCRIPTIONS---([\s\S]*?)(?:---ENVIRONMENT|$)/i);
     const environmentsMatch = content.match(/---ENVIRONMENT DESCRIPTIONS---([\s\S]*?)$/i);
 
@@ -190,7 +266,6 @@ export default function ScreenplayCreator({ onScreenplayCreated, onClose }: Scre
       if (currentEnv.name) environments.push(currentEnv);
     }
 
-    // Extract title from the screenplay
     const titleMatch = content.match(/(?:TITLE:|"([^"]+)"|COLD OPEN|TEASER)\s*\n?([^\n]+)?/i);
     const title = titleMatch?.[1] || titleMatch?.[2] || selectedConcept?.title || 'Untitled Screenplay';
 
@@ -198,11 +273,11 @@ export default function ScreenplayCreator({ onScreenplayCreated, onClose }: Scre
       title: title.trim(),
       content,
       runtime,
-      characters: characters.length > 0 ? characters : [{ name: 'HOST', description: 'The show host' }],
-      environments: environments.length > 0 ? environments : [{ name: 'STUDIO', description: 'TV studio set' }],
+      characters: characters.length > 0 ? characters : [{ name: 'PROTAGONIST', description: 'The main character' }],
+      environments: environments.length > 0 ? environments : [{ name: 'MAIN LOCATION', description: 'Primary setting' }],
       sourceType,
       sourceUrl: sourceType === 'youtube' ? youtubeUrl : undefined,
-      storyIdea: sourceType === 'concept' ? storyIdea : undefined,
+      storyIdea: sourceType === 'concept' ? (useCustomIdea ? customIdea : selectedIdea?.premise) : undefined,
     });
   };
 
@@ -233,6 +308,78 @@ export default function ScreenplayCreator({ onScreenplayCreated, onClose }: Scre
     }
   };
 
+  // Download handlers
+  const downloadScreenplay = (format: 'txt' | 'doc' | 'docx') => {
+    const filename = `${screenplayTitle.replace(/[^a-zA-Z0-9]/g, '_') || 'screenplay'}`;
+    
+    if (format === 'txt') {
+      const blob = new Blob([screenplay], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${filename}.txt`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } else {
+      // For DOC/DOCX, we need to use the API
+      downloadAsDoc(format);
+    }
+  };
+
+  const downloadAsDoc = async (format: 'doc' | 'docx') => {
+    try {
+      const response = await fetch('/api/screenplay/download', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          screenplay, 
+          title: screenplayTitle,
+          format 
+        }),
+      });
+      
+      if (!response.ok) throw new Error('Download failed');
+      
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${screenplayTitle.replace(/[^a-zA-Z0-9]/g, '_') || 'screenplay'}.${format}`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setError('Failed to download file');
+    }
+  };
+
+  const resetConceptFlow = () => {
+    setConceptStep('genre');
+    setSelectedGenre(null);
+    setStoryIdeas([]);
+    setSelectedIdea(null);
+    setCustomIdea('');
+    setUseCustomIdea(false);
+    setConcepts([]);
+    setSelectedConcept(null);
+    setScreenplay('');
+    setScreenplayTitle('');
+    setError('');
+  };
+
+  const goBackInConceptFlow = () => {
+    if (conceptStep === 'ideas') {
+      setConceptStep('genre');
+      setStoryIdeas([]);
+      setSelectedIdea(null);
+    } else if (conceptStep === 'concepts') {
+      setConceptStep('ideas');
+      setConcepts([]);
+      setSelectedConcept(null);
+    } else if (conceptStep === 'complete') {
+      setConceptStep('concepts');
+    }
+  };
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -244,11 +391,14 @@ export default function ScreenplayCreator({ onScreenplayCreated, onClose }: Scre
         initial={{ scale: 0.9, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.9, opacity: 0 }}
-        className="bg-slate-900 border border-amber-500/30 rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col"
+        className="bg-slate-900 border border-amber-500/30 rounded-2xl w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col"
       >
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-slate-700">
-          <h2 className="text-2xl font-bold text-amber-400">AI Screenplay Creator</h2>
+          <div className="flex items-center gap-3">
+            <Film className="w-6 h-6 text-amber-400" />
+            <h2 className="text-2xl font-bold text-amber-400">AI Screenplay Creator</h2>
+          </div>
           <button onClick={onClose} className="p-2 hover:bg-slate-800 rounded-lg transition-colors">
             <X className="w-5 h-5 text-slate-400" />
           </button>
@@ -257,12 +407,14 @@ export default function ScreenplayCreator({ onScreenplayCreated, onClose }: Scre
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-6">
           {error && (
-            <div className="mb-4 p-4 bg-red-500/20 border border-red-500/50 rounded-lg text-red-400">
-              {error}
+            <div className="mb-4 p-4 bg-red-500/20 border border-red-500/50 rounded-lg text-red-400 flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+              <span>{error}</span>
             </div>
           )}
 
           <AnimatePresence mode="wait">
+            {/* Mode Selection */}
             {mode === 'select' && (
               <motion.div
                 key="select"
@@ -272,35 +424,14 @@ export default function ScreenplayCreator({ onScreenplayCreated, onClose }: Scre
                 className="space-y-6"
               >
                 <p className="text-slate-300 text-center mb-8">
-                  Choose how you want to create your screenplay for "CRYPTID JOURNAL"
+                  Choose how you want to create your screenplay
                 </p>
-
-                {/* Runtime Selector */}
-                <div className="bg-slate-800/50 rounded-xl p-6 mb-6">
-                  <label className="flex items-center gap-2 text-amber-400 font-medium mb-4">
-                    <Clock className="w-5 h-5" />
-                    Target Runtime: {runtime} minutes
-                  </label>
-                  <input
-                    type="range"
-                    min="5"
-                    max="25"
-                    value={runtime}
-                    onChange={(e) => setRuntime(parseInt(e.target.value))}
-                    className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-amber-500"
-                  />
-                  <div className="flex justify-between text-sm text-slate-500 mt-2">
-                    <span>5 min</span>
-                    <span>15 min</span>
-                    <span>25 min</span>
-                  </div>
-                </div>
 
                 <div className="grid md:grid-cols-2 gap-6">
                   {/* YouTube Option */}
                   <button
                     onClick={() => setMode('youtube')}
-                    className="group p-6 bg-slate-800/50 hover:bg-slate-800 border border-slate-700 hover:border-amber-500/50 rounded-xl text-left transition-all"
+                    className="group p-6 bg-slate-800/50 hover:bg-slate-800 border border-slate-700 hover:border-red-500/50 rounded-xl text-left transition-all"
                   >
                     <div className="w-12 h-12 bg-red-500/20 rounded-lg flex items-center justify-center mb-4 group-hover:bg-red-500/30 transition-colors">
                       <Youtube className="w-6 h-6 text-red-400" />
@@ -309,14 +440,14 @@ export default function ScreenplayCreator({ onScreenplayCreated, onClose }: Scre
                     <p className="text-slate-400 text-sm">
                       Extract a story from a YouTube video transcript and transform it into a dramatic screenplay
                     </p>
-                    <div className="flex items-center gap-2 text-amber-400 mt-4 text-sm">
+                    <div className="flex items-center gap-2 text-red-400 mt-4 text-sm">
                       Get Started <ChevronRight className="w-4 h-4" />
                     </div>
                   </button>
 
                   {/* Story Concept Option */}
                   <button
-                    onClick={() => setMode('concept')}
+                    onClick={() => { setMode('concept'); setConceptStep('genre'); }}
                     className="group p-6 bg-slate-800/50 hover:bg-slate-800 border border-slate-700 hover:border-amber-500/50 rounded-xl text-left transition-all"
                   >
                     <div className="w-12 h-12 bg-amber-500/20 rounded-lg flex items-center justify-center mb-4 group-hover:bg-amber-500/30 transition-colors">
@@ -324,7 +455,7 @@ export default function ScreenplayCreator({ onScreenplayCreated, onClose }: Scre
                     </div>
                     <h3 className="text-lg font-semibold text-white mb-2">From Story Idea</h3>
                     <p className="text-slate-400 text-sm">
-                      Provide a story idea and get 5 unique concepts to choose from, then generate a full screenplay
+                      Select a genre, generate story ideas, develop concepts, and create a full screenplay
                     </p>
                     <div className="flex items-center gap-2 text-amber-400 mt-4 text-sm">
                       Get Started <ChevronRight className="w-4 h-4" />
@@ -334,6 +465,7 @@ export default function ScreenplayCreator({ onScreenplayCreated, onClose }: Scre
               </motion.div>
             )}
 
+            {/* YouTube Mode */}
             {mode === 'youtube' && !generating && (
               <motion.div
                 key="youtube"
@@ -361,12 +493,8 @@ export default function ScreenplayCreator({ onScreenplayCreated, onClose }: Scre
                     placeholder="https://www.youtube.com/watch?v=..."
                     className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:border-amber-500 focus:outline-none"
                   />
-                  <p className="text-slate-500 text-sm mt-2">
-                    The transcript will be automatically extracted from the video.
-                  </p>
                 </div>
 
-                {/* Manual Transcript Input - Shows when auto-extract fails */}
                 {showManualInput && (
                   <motion.div
                     initial={{ opacity: 0, y: -10 }}
@@ -378,20 +506,9 @@ export default function ScreenplayCreator({ onScreenplayCreated, onClose }: Scre
                       <div>
                         <h4 className="text-amber-400 font-medium">Manual Transcript Required</h4>
                         <p className="text-slate-400 text-sm mt-1">
-                          YouTube is blocking automatic extraction. Please copy the transcript from the video and paste it below.
+                          YouTube is blocking automatic extraction. Please copy the transcript and paste it below.
                         </p>
                       </div>
-                    </div>
-                    
-                    <div className="bg-slate-900/50 rounded-lg p-4 mb-4">
-                      <p className="text-slate-300 text-sm font-medium mb-2">How to get the transcript:</p>
-                      <ol className="text-slate-400 text-sm space-y-1 list-decimal list-inside">
-                        <li>Open the video on YouTube</li>
-                        <li>Click the <strong>...</strong> (More) button below the video</li>
-                        <li>Click <strong>Show transcript</strong></li>
-                        <li>Click the three dots in the transcript panel and select <strong>Toggle timestamps</strong> to hide timestamps (optional)</li>
-                        <li>Select all text and copy (Ctrl/Cmd + A, then Ctrl/Cmd + C)</li>
-                      </ol>
                     </div>
                     
                     <label className="flex items-center gap-2 text-amber-400 font-medium mb-2">
@@ -402,14 +519,9 @@ export default function ScreenplayCreator({ onScreenplayCreated, onClose }: Scre
                       value={manualTranscript}
                       onChange={(e) => setManualTranscript(e.target.value)}
                       placeholder="Paste the transcript text here..."
-                      rows={8}
+                      rows={6}
                       className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:border-amber-500 focus:outline-none resize-none font-mono text-sm"
                     />
-                    {manualTranscript && (
-                      <p className="text-slate-500 text-xs mt-2">
-                        {manualTranscript.split(/\s+/).filter(w => w).length} words
-                      </p>
-                    )}
                   </motion.div>
                 )}
 
@@ -421,152 +533,359 @@ export default function ScreenplayCreator({ onScreenplayCreated, onClose }: Scre
                   <input
                     type="range"
                     min="5"
-                    max="25"
+                    max="30"
                     value={runtime}
                     onChange={(e) => setRuntime(parseInt(e.target.value))}
                     className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-amber-500"
                   />
+                  <div className="flex justify-between text-sm text-slate-500 mt-2">
+                    <span>5 min</span>
+                    <span>15 min</span>
+                    <span>30 min</span>
+                  </div>
                 </div>
 
-                {showManualInput ? (
-                  <button
-                    onClick={handleManualTranscriptSubmit}
-                    disabled={!manualTranscript.trim() || loading}
-                    className="w-full py-4 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 disabled:from-slate-600 disabled:to-slate-700 text-slate-900 disabled:text-slate-500 font-semibold rounded-xl transition-all flex items-center justify-center gap-2"
-                  >
-                    {loading ? (
-                      <><Loader2 className="w-5 h-5 animate-spin" /> Processing...</>
-                    ) : (
-                      <><FileText className="w-5 h-5" /> Generate Screenplay from Pasted Transcript</>
-                    )}
-                  </button>
-                ) : (
-                  <button
-                    onClick={handleYoutubeSubmit}
-                    disabled={!youtubeUrl || loading}
-                    className="w-full py-4 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 disabled:from-slate-600 disabled:to-slate-700 text-slate-900 disabled:text-slate-500 font-semibold rounded-xl transition-all flex items-center justify-center gap-2"
-                  >
-                    {loading ? (
-                      <><Loader2 className="w-5 h-5 animate-spin" /> Importing Transcript...</>
-                    ) : (
-                      <><FileText className="w-5 h-5" /> Generate Screenplay</>
-                    )}
-                  </button>
-                )}
+                <button
+                  onClick={showManualInput ? handleManualTranscriptSubmit : handleYoutubeSubmit}
+                  disabled={showManualInput ? !manualTranscript.trim() : !youtubeUrl || loading}
+                  className="w-full py-4 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 disabled:from-slate-600 disabled:to-slate-700 text-slate-900 disabled:text-slate-500 font-semibold rounded-xl transition-all flex items-center justify-center gap-2"
+                >
+                  {loading ? (
+                    <><Loader2 className="w-5 h-5 animate-spin" /> Processing...</>
+                  ) : (
+                    <><FileText className="w-5 h-5" /> Generate Screenplay</>
+                  )}
+                </button>
               </motion.div>
             )}
 
-            {mode === 'concept' && !generating && (
+            {/* Concept Mode - Genre Selection */}
+            {mode === 'concept' && conceptStep === 'genre' && (
               <motion.div
-                key="concept"
+                key="genre"
                 initial={{ opacity: 0, x: -20 }}
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: 20 }}
                 className="space-y-6"
               >
                 <button
-                  onClick={() => { setMode('select'); setConcepts([]); setSelectedConcept(null); }}
+                  onClick={() => { setMode('select'); resetConceptFlow(); }}
                   className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors"
                 >
                   <ChevronRight className="w-4 h-4 rotate-180" /> Back
                 </button>
 
-                {concepts.length === 0 ? (
-                  <>
-                    <div className="bg-slate-800/50 rounded-xl p-6">
-                      <label className="flex items-center gap-2 text-amber-400 font-medium mb-4">
-                        <Lightbulb className="w-5 h-5" />
-                        Story Idea or Subject
-                      </label>
-                      <textarea
-                        value={storyIdea}
-                        onChange={(e) => setStoryIdea(e.target.value)}
-                        placeholder="e.g., A family moves into an old Victorian house and discovers the previous owners never really left..."
-                        rows={4}
-                        className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:border-amber-500 focus:outline-none resize-none"
-                      />
-                    </div>
+                {/* Progress Indicator */}
+                <div className="flex items-center justify-center gap-2 mb-6">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-full bg-amber-500 flex items-center justify-center text-slate-900 font-bold text-sm">1</div>
+                    <span className="text-amber-400 font-medium">Genre</span>
+                  </div>
+                  <div className="w-8 h-0.5 bg-slate-700" />
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center text-slate-400 font-bold text-sm">2</div>
+                    <span className="text-slate-500">Ideas</span>
+                  </div>
+                  <div className="w-8 h-0.5 bg-slate-700" />
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center text-slate-400 font-bold text-sm">3</div>
+                    <span className="text-slate-500">Concepts</span>
+                  </div>
+                  <div className="w-8 h-0.5 bg-slate-700" />
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center text-slate-400 font-bold text-sm">4</div>
+                    <span className="text-slate-500">Screenplay</span>
+                  </div>
+                </div>
 
-                    <div className="bg-slate-800/50 rounded-xl p-6">
-                      <label className="flex items-center gap-2 text-amber-400 font-medium mb-4">
-                        <Clock className="w-5 h-5" />
-                        Target Runtime: {runtime} minutes
-                      </label>
-                      <input
-                        type="range"
-                        min="5"
-                        max="25"
-                        value={runtime}
-                        onChange={(e) => setRuntime(parseInt(e.target.value))}
-                        className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-amber-500"
-                      />
-                    </div>
+                <div className="text-center mb-4">
+                  <h3 className="text-xl font-semibold text-white mb-2">Select a Story Genre</h3>
+                  <p className="text-slate-400">Choose a genre to generate story ideas</p>
+                </div>
 
+                {/* Search */}
+                <input
+                  type="text"
+                  value={genreSearch}
+                  onChange={(e) => setGenreSearch(e.target.value)}
+                  placeholder="Search genres..."
+                  className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:border-amber-500 focus:outline-none"
+                />
+
+                {/* Genre Grid */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 max-h-[400px] overflow-y-auto p-1">
+                  {filteredGenres.map((genre) => (
                     <button
-                      onClick={generateConcepts}
-                      disabled={!storyIdea || loading}
-                      className="w-full py-4 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 disabled:from-slate-600 disabled:to-slate-700 text-slate-900 disabled:text-slate-500 font-semibold rounded-xl transition-all flex items-center justify-center gap-2"
+                      key={genre.id}
+                      onClick={() => setSelectedGenre(genre)}
+                      className={`p-3 rounded-xl border text-left transition-all ${
+                        selectedGenre?.id === genre.id
+                          ? 'bg-amber-500/20 border-amber-500'
+                          : 'bg-slate-800/50 border-slate-700 hover:border-slate-600'
+                      }`}
                     >
-                      {loading ? (
-                        <><Loader2 className="w-5 h-5 animate-spin" /> Generating Concepts...</>
-                      ) : (
-                        <><Lightbulb className="w-5 h-5" /> Generate 5 Story Concepts</>
-                      )}
+                      <div className="text-2xl mb-1">{genre.icon}</div>
+                      <div className="font-medium text-white text-sm">{genre.name}</div>
+                      <div className="text-slate-500 text-xs mt-1 line-clamp-2">{genre.description}</div>
                     </button>
-                  </>
-                ) : (
-                  <>
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-lg font-semibold text-white">Select a Story Concept</h3>
-                      <button
-                        onClick={generateConcepts}
-                        disabled={loading}
-                        className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-600 rounded-lg text-slate-300 text-sm transition-colors"
-                      >
-                        <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-                        Regenerate
-                      </button>
-                    </div>
+                  ))}
+                </div>
 
-                    <div className="space-y-4">
-                      {concepts.map((concept) => (
-                        <button
-                          key={concept.id}
-                          onClick={() => setSelectedConcept(concept)}
-                          className={`w-full p-4 rounded-xl border text-left transition-all ${
-                            selectedConcept?.id === concept.id
-                              ? 'bg-amber-500/20 border-amber-500'
-                              : 'bg-slate-800/50 border-slate-700 hover:border-slate-600'
-                          }`}
-                        >
-                          <div className="flex items-start justify-between">
-                            <h4 className="font-semibold text-white">{concept.title}</h4>
-                            {selectedConcept?.id === concept.id && (
-                              <CheckCircle className="w-5 h-5 text-amber-400 flex-shrink-0" />
-                            )}
-                          </div>
-                          <p className="text-slate-400 text-sm mt-2">{concept.synopsis}</p>
-                          <div className="flex gap-4 mt-3 text-xs">
-                            <span className="text-purple-400">👻 {concept.paranormalElement}</span>
-                            <span className="text-pink-400">❤️ {concept.emotionalHook}</span>
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-
-                    <button
-                      onClick={handleConceptSubmit}
-                      disabled={!selectedConcept}
-                      className="w-full py-4 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 disabled:from-slate-600 disabled:to-slate-700 text-slate-900 disabled:text-slate-500 font-semibold rounded-xl transition-all flex items-center justify-center gap-2"
-                    >
-                      <FileText className="w-5 h-5" /> Generate Screenplay
-                    </button>
-                  </>
-                )}
+                <button
+                  onClick={() => { setConceptStep('ideas'); generateStoryIdeas(); }}
+                  disabled={!selectedGenre}
+                  className="w-full py-4 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 disabled:from-slate-600 disabled:to-slate-700 text-slate-900 disabled:text-slate-500 font-semibold rounded-xl transition-all flex items-center justify-center gap-2"
+                >
+                  <Sparkles className="w-5 h-5" /> Generate Story Ideas
+                </button>
               </motion.div>
             )}
 
-            {generating && (
+            {/* Concept Mode - Story Ideas */}
+            {mode === 'concept' && conceptStep === 'ideas' && (
+              <motion.div
+                key="ideas"
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 20 }}
+                className="space-y-6"
+              >
+                <button
+                  onClick={goBackInConceptFlow}
+                  className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors"
+                >
+                  <ChevronRight className="w-4 h-4 rotate-180" /> Back to Genres
+                </button>
+
+                {/* Progress Indicator */}
+                <div className="flex items-center justify-center gap-2 mb-6">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-full bg-green-500 flex items-center justify-center text-white font-bold text-sm"><CheckCircle className="w-4 h-4" /></div>
+                    <span className="text-green-400 font-medium">Genre</span>
+                  </div>
+                  <div className="w-8 h-0.5 bg-green-500" />
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-full bg-amber-500 flex items-center justify-center text-slate-900 font-bold text-sm">2</div>
+                    <span className="text-amber-400 font-medium">Ideas</span>
+                  </div>
+                  <div className="w-8 h-0.5 bg-slate-700" />
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center text-slate-400 font-bold text-sm">3</div>
+                    <span className="text-slate-500">Concepts</span>
+                  </div>
+                  <div className="w-8 h-0.5 bg-slate-700" />
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center text-slate-400 font-bold text-sm">4</div>
+                    <span className="text-slate-500">Screenplay</span>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-xl font-semibold text-white">Select a Story Idea</h3>
+                    <p className="text-slate-400 text-sm">Genre: <span className="text-amber-400">{selectedGenre?.icon} {selectedGenre?.name}</span></p>
+                  </div>
+                  <button
+                    onClick={generateStoryIdeas}
+                    disabled={loading}
+                    className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-600 rounded-lg text-slate-300 text-sm transition-colors"
+                  >
+                    <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+                    Regenerate
+                  </button>
+                </div>
+
+                {loading ? (
+                  <div className="flex items-center justify-center py-12">
+                    <Loader2 className="w-8 h-8 text-amber-400 animate-spin" />
+                    <span className="ml-3 text-slate-300">Generating story ideas...</span>
+                  </div>
+                ) : (
+                  <>
+                    {/* Custom Idea Option */}
+                    <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700">
+                      <label className="flex items-center gap-3 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={useCustomIdea}
+                          onChange={(e) => { setUseCustomIdea(e.target.checked); if (e.target.checked) setSelectedIdea(null); }}
+                          className="w-5 h-5 rounded border-slate-600 bg-slate-900 text-amber-500 focus:ring-amber-500"
+                        />
+                        <div>
+                          <span className="text-white font-medium">Use custom story idea</span>
+                          <p className="text-slate-500 text-sm">Enter your own story idea instead</p>
+                        </div>
+                      </label>
+                      {useCustomIdea && (
+                        <textarea
+                          value={customIdea}
+                          onChange={(e) => setCustomIdea(e.target.value)}
+                          placeholder="Enter your story idea or subject..."
+                          rows={3}
+                          className="mt-3 w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:border-amber-500 focus:outline-none resize-none"
+                        />
+                      )}
+                    </div>
+
+                    {/* Generated Ideas */}
+                    {!useCustomIdea && (
+                      <div className="grid gap-3 max-h-[350px] overflow-y-auto">
+                        {storyIdeas.map((idea) => (
+                          <button
+                            key={idea.id}
+                            onClick={() => setSelectedIdea(idea)}
+                            className={`p-4 rounded-xl border text-left transition-all ${
+                              selectedIdea?.id === idea.id
+                                ? 'bg-amber-500/20 border-amber-500'
+                                : 'bg-slate-800/50 border-slate-700 hover:border-slate-600'
+                            }`}
+                          >
+                            <div className="flex items-start justify-between">
+                              <h4 className="font-semibold text-white">{idea.title}</h4>
+                              {selectedIdea?.id === idea.id && (
+                                <CheckCircle className="w-5 h-5 text-amber-400 flex-shrink-0" />
+                              )}
+                            </div>
+                            <p className="text-slate-400 text-sm mt-1">{idea.premise}</p>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
+
+                <button
+                  onClick={() => { setConceptStep('concepts'); generateConcepts(); }}
+                  disabled={(useCustomIdea ? !customIdea : !selectedIdea) || loading}
+                  className="w-full py-4 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 disabled:from-slate-600 disabled:to-slate-700 text-slate-900 disabled:text-slate-500 font-semibold rounded-xl transition-all flex items-center justify-center gap-2"
+                >
+                  <BookOpen className="w-5 h-5" /> Generate Story Concepts
+                </button>
+              </motion.div>
+            )}
+
+            {/* Concept Mode - Story Concepts */}
+            {mode === 'concept' && conceptStep === 'concepts' && (
+              <motion.div
+                key="concepts"
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 20 }}
+                className="space-y-6"
+              >
+                <button
+                  onClick={goBackInConceptFlow}
+                  className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors"
+                >
+                  <ChevronRight className="w-4 h-4 rotate-180" /> Back to Ideas
+                </button>
+
+                {/* Progress Indicator */}
+                <div className="flex items-center justify-center gap-2 mb-6">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-full bg-green-500 flex items-center justify-center text-white font-bold text-sm"><CheckCircle className="w-4 h-4" /></div>
+                    <span className="text-green-400 font-medium">Genre</span>
+                  </div>
+                  <div className="w-8 h-0.5 bg-green-500" />
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-full bg-green-500 flex items-center justify-center text-white font-bold text-sm"><CheckCircle className="w-4 h-4" /></div>
+                    <span className="text-green-400 font-medium">Ideas</span>
+                  </div>
+                  <div className="w-8 h-0.5 bg-green-500" />
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-full bg-amber-500 flex items-center justify-center text-slate-900 font-bold text-sm">3</div>
+                    <span className="text-amber-400 font-medium">Concepts</span>
+                  </div>
+                  <div className="w-8 h-0.5 bg-slate-700" />
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center text-slate-400 font-bold text-sm">4</div>
+                    <span className="text-slate-500">Screenplay</span>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-xl font-semibold text-white">Select a Story Concept</h3>
+                    <p className="text-slate-400 text-sm">
+                      Based on: <span className="text-amber-400">{useCustomIdea ? customIdea.slice(0, 50) + '...' : selectedIdea?.title}</span>
+                    </p>
+                  </div>
+                  <button
+                    onClick={generateConcepts}
+                    disabled={loading}
+                    className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-600 rounded-lg text-slate-300 text-sm transition-colors"
+                  >
+                    <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+                    Regenerate
+                  </button>
+                </div>
+
+                {loading ? (
+                  <div className="flex items-center justify-center py-12">
+                    <Loader2 className="w-8 h-8 text-amber-400 animate-spin" />
+                    <span className="ml-3 text-slate-300">Generating story concepts...</span>
+                  </div>
+                ) : (
+                  <div className="grid gap-3 max-h-[300px] overflow-y-auto">
+                    {concepts.map((concept) => (
+                      <button
+                        key={concept.id}
+                        onClick={() => setSelectedConcept(concept)}
+                        className={`p-4 rounded-xl border text-left transition-all ${
+                          selectedConcept?.id === concept.id
+                            ? 'bg-amber-500/20 border-amber-500'
+                            : 'bg-slate-800/50 border-slate-700 hover:border-slate-600'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between">
+                          <h4 className="font-semibold text-white">{concept.title}</h4>
+                          {selectedConcept?.id === concept.id && (
+                            <CheckCircle className="w-5 h-5 text-amber-400 flex-shrink-0" />
+                          )}
+                        </div>
+                        <p className="text-slate-400 text-sm mt-2">{concept.synopsis}</p>
+                        <div className="flex flex-wrap gap-3 mt-3 text-xs">
+                          <span className="text-purple-400">✨ {concept.dramaticElement || concept.paranormalElement}</span>
+                          <span className="text-pink-400">❤️ {concept.emotionalHook}</span>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* Runtime Selector */}
+                <div className="bg-slate-800/50 rounded-xl p-4">
+                  <label className="flex items-center gap-2 text-amber-400 font-medium mb-3">
+                    <Clock className="w-5 h-5" />
+                    Target Runtime: {runtime} minutes
+                  </label>
+                  <input
+                    type="range"
+                    min="5"
+                    max="30"
+                    value={runtime}
+                    onChange={(e) => setRuntime(parseInt(e.target.value))}
+                    className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-amber-500"
+                  />
+                  <div className="flex justify-between text-sm text-slate-500 mt-2">
+                    <span>5 min</span>
+                    <span>15 min</span>
+                    <span>30 min</span>
+                  </div>
+                </div>
+
+                <button
+                  onClick={handleConceptSubmit}
+                  disabled={!selectedConcept || loading}
+                  className="w-full py-4 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 disabled:from-slate-600 disabled:to-slate-700 text-slate-900 disabled:text-slate-500 font-semibold rounded-xl transition-all flex items-center justify-center gap-2"
+                >
+                  <PenTool className="w-5 h-5" /> Generate Screenplay
+                </button>
+              </motion.div>
+            )}
+
+            {/* Generating State */}
+            {(generating || conceptStep === 'generating') && (
               <motion.div
                 key="generating"
                 initial={{ opacity: 0 }}
@@ -587,6 +906,107 @@ export default function ScreenplayCreator({ onScreenplayCreated, onClose }: Scre
                     </pre>
                   </div>
                 )}
+              </motion.div>
+            )}
+
+            {/* Complete - Screenplay Preview with Download */}
+            {mode === 'concept' && conceptStep === 'complete' && !generating && (
+              <motion.div
+                key="complete"
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 20 }}
+                className="space-y-6"
+              >
+                {/* Progress Indicator */}
+                <div className="flex items-center justify-center gap-2 mb-6">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-full bg-green-500 flex items-center justify-center text-white font-bold text-sm"><CheckCircle className="w-4 h-4" /></div>
+                    <span className="text-green-400 font-medium">Genre</span>
+                  </div>
+                  <div className="w-8 h-0.5 bg-green-500" />
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-full bg-green-500 flex items-center justify-center text-white font-bold text-sm"><CheckCircle className="w-4 h-4" /></div>
+                    <span className="text-green-400 font-medium">Ideas</span>
+                  </div>
+                  <div className="w-8 h-0.5 bg-green-500" />
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-full bg-green-500 flex items-center justify-center text-white font-bold text-sm"><CheckCircle className="w-4 h-4" /></div>
+                    <span className="text-green-400 font-medium">Concepts</span>
+                  </div>
+                  <div className="w-8 h-0.5 bg-green-500" />
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-full bg-green-500 flex items-center justify-center text-white font-bold text-sm"><CheckCircle className="w-4 h-4" /></div>
+                    <span className="text-green-400 font-medium">Complete</span>
+                  </div>
+                </div>
+
+                <div className="text-center">
+                  <div className="w-16 h-16 bg-green-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <CheckCircle className="w-8 h-8 text-green-400" />
+                  </div>
+                  <h3 className="text-2xl font-bold text-white mb-2">Screenplay Complete!</h3>
+                  <p className="text-slate-400">{screenplayTitle} • {runtime} minutes</p>
+                </div>
+
+                {/* Download Options */}
+                <div className="bg-slate-800/50 rounded-xl p-6">
+                  <h4 className="text-amber-400 font-medium mb-4 flex items-center gap-2">
+                    <Download className="w-5 h-5" />
+                    Download Screenplay
+                  </h4>
+                  <div className="grid grid-cols-3 gap-3">
+                    <button
+                      onClick={() => downloadScreenplay('txt')}
+                      className="p-4 bg-slate-900 hover:bg-slate-700 border border-slate-700 hover:border-slate-600 rounded-xl transition-all text-center"
+                    >
+                      <FileText className="w-8 h-8 text-slate-400 mx-auto mb-2" />
+                      <span className="text-white font-medium">TXT</span>
+                      <p className="text-slate-500 text-xs mt-1">Plain Text</p>
+                    </button>
+                    <button
+                      onClick={() => downloadScreenplay('doc')}
+                      className="p-4 bg-slate-900 hover:bg-slate-700 border border-slate-700 hover:border-slate-600 rounded-xl transition-all text-center"
+                    >
+                      <FileText className="w-8 h-8 text-blue-400 mx-auto mb-2" />
+                      <span className="text-white font-medium">DOC</span>
+                      <p className="text-slate-500 text-xs mt-1">Word 97-2003</p>
+                    </button>
+                    <button
+                      onClick={() => downloadScreenplay('docx')}
+                      className="p-4 bg-slate-900 hover:bg-slate-700 border border-slate-700 hover:border-slate-600 rounded-xl transition-all text-center"
+                    >
+                      <FileText className="w-8 h-8 text-blue-500 mx-auto mb-2" />
+                      <span className="text-white font-medium">DOCX</span>
+                      <p className="text-slate-500 text-xs mt-1">Word Document</p>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Screenplay Preview */}
+                <div className="bg-slate-800/50 rounded-xl p-6">
+                  <h4 className="text-amber-400 font-medium mb-4">Screenplay Preview</h4>
+                  <div className="bg-slate-900 rounded-lg p-4 max-h-[300px] overflow-y-auto">
+                    <pre className="text-slate-300 whitespace-pre-wrap font-mono text-sm">
+                      {screenplay.slice(0, 2000)}{screenplay.length > 2000 && '\n\n... [Preview truncated]'}
+                    </pre>
+                  </div>
+                </div>
+
+                <div className="flex gap-3">
+                  <button
+                    onClick={resetConceptFlow}
+                    className="flex-1 py-4 bg-slate-800 hover:bg-slate-700 border border-slate-600 text-white font-semibold rounded-xl transition-all flex items-center justify-center gap-2"
+                  >
+                    <RefreshCw className="w-5 h-5" /> Create Another
+                  </button>
+                  <button
+                    onClick={onClose}
+                    className="flex-1 py-4 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-900 font-semibold rounded-xl transition-all flex items-center justify-center gap-2"
+                  >
+                    <CheckCircle className="w-5 h-5" /> Continue to Prompts
+                  </button>
+                </div>
               </motion.div>
             )}
           </AnimatePresence>
