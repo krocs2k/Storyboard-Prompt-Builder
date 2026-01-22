@@ -1,16 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 
-// GET - List all projects or get specific project
+// GET - List user's projects or get specific project
 export async function GET(request: NextRequest) {
   try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
     const folderId = searchParams.get('folderId');
 
     if (id) {
-      const project = await prisma.project.findUnique({
-        where: { id },
+      const project = await prisma.project.findFirst({
+        where: { id, userId: session.user.id },
         include: {
           folder: true,
           screenplay: true,
@@ -25,7 +32,9 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(project);
     }
 
-    const where = folderId ? { folderId } : {};
+    const where: Record<string, unknown> = { userId: session.user.id };
+    if (folderId) where.folderId = folderId;
+
     const projects = await prisma.project.findMany({
       where,
       include: {
@@ -49,6 +58,11 @@ export async function GET(request: NextRequest) {
 // POST - Create new project
 export async function POST(request: NextRequest) {
   try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const body = await request.json();
     const { name, folderId, selections, recommendations, screenplay, storyboard } = body;
 
@@ -56,10 +70,21 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Project name is required' }, { status: 400 });
     }
 
+    // Verify folder ownership if folderId is provided
+    if (folderId) {
+      const folder = await prisma.projectFolder.findFirst({
+        where: { id: folderId, userId: session.user.id },
+      });
+      if (!folder) {
+        return NextResponse.json({ error: 'Folder not found' }, { status: 404 });
+      }
+    }
+
     const project = await prisma.project.create({
       data: {
         name,
         folderId: folderId || null,
+        userId: session.user.id,
         selections: selections || null,
         recommendations: recommendations || null,
         ...(screenplay && {
@@ -109,11 +134,35 @@ export async function POST(request: NextRequest) {
 // PUT - Update project
 export async function PUT(request: NextRequest) {
   try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const body = await request.json();
     const { id, name, folderId, selections, recommendations, screenplay, storyboard } = body;
 
     if (!id) {
       return NextResponse.json({ error: 'Project ID is required' }, { status: 400 });
+    }
+
+    // Verify ownership
+    const existing = await prisma.project.findFirst({
+      where: { id, userId: session.user.id },
+    });
+
+    if (!existing) {
+      return NextResponse.json({ error: 'Project not found' }, { status: 404 });
+    }
+
+    // Verify folder ownership if folderId is provided
+    if (folderId) {
+      const folder = await prisma.projectFolder.findFirst({
+        where: { id: folderId, userId: session.user.id },
+      });
+      if (!folder) {
+        return NextResponse.json({ error: 'Folder not found' }, { status: 404 });
+      }
     }
 
     // Update main project
@@ -221,11 +270,25 @@ export async function PUT(request: NextRequest) {
 // DELETE - Delete project
 export async function DELETE(request: NextRequest) {
   try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
 
     if (!id) {
       return NextResponse.json({ error: 'Project ID is required' }, { status: 400 });
+    }
+
+    // Verify ownership
+    const existing = await prisma.project.findFirst({
+      where: { id, userId: session.user.id },
+    });
+
+    if (!existing) {
+      return NextResponse.json({ error: 'Project not found' }, { status: 404 });
     }
 
     await prisma.project.delete({

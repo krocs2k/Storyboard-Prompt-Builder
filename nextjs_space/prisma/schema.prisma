@@ -11,18 +11,21 @@ datasource db {
 
 // Authentication models
 model User {
-  id              String    @id @default(cuid())
+  id              String          @id @default(cuid())
   name            String?
-  email           String    @unique
+  email           String          @unique
   emailVerified   DateTime?
   password        String?
   image           String?
-  role            String    @default("user") // "user" or "admin"
-  isActive        Boolean   @default(false) // Disabled by default, admin must enable
+  role            String          @default("user") // "user" or "admin"
+  isActive        Boolean         @default(false) // Disabled by default, admin must enable
   accounts        Account[]
   sessions        Session[]
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  savedPrompts    SavedPrompt[]
+  projectFolders  ProjectFolder[]
+  projects        Project[]
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
 }
 
 model Account {
@@ -74,6 +77,8 @@ model SavedPrompt {
   name        String
   prompt      String   @db.Text
   selections  Json
+  userId      String?
+  user        User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }
@@ -81,6 +86,8 @@ model SavedPrompt {
 model ProjectFolder {
   id          String    @id @default(cuid())
   name        String
+  userId      String?
+  user        User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
   projects    Project[]
@@ -91,6 +98,8 @@ model Project {
   name            String
   folderId        String?
   folder          ProjectFolder? @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  userId          String?
+  user            User?          @relation(fields: [userId], references: [id], onDelete: Cascade)
   screenplay      Screenplay?
   storyboard      Storyboard?
   selections      Json?
