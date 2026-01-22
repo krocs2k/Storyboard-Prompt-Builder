@@ -2,24 +2,25 @@ export interface FilterEffect {
   id: string;
   name: string;
   description: string;
+  image?: string;
 }
 
 export const filterEffects: FilterEffect[] = [
-  { id: 'technicolor', name: 'Technicolor 3-Strip', description: 'saturated primaries, deep blues/reds, theatrical contrast, vintage Hollywood vividness' },
-  { id: 'ecn2', name: 'ECN-2 Color Film', description: 'cinematic color density, smooth highlight rolloff, balanced saturation, fine grain' },
-  { id: 'ektachrome', name: 'Ektachrome Slide', description: 'cool tones, high contrast, punchy highlights, documentary vividness' },
-  { id: 'kodachrome', name: 'Kodachrome', description: 'rich reds, warm midtones, crisp edges, nostalgic travel film look' },
-  { id: 'provia-filter', name: 'Fujifilm Provia', description: 'neutral-cool tones, moderate contrast, natural saturation, professional slide clarity' },
-  { id: 'velvia-filter', name: 'Fujifilm Velvia', description: 'ultra-saturated greens/reds, landscape punch, high contrast, slide film vividness' },
-  { id: 'astia-filter', name: 'Fujifilm Astia', description: 'soft contrast, pastel tones, gentle color reproduction, fashion slide aesthetic' },
-  { id: 'portra-filter', name: 'Kodak Portra', description: 'warm skin tones, low contrast, pastel palette, fine grain, film portrait softness' },
-  { id: 'ektar-filter', name: 'Kodak Ektar', description: 'vivid saturation, blue-red punch, low grain, landscape pop' },
-  { id: 'vision3-500t', name: 'Kodak Vision3 500T', description: 'tungsten-balanced color, subdued saturation, wide dynamic range, cinematic grain' },
-  { id: 'vision3-250d', name: 'Kodak Vision3 250D', description: 'daylight balance, neutral warmth, gentle highlights, naturalistic color' },
-  { id: 'cinestill-800t-filter', name: 'Cinestill 800T', description: 'tungsten balance, orange halation glow, cinematic night colors, medium grain' },
-  { id: 'cinestill-50d-filter', name: 'Cinestill 50D', description: 'daylight clean tones, fine grain, warm highlights, cinematic sharpness' },
-  { id: 'agfa-vista-filter', name: 'Agfa Vista', description: 'warm pastel bias, light grain, nostalgic consumer look' },
-  { id: 'polaroid', name: 'Polaroid Instant', description: 'washed pastel colors, soft contrast, instant retro character' },
+  { id: 'technicolor', name: 'Technicolor 3-Strip', description: 'saturated primaries, deep blues/reds, theatrical contrast, vintage Hollywood vividness', image: 'https://cdn.abacus.ai/images/913930ea-3a06-4995-ab80-41da849370f8.png' },
+  { id: 'ecn2', name: 'ECN-2 Color Film', description: 'cinematic color density, smooth highlight rolloff, balanced saturation, fine grain', image: 'https://cdn.abacus.ai/images/6f3802fc-d646-4a8b-a5bc-84669aafd08d.png' },
+  { id: 'ektachrome', name: 'Ektachrome Slide', description: 'cool tones, high contrast, punchy highlights, documentary vividness', image: 'https://cdn.abacus.ai/images/93dc86b3-7888-40b9-a36b-8b9ff22fea34.png' },
+  { id: 'kodachrome', name: 'Kodachrome', description: 'rich reds, warm midtones, crisp edges, nostalgic travel film look', image: 'https://cdn.abacus.ai/images/e306d49e-82ff-4dc8-8d05-4457b18fdc79.png' },
+  { id: 'provia-filter', name: 'Fujifilm Provia', description: 'neutral-cool tones, moderate contrast, natural saturation, professional slide clarity', image: 'https://cdn.abacus.ai/images/8ee292d1-3139-4bfc-96a9-dd4be1982a97.png' },
+  { id: 'velvia-filter', name: 'Fujifilm Velvia', description: 'ultra-saturated greens/reds, landscape punch, high contrast, slide film vividness', image: 'https://cdn.abacus.ai/images/ca144edd-ebe9-4a22-994b-0b13b5c11231.png' },
+  { id: 'astia-filter', name: 'Fujifilm Astia', description: 'soft contrast, pastel tones, gentle color reproduction, fashion slide aesthetic', image: 'https://cdn.abacus.ai/images/87bfb28c-23c8-4895-a189-8ec68d11220a.png' },
+  { id: 'portra-filter', name: 'Kodak Portra', description: 'warm skin tones, low contrast, pastel palette, fine grain, film portrait softness', image: 'https://cdn.abacus.ai/images/1c26ac61-46db-4868-b951-fe61680938c3.png' },
+  { id: 'ektar-filter', name: 'Kodak Ektar', description: 'vivid saturation, blue-red punch, low grain, landscape pop', image: 'https://cdn.abacus.ai/images/dbd2b7e8-46f5-49b3-9bbc-db45313c9e04.png' },
+  { id: 'vision3-500t', name: 'Kodak Vision3 500T', description: 'tungsten-balanced color, subdued saturation, wide dynamic range, cinematic grain', image: 'https://cdn.abacus.ai/images/ee6c4318-705c-4667-b7d0-2cb6c3d8cd77.png' },
+  { id: 'vision3-250d', name: 'Kodak Vision3 250D', description: 'daylight balance, neutral warmth, gentle highlights, naturalistic color', image: 'https://cdn.abacus.ai/images/4e871882-bc7d-4b94-beff-6b6f23db33e3.png' },
+  { id: 'cinestill-800t-filter', name: 'Cinestill 800T', description: 'tungsten balance, orange halation glow, cinematic night colors, medium grain', image: 'https://cdn.abacus.ai/images/e5b32185-e49c-425e-9225-3d187d9ed0d7.png' },
+  { id: 'cinestill-50d-filter', name: 'Cinestill 50D', description: 'daylight clean tones, fine grain, warm highlights, cinematic sharpness', image: 'https://cdn.abacus.ai/images/963bbd6f-ab3a-452a-b83a-1e94ab826e9d.png' },
+  { id: 'agfa-vista-filter', name: 'Agfa Vista', description: 'warm pastel bias, light grain, nostalgic consumer look', image: 'https://cdn.abacus.ai/images/fdb8c8e1-3d0f-4b80-935f-ab43ae263211.png' },
+  { id: 'polaroid', name: 'Polaroid Instant', description: 'washed pastel colors, soft contrast, instant retro character', image: 'https://cdn.abacus.ai/images/24c2b2d2-0b49-407d-9f10-2f630c859cc4.png' },
   { id: 'instax', name: 'Instax Mini', description: 'bright pastel colors, smooth skin, instant photo highlight rolloff' },
   { id: 'peel-apart', name: 'Instant Peel-Apart Pack', description: 'neutral muted tones, low contrast, analog documentary feel' },
   { id: 'cross-process', name: 'Cross-Process (C-41 in E-6)', description: 'high contrast, unpredictable hues, green/magenta shifts, experimental color' },
