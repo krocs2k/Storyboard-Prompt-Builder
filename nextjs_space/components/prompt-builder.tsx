@@ -2,11 +2,14 @@
 
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useSession, signOut } from 'next-auth/react';
+import Link from 'next/link';
 import { 
   Palette, Frame, Sun, Camera, Sparkles, FileText, Copy, Check, 
   Trash2, Film, Aperture, Image as ImageIcon, Save, History,
   FolderOpen, Plus, Download, Loader2, Clapperboard, Upload,
-  LayoutGrid, Users, MapPin, ChevronDown, X, FolderPlus, Edit3, Grid3X3, Mic, RefreshCw
+  LayoutGrid, Users, MapPin, ChevronDown, X, FolderPlus, Edit3, Grid3X3, Mic, RefreshCw,
+  LogOut, Settings, User
 } from 'lucide-react';
 import { SectionCard } from './section-card';
 import { SelectionButton } from './selection-button';
@@ -47,6 +50,8 @@ interface Selections {
 }
 
 export function PromptBuilder() {
+  const { data: session } = useSession() || {};
+  const [showUserMenu, setShowUserMenu] = useState(false);
   const [activeModal, setActiveModal] = useState<ModalType>(null);
   const [copied, setCopied] = useState(false);
   
@@ -661,6 +666,65 @@ export function PromptBuilder() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
+      {/* User Header */}
+      {session?.user && (
+        <div className="fixed top-4 right-4 z-50">
+          <div className="relative">
+            <button
+              onClick={() => setShowUserMenu(!showUserMenu)}
+              className="flex items-center gap-2 px-3 py-2 bg-slate-800/80 backdrop-blur-sm border border-slate-700 rounded-lg hover:bg-slate-700/80 transition-colors"
+            >
+              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center">
+                {session.user.image ? (
+                  <img src={session.user.image} alt="" className="w-8 h-8 rounded-full" />
+                ) : (
+                  <User size={16} className="text-slate-900" />
+                )}
+              </div>
+              <span className="text-sm text-slate-300 max-w-[120px] truncate hidden sm:block">
+                {session.user.name || session.user.email}
+              </span>
+              <ChevronDown size={16} className={`text-slate-400 transition-transform ${showUserMenu ? 'rotate-180' : ''}`} />
+            </button>
+
+            <AnimatePresence>
+              {showUserMenu && (
+                <motion.div
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  className="absolute right-0 mt-2 w-56 bg-slate-800 border border-slate-700 rounded-lg shadow-xl overflow-hidden"
+                >
+                  <div className="px-4 py-3 border-b border-slate-700">
+                    <p className="text-sm text-white font-medium truncate">{session.user.name || 'User'}</p>
+                    <p className="text-xs text-slate-400 truncate">{session.user.email}</p>
+                  </div>
+                  <div className="py-1">
+                    {session.user.role === 'admin' && (
+                      <Link
+                        href="/admin"
+                        className="flex items-center gap-3 px-4 py-2 text-sm text-slate-300 hover:bg-slate-700/50 transition-colors"
+                        onClick={() => setShowUserMenu(false)}
+                      >
+                        <Settings size={16} />
+                        Administration
+                      </Link>
+                    )}
+                    <button
+                      onClick={() => signOut({ callbackUrl: '/login' })}
+                      className="w-full flex items-center gap-3 px-4 py-2 text-sm text-red-400 hover:bg-slate-700/50 transition-colors"
+                    >
+                      <LogOut size={16} />
+                      Sign Out
+                    </button>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        </div>
+      )}
+
       {/* Hero Section */}
       <div className="relative overflow-hidden">
         <div className="absolute inset-0 bg-[url('https://thumbs.dreamstime.com/b/abstract-design-website-hero-section-background-features-vibrant-blue-fluid-lines-geometric-shapes-circles-351935047.jpg bg-cover bg-center opacity-10" />

@@ -1,0 +1,288 @@
+'use client';
+
+import { useSession } from 'next-auth/react';
+import { useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
+import { Loader2, ArrowLeft, UserCheck, UserX, Shield, ShieldOff, Trash2, Search, RefreshCw } from 'lucide-react';
+import Link from 'next/link';
+
+interface User {
+  id: string;
+  email: string;
+  name: string | null;
+  role: string;
+  isActive: boolean;
+  emailVerified: Date | null;
+  createdAt: string;
+  accounts: { provider: string }[];
+}
+
+export default function UsersPage() {
+  const sessionData = useSession();
+  const session = sessionData?.data;
+  const status = sessionData?.status || 'loading';
+  const router = useRouter();
+  const [users, setUsers] = useState<User[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!mounted) return;
+    if (status === 'unauthenticated') {
+      router.replace('/login');
+    } else if (status === 'authenticated' && session?.user?.role !== 'admin') {
+      router.replace('/');
+    }
+  }, [status, session, router, mounted]);
+
+  const fetchUsers = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch('/api/admin/users');
+      const data = await res.json();
+      if (data.users) {
+        setUsers(data.users);
+      }
+    } catch (err) {
+      console.error('Failed to fetch users:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (session?.user?.role === 'admin') {
+      fetchUsers();
+    }
+  }, [session]);
+
+  const handleAction = async (userId: string, action: string) => {
+    setActionLoading(userId);
+    try {
+      const res = await fetch('/api/admin/users', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, action })
+      });
+      const data = await res.json();
+      if (data.user) {
+        setUsers(users.map(u => u.id === userId ? { ...u, ...data.user } : u));
+      } else if (data.error) {
+        alert(data.error);
+      }
+    } catch (err) {
+      console.error('Action failed:', err);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleDelete = async (userId: string, email: string) => {
+    if (!confirm(`Are you sure you want to delete ${email}? This action cannot be undone.`)) {
+      return;
+    }
+    setActionLoading(userId);
+    try {
+      const res = await fetch(`/api/admin/users?userId=${userId}`, {
+        method: 'DELETE'
+      });
+      const data = await res.json();
+      if (data.success) {
+        setUsers(users.filter(u => u.id !== userId));
+      } else if (data.error) {
+        alert(data.error);
+      }
+    } catch (err) {
+      console.error('Delete failed:', err);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const filteredUsers = users.filter(u =>
+    u.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (u.name && u.name.toLowerCase().includes(searchQuery.toLowerCase()))
+  );
+
+  if (!mounted || status === 'loading' || (status === 'authenticated' && session?.user?.role !== 'admin')) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
+        <Loader2 className="w-8 h-8 animate-spin text-rose-500" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
+      <div className="max-w-6xl mx-auto p-6">
+        <div className="mb-8">
+          <Link
+            href="/admin"
+            className="inline-flex items-center gap-2 text-gray-400 hover:text-white mb-4 transition-colors"
+          >
+            <ArrowLeft className="w-4 h-4" /> Back to Admin
+          </Link>
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-3xl font-bold text-white mb-2">User Management</h1>
+              <p className="text-gray-400">{users.length} total users</p>
+            </div>
+            <button
+              onClick={fetchUsers}
+              className="p-2 bg-gray-700 rounded-lg hover:bg-gray-600 transition-colors"
+            >
+              <RefreshCw className="w-5 h-5 text-white" />
+            </button>
+          </div>
+        </div>
+
+        <div className="mb-6">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search users by email or name..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-10 pr-4 py-3 bg-gray-800/50 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-rose-500 focus:border-transparent"
+            />
+          </div>
+        </div>
+
+        {loading ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="w-8 h-8 animate-spin text-rose-500" />
+          </div>
+        ) : (
+          <div className="bg-gray-800/50 backdrop-blur-sm border border-gray-700 rounded-xl overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-gray-700">
+                    <th className="text-left p-4 text-gray-400 font-medium">User</th>
+                    <th className="text-left p-4 text-gray-400 font-medium">Status</th>
+                    <th className="text-left p-4 text-gray-400 font-medium">Role</th>
+                    <th className="text-left p-4 text-gray-400 font-medium">Provider</th>
+                    <th className="text-left p-4 text-gray-400 font-medium">Joined</th>
+                    <th className="text-right p-4 text-gray-400 font-medium">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredUsers.map((user) => (
+                    <tr key={user.id} className="border-b border-gray-700/50 hover:bg-gray-700/20">
+                      <td className="p-4">
+                        <div>
+                          <p className="text-white font-medium">{user.name || 'No name'}</p>
+                          <p className="text-gray-400 text-sm">{user.email}</p>
+                        </div>
+                      </td>
+                      <td className="p-4">
+                        <div className="flex flex-col gap-1">
+                          {!user.emailVerified ? (
+                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-gray-500/20 text-gray-400 w-fit">
+                              Unverified
+                            </span>
+                          ) : user.isActive ? (
+                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-green-500/20 text-green-400 w-fit">
+                              Active
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-amber-500/20 text-amber-400 w-fit">
+                              Pending Approval
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="p-4">
+                        <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs ${
+                          user.role === 'admin'
+                            ? 'bg-purple-500/20 text-purple-400'
+                            : 'bg-gray-500/20 text-gray-400'
+                        }`}>
+                          {user.role}
+                        </span>
+                      </td>
+                      <td className="p-4">
+                        <span className="text-gray-400 text-sm">
+                          {user.accounts.length > 0
+                            ? user.accounts.map(a => a.provider).join(', ')
+                            : 'credentials'}
+                        </span>
+                      </td>
+                      <td className="p-4">
+                        <span className="text-gray-400 text-sm">
+                          {new Date(user.createdAt).toLocaleDateString()}
+                        </span>
+                      </td>
+                      <td className="p-4">
+                        <div className="flex items-center justify-end gap-2">
+                          {actionLoading === user.id ? (
+                            <Loader2 className="w-5 h-5 animate-spin text-gray-400" />
+                          ) : (
+                            <>
+                              {user.id !== session?.user?.id && (
+                                <>
+                                  {user.isActive ? (
+                                    <button
+                                      onClick={() => handleAction(user.id, 'deactivate')}
+                                      className="p-2 bg-red-500/20 text-red-400 rounded-lg hover:bg-red-500/30 transition-colors"
+                                      title="Deactivate"
+                                    >
+                                      <UserX className="w-4 h-4" />
+                                    </button>
+                                  ) : (
+                                    <button
+                                      onClick={() => handleAction(user.id, 'activate')}
+                                      className="p-2 bg-green-500/20 text-green-400 rounded-lg hover:bg-green-500/30 transition-colors"
+                                      title="Activate"
+                                    >
+                                      <UserCheck className="w-4 h-4" />
+                                    </button>
+                                  )}
+                                  {user.role === 'admin' ? (
+                                    <button
+                                      onClick={() => handleAction(user.id, 'demote')}
+                                      className="p-2 bg-amber-500/20 text-amber-400 rounded-lg hover:bg-amber-500/30 transition-colors"
+                                      title="Remove Admin"
+                                    >
+                                      <ShieldOff className="w-4 h-4" />
+                                    </button>
+                                  ) : (
+                                    <button
+                                      onClick={() => handleAction(user.id, 'promote')}
+                                      className="p-2 bg-purple-500/20 text-purple-400 rounded-lg hover:bg-purple-500/30 transition-colors"
+                                      title="Make Admin"
+                                    >
+                                      <Shield className="w-4 h-4" />
+                                    </button>
+                                  )}
+                                  <button
+                                    onClick={() => handleDelete(user.id, user.email)}
+                                    className="p-2 bg-red-500/20 text-red-400 rounded-lg hover:bg-red-500/30 transition-colors"
+                                    title="Delete"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
