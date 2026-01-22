@@ -561,64 +561,71 @@ export function PromptBuilder() {
     
     parts.push('Create a sequence of 9 cinematic film stills that tell a short story');
     
+    // Image type
     if (selections?.imageType) {
-      parts.push(`, a ${selections?.imageType?.name ?? ''} image of a`);
+      parts.push(`, a "${selections?.imageType?.name ?? ''} image of a"`);
     }
     
+    // Shot type / angle
     if (selections?.shotType) {
-      parts.push(` ${selections?.shotType?.name ?? ''} of`);
+      parts.push(` "${selections?.shotType?.name ?? ''} of"`);
     }
     
+    // Subject & action
     if (selections?.subjectAction) {
-      parts.push(` ${selections?.subjectAction ?? ''}`);
+      parts.push(` "${selections?.subjectAction ?? ''}"`);
     }
     
+    // Environment
     if (selections?.environment) {
-      parts.push(`, set in ${selections?.environment ?? ''}`);
+      parts.push(` ", set in ${selections?.environment ?? ''}"`);
     }
     
+    // Lighting source (name only)
     if (selections?.lighting) {
-      parts.push(`, illuminated by ${selections?.lighting?.name ?? ''} with ${selections?.lighting?.description ?? ''}`);
+      parts.push(` "illuminated by ${selections?.lighting?.name ?? ''}"`);
     }
     
+    // Atmosphere / mood
     if (selections?.atmosphere) {
-      parts.push(`, creating an ${selections?.atmosphere ?? ''} atmosphere and mood`);
+      parts.push(` ", creating an ${selections?.atmosphere ?? ''} atmosphere and mood".`);
     }
     
+    // Camera, lens, and film stock combined
+    const cameraLensParts: string[] = [];
     if (selections?.camera) {
-      parts.push(`. ${selections?.camera?.name ?? ''} with ${selections?.camera?.description ?? ''}`);
+      cameraLensParts.push(`"Captured with a ${selections?.camera?.name ?? ''} camera"`);
     }
-    
     if (selections?.focalLength || selections?.lensType) {
       const focalPart = selections?.focalLength?.name ?? '';
       const lensPart = selections?.lensType?.name ?? '';
-      const lensDesc = selections?.lensType?.description ?? '';
       if (focalPart || lensPart) {
-        parts.push(`. ${focalPart} ${lensPart}${lensDesc ? ` with ${lensDesc}` : ''}`);
+        cameraLensParts.push(`"${focalPart} ${lensPart} lens"`);
       }
     }
-    
     if (selections?.filmStock) {
-      parts.push(`. ${selections?.filmStock?.name ?? ''} with ${selections?.filmStock?.description ?? ''}`);
+      cameraLensParts.push(`"${selections?.filmStock?.name ?? ''}"`);
+    }
+    if (cameraLensParts.length > 0) {
+      parts.push(` ${cameraLensParts.join(', ')}.`);
     }
     
+    // Photographer style with description
     if (selections?.photographer) {
-      parts.push(`. In the style of photographer ${selections?.photographer?.name ?? ''} with ${selections?.photographer?.description ?? ''}`);
+      parts.push(` "In the style of photographer ${selections?.photographer?.name ?? ''} with ${selections?.photographer?.description ?? ''}."`);
     }
     
+    // Movie look / aesthetic with description
     if (selections?.movie) {
-      parts.push(`. With the visual aesthetic of the movie ${selections?.movie?.name ?? ''} with ${selections?.movie?.description ?? ''}`);
+      parts.push(` "With the visual aesthetic of the movie ${selections?.movie?.name ?? ''} with ${selections?.movie?.description ?? ''}."`);
     }
     
+    // Filter effects
     if (selections?.filter) {
-      parts.push(`. Applied effects: ${selections?.filter?.name ?? ''}, ${selections?.filter?.description ?? ''}`);
+      parts.push(` Applied effects: "${selections?.filter?.name ?? ''}".`);
     }
     
-    if (selections?.aspectRatio) {
-      parts.push(`. Aspect ratio: ${selections?.aspectRatio ?? ''}`);
-    }
-    
-    parts.push('. No blurred faces.');
+    parts.push(' No blurred faces.');
     
     return parts?.join('') ?? '';
   }, [selections]);
