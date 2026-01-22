@@ -606,7 +606,7 @@ export function PromptBuilder() {
       }
     }
     if (selections?.filmStock) {
-      cameraLensParts.push(`${selections?.filmStock?.name ?? ''}`);
+      cameraLensParts.push(`${selections?.filmStock?.name ?? ''} film`);
     }
     if (cameraLensParts.length > 0) {
       parts.push(` ${cameraLensParts.join(', ')}.`);
