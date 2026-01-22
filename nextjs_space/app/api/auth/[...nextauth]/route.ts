@@ -1,8 +1,11 @@
 import NextAuth from 'next-auth';
-import { authOptions } from '@/lib/auth';
+import { NextRequest } from 'next/server';
+import { getAuthOptionsWithGoogle } from '@/lib/auth';
 
-// For static export, we need to use the base authOptions
-// The dynamic Google config is fetched at runtime in the callbacks
-const handler = NextAuth(authOptions);
+// Dynamic handler that loads Google SSO config from database
+async function handler(req: NextRequest, context: { params: { nextauth: string[] } }) {
+  const authOptions = await getAuthOptionsWithGoogle();
+  return NextAuth(req, context, authOptions);
+}
 
 export { handler as GET, handler as POST };

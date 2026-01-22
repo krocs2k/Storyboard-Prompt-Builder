@@ -5,6 +5,37 @@ import { PrismaAdapter } from '@next-auth/prisma-adapter';
 import bcrypt from 'bcryptjs';
 import { prisma } from './db';
 
+// Function to get Google SSO config from database
+export async function getGoogleConfig() {
+  try {
+    const configs = await prisma.systemConfig.findMany({
+      where: {
+        key: {
+          in: ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'GOOGLE_SSO_ENABLED']
+        }
+      }
+    });
+
+    const configMap: Record<string, string> = {};
+    configs.forEach((c) => {
+      configMap[c.key] = c.value;
+    });
+
+    return {
+      clientId: configMap['GOOGLE_CLIENT_ID'] || process.env.GOOGLE_CLIENT_ID || '',
+      clientSecret: configMap['GOOGLE_CLIENT_SECRET'] || process.env.GOOGLE_CLIENT_SECRET || '',
+      enabled: configMap['GOOGLE_SSO_ENABLED'] === 'true' || 
+               (!!process.env.GOOGLE_CLIENT_ID && !!process.env.GOOGLE_CLIENT_SECRET)
+    };
+  } catch {
+    return {
+      clientId: process.env.GOOGLE_CLIENT_ID || '',
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
+      enabled: !!process.env.GOOGLE_CLIENT_ID && !!process.env.GOOGLE_CLIENT_SECRET
+    };
+  }
+}
+
 // Create a custom adapter that handles our isActive and emailVerified fields
 function customPrismaAdapter() {
   const adapter = PrismaAdapter(prisma);
@@ -29,61 +60,68 @@ function customPrismaAdapter() {
   };
 }
 
-// Build providers array
-function getProviders() {
-  const providers: NextAuthOptions['providers'] = [
-    CredentialsProvider({
-      name: 'credentials',
-      credentials: {
-        email: { label: 'Email', type: 'email' },
-        password: { label: 'Password', type: 'password' }
-      },
-      async authorize(credentials) {
-        if (!credentials?.email || !credentials?.password) {
-          throw new Error('Email and password required');
-        }
+// Credentials provider (always available)
+const credentialsProvider = CredentialsProvider({
+  name: 'credentials',
+  credentials: {
+    email: { label: 'Email', type: 'email' },
+    password: { label: 'Password', type: 'password' }
+  },
+  async authorize(credentials) {
+    if (!credentials?.email || !credentials?.password) {
+      throw new Error('Email and password required');
+    }
 
-        const user = await prisma.user.findUnique({
-          where: { email: credentials.email }
-        });
+    const user = await prisma.user.findUnique({
+      where: { email: credentials.email }
+    });
 
-        if (!user || !user.password) {
-          throw new Error('Invalid email or password');
-        }
+    if (!user || !user.password) {
+      throw new Error('Invalid email or password');
+    }
 
-        const isValid = await bcrypt.compare(credentials.password, user.password);
-        if (!isValid) {
-          throw new Error('Invalid email or password');
-        }
+    const isValid = await bcrypt.compare(credentials.password, user.password);
+    if (!isValid) {
+      throw new Error('Invalid email or password');
+    }
 
-        if (!user.emailVerified) {
-          throw new Error('Please verify your email before logging in');
-        }
+    if (!user.emailVerified) {
+      throw new Error('Please verify your email before logging in');
+    }
 
-        if (!user.isActive) {
-          throw new Error('Your account is pending approval by an administrator');
-        }
+    if (!user.isActive) {
+      throw new Error('Your account is pending approval by an administrator');
+    }
 
-        return {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          image: user.image,
-          role: user.role
-        };
-      }
-    }),
-    // Always include Google provider - it will fail gracefully if not configured
-    GoogleProvider({
-      clientId: process.env.GOOGLE_CLIENT_ID || 'placeholder-client-id',
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET || 'placeholder-secret',
-      allowDangerousEmailAccountLinking: true
-    })
-  ];
+    return {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      image: user.image,
+      role: user.role
+    };
+  }
+});
+
+// Build providers array with dynamic Google config
+function getProviders(googleConfig?: { clientId: string; clientSecret: string; enabled: boolean }) {
+  const providers: NextAuthOptions['providers'] = [credentialsProvider];
+
+  // Add Google provider if configured
+  if (googleConfig?.enabled && googleConfig.clientId && googleConfig.clientSecret) {
+    providers.push(
+      GoogleProvider({
+        clientId: googleConfig.clientId,
+        clientSecret: googleConfig.clientSecret,
+        allowDangerousEmailAccountLinking: true
+      })
+    );
+  }
 
   return providers;
 }
 
+// Base auth options without Google provider (for static imports)
 export const authOptions: NextAuthOptions = {
   adapter: customPrismaAdapter(),
   providers: getProviders(),
@@ -130,6 +168,16 @@ export const authOptions: NextAuthOptions = {
     error: '/login'
   }
 };
+
+// Dynamic auth options that loads Google config from database
+export async function getAuthOptionsWithGoogle(): Promise<NextAuthOptions> {
+  const googleConfig = await getGoogleConfig();
+  
+  return {
+    ...authOptions,
+    providers: getProviders(googleConfig)
+  };
+}
 
 
 
