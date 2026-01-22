@@ -6,6 +6,17 @@ export default withAuth(
     const token = req.nextauth.token;
     const pathname = req.nextUrl.pathname;
 
+    // Allow access to pending-approval page
+    if (pathname === '/pending-approval') {
+      return NextResponse.next();
+    }
+
+    // Check if user is active (not pending approval)
+    if (token && token.isActive === false) {
+      // Redirect inactive users to pending approval page
+      return NextResponse.redirect(new URL('/pending-approval', req.url));
+    }
+
     // Admin routes require admin role
     if (pathname.startsWith('/admin')) {
       if (token?.role !== 'admin') {
@@ -21,7 +32,7 @@ export default withAuth(
         const pathname = req.nextUrl.pathname;
         
         // Public routes that don't require authentication
-        const publicRoutes = ['/login', '/register', '/verify-email'];
+        const publicRoutes = ['/login', '/register', '/verify-email', '/pending-approval'];
         const isPublicRoute = publicRoutes.some(route => pathname.startsWith(route));
         
         // API routes that should be public

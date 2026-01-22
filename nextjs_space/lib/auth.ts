@@ -98,7 +98,8 @@ const credentialsProvider = CredentialsProvider({
       email: user.email,
       name: user.name,
       image: user.image,
-      role: user.role
+      role: user.role,
+      isActive: user.isActive
     };
   }
 });
@@ -146,11 +147,15 @@ export const authOptions: NextAuthOptions = {
       if (user) {
         token.id = user.id;
         token.role = (user as { role?: string }).role || 'user';
+        token.isActive = (user as { isActive?: boolean }).isActive ?? true;
       }
       
       // Handle session update
       if (trigger === 'update' && session) {
         token.name = session.name;
+        if (session.isActive !== undefined) {
+          token.isActive = session.isActive;
+        }
       }
       
       return token;
@@ -159,6 +164,7 @@ export const authOptions: NextAuthOptions = {
       if (session.user) {
         session.user.id = token.id as string;
         session.user.role = token.role as string;
+        session.user.isActive = token.isActive as boolean;
       }
       return session;
     }
@@ -190,11 +196,13 @@ declare module 'next-auth' {
       name?: string | null;
       image?: string | null;
       role: string;
+      isActive: boolean;
     };
   }
   
   interface User {
     role?: string;
+    isActive?: boolean;
   }
 }
 
@@ -202,5 +210,6 @@ declare module 'next-auth/jwt' {
   interface JWT {
     id: string;
     role: string;
+    isActive: boolean;
   }
 }

@@ -88,7 +88,12 @@ function RegisterContent() {
               <CheckCircle2 className="w-8 h-8 text-green-400" />
             </div>
             <h2 className="text-2xl font-bold text-white mb-4">Check Your Email</h2>
-            <p className="text-gray-400 mb-6">{message}</p>
+            <p className="text-gray-400 mb-4">{message}</p>
+            <div className="mb-6 p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+              <p className="text-amber-300 text-sm">
+                <strong>Note:</strong> After verifying your email, your account will need administrator approval before you can access the application.
+              </p>
+            </div>
             <Link
               href="/login"
               className="inline-block px-6 py-3 bg-gradient-to-r from-rose-500 to-purple-600 text-white font-semibold rounded-lg hover:from-rose-600 hover:to-purple-700 transition-all"
