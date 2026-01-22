@@ -5,33 +5,6 @@ import { PrismaAdapter } from '@next-auth/prisma-adapter';
 import bcrypt from 'bcryptjs';
 import { prisma } from './db';
 
-// Function to get Google SSO config from database
-async function getGoogleConfig() {
-  try {
-    const clientIdConfig = await prisma.systemConfig.findUnique({
-      where: { key: 'GOOGLE_CLIENT_ID' }
-    });
-    const clientSecretConfig = await prisma.systemConfig.findUnique({
-      where: { key: 'GOOGLE_CLIENT_SECRET' }
-    });
-    const enabledConfig = await prisma.systemConfig.findUnique({
-      where: { key: 'GOOGLE_SSO_ENABLED' }
-    });
-
-    return {
-      clientId: clientIdConfig?.value || process.env.GOOGLE_CLIENT_ID || '',
-      clientSecret: clientSecretConfig?.value || process.env.GOOGLE_CLIENT_SECRET || '',
-      enabled: enabledConfig?.value === 'true'
-    };
-  } catch {
-    return {
-      clientId: process.env.GOOGLE_CLIENT_ID || '',
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
-      enabled: false
-    };
-  }
-}
-
 // Create a custom adapter that handles our isActive and emailVerified fields
 function customPrismaAdapter() {
   const adapter = PrismaAdapter(prisma);
@@ -56,7 +29,7 @@ function customPrismaAdapter() {
   };
 }
 
-// Build providers array dynamically
+// Build providers array
 function getProviders() {
   const providers: NextAuthOptions['providers'] = [
     CredentialsProvider({
@@ -99,18 +72,14 @@ function getProviders() {
           role: user.role
         };
       }
+    }),
+    // Always include Google provider - it will fail gracefully if not configured
+    GoogleProvider({
+      clientId: process.env.GOOGLE_CLIENT_ID || 'placeholder-client-id',
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET || 'placeholder-secret',
+      allowDangerousEmailAccountLinking: true
     })
   ];
-
-  // Add Google provider if configured via environment variables
-  if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
-    providers.push(
-      GoogleProvider({
-        clientId: process.env.GOOGLE_CLIENT_ID,
-        clientSecret: process.env.GOOGLE_CLIENT_SECRET
-      })
-    );
-  }
 
   return providers;
 }
@@ -162,34 +131,7 @@ export const authOptions: NextAuthOptions = {
   }
 };
 
-// Dynamic auth options with Google provider from database
-export async function getAuthOptions(): Promise<NextAuthOptions> {
-  const googleConfig = await getGoogleConfig();
-  
-  const providers: NextAuthOptions['providers'] = [...authOptions.providers];
-  
-  // Add Google provider from database config if enabled and not already added via env vars
-  if (googleConfig.enabled && googleConfig.clientId && googleConfig.clientSecret) {
-    // Check if Google provider already exists from env vars
-    const hasGoogleProvider = providers.some(
-      p => 'id' in p && p.id === 'google'
-    );
-    
-    if (!hasGoogleProvider) {
-      providers.push(
-        GoogleProvider({
-          clientId: googleConfig.clientId,
-          clientSecret: googleConfig.clientSecret
-        })
-      );
-    }
-  }
-  
-  return {
-    ...authOptions,
-    providers
-  };
-}
+
 
 // Type augmentation for next-auth
 declare module 'next-auth' {
