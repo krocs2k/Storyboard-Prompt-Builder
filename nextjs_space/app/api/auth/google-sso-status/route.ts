@@ -8,6 +8,15 @@ interface SystemConfig {
 
 export async function GET() {
   try {
+    // First check environment variables
+    const envClientId = process.env.GOOGLE_CLIENT_ID;
+    const envClientSecret = process.env.GOOGLE_CLIENT_SECRET;
+    
+    if (envClientId && envClientSecret) {
+      return NextResponse.json({ enabled: true });
+    }
+
+    // Then check database config
     const configs = await prisma.systemConfig.findMany({
       where: {
         key: {
