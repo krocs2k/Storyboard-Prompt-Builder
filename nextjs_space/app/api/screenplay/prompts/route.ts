@@ -158,34 +158,39 @@ ${environmentPromptTemplate}
 
 === WHAT YOU MUST FILL IN ===
 
-FOR CHARACTERS - Fill in [BRACKETED] sections with:
-1. [DETAILED CHARACTER DESCRIPTION] - Include:
-   - Full physical description: exact age, height, body type/build, face shape
-   - Hair: color, length, style, texture
-   - Eyes: color, shape, expression
-   - Skin: tone, texture, any distinguishing marks
-   - Facial features: nose, lips, jaw, eyebrows
-   - Clothing: specific garments, colors, textures, condition
-   - Accessories: jewelry, glasses, watches
-   - Posture and body language
-   
-2. [CHARACTER'S TYPICAL ENVIRONMENT] - The setting where this character is most often seen
+⚠️ CRITICAL CHARACTER LIMITS - YOU MUST STRICTLY ADHERE TO THESE:
+- SUBJECT & ACTION description: MAXIMUM 250 CHARACTERS (includes character description, action, pose)
+- ENVIRONMENT description: MAXIMUM 150 CHARACTERS (the "set in..." portion)
 
-3. [CHARACTER'S EMOTIONAL STATE/MOOD] - Their default emotional presentation
+FOR CHARACTERS - Fill in [BRACKETED] sections with:
+1. [DETAILED CHARACTER DESCRIPTION] - MUST BE 250 CHARACTERS OR LESS. Prioritize:
+   - Most distinctive physical features (age, build, defining characteristics)
+   - Key clothing elements and colors
+   - Current action/pose
+   - Essential expression
+   Example (good - 180 chars): "A weathered 50-year-old man with silver-streaked hair, deep-set eyes, wearing a worn leather jacket, standing tensely with arms crossed, suspicious expression"
+   
+2. [CHARACTER'S TYPICAL ENVIRONMENT] - MUST BE 150 CHARACTERS OR LESS. Focus on:
+   - Primary location type
+   - Key atmospheric details
+   - Essential props/elements
+   Example (good - 85 chars): "a dimly lit underground bunker with concrete walls, flickering fluorescent lights"
+
+3. [CHARACTER'S EMOTIONAL STATE/MOOD] - Keep brief (1-3 words)
 
 FOR ENVIRONMENTS - Fill in [BRACKETED] sections with:
-1. [ENVIRONMENT ESTABLISHING SHOT] - Key visual elements, architectural features, props
-
-2. [FULL ENVIRONMENT DESCRIPTION] - Include:
-   - Location type and architectural style
-   - Dimensions and spatial layout
-   - Wall/floor/ceiling materials and colors
-   - Practical lights and fixtures
-   - Specific props and set dressing (5-10 items)
-   - Textures and surfaces
-   - Any supernatural/eerie elements
+1. [ENVIRONMENT ESTABLISHING SHOT] - MUST BE 250 CHARACTERS OR LESS. Prioritize:
+   - Main architectural elements
+   - Key props and fixtures
+   - Dominant visual features
    
-3. [ENVIRONMENT MOOD/ATMOSPHERE] - The emotional tone of the space
+2. [FULL ENVIRONMENT DESCRIPTION] - MUST BE 150 CHARACTERS OR LESS. Focus on:
+   - Location type and primary atmosphere
+   - Most important visual elements
+   - Key textures/materials
+   Example (good - 120 chars): "abandoned warehouse with rusted metal beams, broken windows letting in moonlight, scattered debris on concrete floor"
+   
+3. [ENVIRONMENT MOOD/ATMOSPHERE] - Keep brief (1-3 words)
 
 === VISUAL SPECIFICATIONS (KEEP THESE EXACTLY AS SHOWN IN TEMPLATE) ===
 ${styleContext}

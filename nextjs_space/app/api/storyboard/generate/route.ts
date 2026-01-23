@@ -161,19 +161,26 @@ Each storyboard block prompt MUST follow this EXACT structure:
 ${examplePrompt}
 
 === WHAT YOU MUST FILL IN FOR EACH BLOCK ===
+
+⚠️ CRITICAL CHARACTER LIMITS - STRICTLY ENFORCE THESE:
+- SUBJECT & ACTION: MAXIMUM 250 CHARACTERS
+- ENVIRONMENT: MAXIMUM 150 CHARACTERS
+
 For each storyboard block, you will populate these bracketed sections with scene-specific content:
 
-1. [SUBJECT performing ACTION] - Replace with the specific character(s) and their action from that 30-second segment
-   Examples: "The Host, a shadowy figure in a dark suit, emerging from behind ancient filing cabinets"
-   Examples: "The Interviewee, a middle-aged woman with haunted eyes, recounting her experience"
-   Examples: "A young man fleeing through fog-shrouded woods, terror etched on his face"
+1. [SUBJECT performing ACTION] - MUST BE 250 CHARACTERS OR LESS
+   Be concise but descriptive. Prioritize: character identity, key visual trait, specific action.
+   Examples (good): "The Host, shadowy figure in dark suit, emerging from behind ancient filing cabinets" (82 chars)
+   Examples (good): "The Interviewee, middle-aged woman with haunted eyes, recounting her terrifying encounter" (91 chars)
+   Examples (good): "A young man fleeing through fog-shrouded woods, terror on his face" (66 chars)
 
-2. [ENVIRONMENT DESCRIPTION] - Replace with the specific location details
-   Examples: "a cavernous underground archive with towering shelves of mysterious artifacts"
-   Examples: "a stark concrete interview room with a single harsh overhead light"
-   Examples: "a moonlit forest clearing with twisted ancient oaks and rolling fog"
+2. [ENVIRONMENT DESCRIPTION] - MUST BE 150 CHARACTERS OR LESS
+   Focus on: location type, 2-3 key atmospheric details.
+   Examples (good): "a cavernous underground archive with towering shelves of mysterious artifacts" (77 chars)
+   Examples (good): "a stark concrete interview room with single harsh overhead light" (64 chars)
+   Examples (good): "a moonlit forest clearing with twisted oaks and rolling fog" (59 chars)
 
-3. [ATMOSPHERE/MOOD] - Replace with the emotional tone of that moment
+3. [ATMOSPHERE/MOOD] - Keep brief, 1-3 descriptive words
    Examples: "ominous and foreboding"
    Examples: "tense and claustrophobic"
    Examples: "terrifying and chaotic"
