@@ -629,15 +629,11 @@ export function PromptBuilder() {
     
     parts.push(' No blurred faces.');
     
-    // Clean up repeated punctuation
+    // Clean up duplicate punctuation only (not grammar correction)
     let result = parts?.join('') ?? '';
     result = result.replace(/\.+/g, '.'); // Multiple periods to single
     result = result.replace(/,+/g, ',');  // Multiple commas to single
     result = result.replace(/\s+/g, ' '); // Multiple spaces to single
-    result = result.replace(/,\./g, '.'); // Comma followed by period
-    result = result.replace(/\.,/g, ','); // Period followed by comma
-    result = result.replace(/\. \./g, '.'); // Period space period
-    result = result.replace(/, ,/g, ','); // Comma space comma
     
     return result;
   }, [selections]);
