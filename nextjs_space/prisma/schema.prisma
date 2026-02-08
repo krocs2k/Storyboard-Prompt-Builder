@@ -1,7 +1,6 @@
 generator client {
-    provider = "prisma-client-js"
-    binaryTargets = ["native", "linux-musl-arm64-openssl-3.0.x"]
-    output = "/home/ubuntu/storyboard_prompt_builder/nextjs_space/node_modules/.prisma/client"
+    provider      = "prisma-client-js"
+    binaryTargets = ["native", "linux-musl-openssl-3.0.x", "linux-musl-arm64-openssl-3.0.x", "debian-openssl-3.0.x"]
 }
 
 datasource db {
@@ -17,8 +16,8 @@ model User {
   emailVerified   DateTime?
   password        String?
   image           String?
-  role            String          @default("user") // "user" or "admin"
-  isActive        Boolean         @default(false) // Disabled by default, admin must enable
+  role            String          @default("user")
+  isActive        Boolean         @default(false)
   accounts        Account[]
   sessions        Session[]
   savedPrompts    SavedPrompt[]
@@ -58,12 +57,11 @@ model VerificationToken {
   identifier String
   token      String   @unique
   expires    DateTime
-  type       String   @default("email") // "email" or "password_reset"
+  type       String   @default("email")
 
   @@unique([identifier, token])
 }
 
-// System configuration for dynamic settings like Google SSO
 model SystemConfig {
   id        String   @id @default(cuid())
   key       String   @unique
