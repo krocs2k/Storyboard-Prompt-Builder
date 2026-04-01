@@ -32,13 +32,15 @@ export default withAuth(
         const pathname = req.nextUrl.pathname;
         
         // Public routes that don't require authentication
-        const publicRoutes = ['/login', '/register', '/verify-email', '/pending-approval'];
+        const publicRoutes = ['/login', '/register', '/verify-email', '/pending-approval', '/invite/accept'];
         const isPublicRoute = publicRoutes.some(route => pathname.startsWith(route));
         
         // API routes that should be public
         const publicApiRoutes = [
           '/api/auth',
-          '/api/signup'
+          '/api/signup',
+          '/api/invite/accept',
+          '/api/admin/users/signup-setting'
         ];
         const isPublicApi = publicApiRoutes.some(route => pathname.startsWith(route));
         
