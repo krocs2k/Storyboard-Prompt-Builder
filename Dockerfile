@@ -7,7 +7,7 @@ WORKDIR /app
 RUN apk add --no-cache libc6-compat openssl wget
 
 # Copy package files
-COPY package.json ./
+COPY package.json yarn.lock* ./
 
 # Install dependencies
 RUN yarn install --frozen-lockfile || yarn install
@@ -49,6 +49,12 @@ COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 
+# Copy seed script for initial database setup
+COPY --from=builder /app/scripts ./scripts
+
+# Create data directory for storyboard images (mount as Docker volume)
+RUN mkdir -p /app/data/images && chown -R nextjs:nodejs /app/data
+
 # Set permissions
 RUN chown -R nextjs:nodejs /app
 
@@ -58,6 +64,7 @@ EXPOSE 3000
 
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
+ENV DATA_DIR=/app/data
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \

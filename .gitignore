@@ -1,0 +1,48 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+.next/
+.build/
+out/
+dist/
+build/
+
+# Environment files (contain secrets)
+.env
+.env.local
+.env.production
+.env.development
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Testing
+coverage/
+.nyc_output/
+
+# TypeScript
+tsconfig.tsbuildinfo
+
+# Core dumps
+core
+*.core
+*.dump
+*.dmp
+
+# Uploads
+uploads/
+
+# Generated images (stored in Docker volume)
+data/images/
