@@ -6,11 +6,11 @@ WORKDIR /app
 # Install dependencies for Prisma and native modules
 RUN apk add --no-cache libc6-compat openssl wget
 
-# Copy package files
+# Copy package files (yarn.lock may not exist in repo — that's fine)
 COPY package.json yarn.lock* ./
 
 # Install dependencies
-RUN yarn install --frozen-lockfile || yarn install
+RUN if [ -f yarn.lock ]; then yarn install --frozen-lockfile; else yarn install; fi
 
 # Copy source code
 COPY . .
