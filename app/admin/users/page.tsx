@@ -221,14 +221,14 @@ export default function UsersPage() {
 
   if (!mounted || status === 'loading' || (status === 'authenticated' && session?.user?.role !== 'admin')) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
+      <div className="min-h-screen flex items-center justify-center ">
         <Loader2 className="w-8 h-8 animate-spin text-rose-500" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
+    <div className="min-h-screen ">
       <div className="max-w-6xl mx-auto p-6">
         <div className="mb-8">
           <Link
@@ -351,7 +351,7 @@ export default function UsersPage() {
                 <thead>
                   <tr className="border-b border-gray-700">
                     <th className="p-4 w-10">
-                      <button onClick={toggleSelectAll} className="text-gray-400 hover:text-white transition-colors">
+                      <button onClick={toggleSelectAll} className="text-gray-500 hover:text-gray-900 transition-colors">
                         {(() => {
                           const selectable = selectableFilteredUsers(filteredUsers);
                           if (selectable.length === 0) return <Square className="w-5 h-5" />;
@@ -374,7 +374,7 @@ export default function UsersPage() {
                     <tr key={user.id} className={`border-b border-gray-700/50 hover:bg-gray-700/20 ${selectedUsers.has(user.id) ? 'bg-rose-500/5' : ''}`}>
                       <td className="p-4 w-10">
                         {user.id !== session?.user?.id ? (
-                          <button onClick={() => toggleSelectUser(user.id)} className="text-gray-400 hover:text-white transition-colors">
+                          <button onClick={() => toggleSelectUser(user.id)} className="text-gray-500 hover:text-gray-900 transition-colors">
                             {selectedUsers.has(user.id) ? (
                               <CheckSquare className="w-5 h-5 text-rose-400" />
                             ) : (

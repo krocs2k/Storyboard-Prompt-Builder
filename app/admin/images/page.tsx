@@ -188,7 +188,7 @@ export default function ImagesAdminPage() {
 
   if (!mounted || status === 'loading') {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
+      <div className="min-h-screen flex items-center justify-center ">
         <Loader2 className="w-8 h-8 animate-spin text-cyan-500" />
       </div>
     );
@@ -197,14 +197,14 @@ export default function ImagesAdminPage() {
   if (status !== 'authenticated' || session?.user?.role !== 'admin') return null;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
+    <div className="min-h-screen ">
       <div className="max-w-3xl mx-auto p-6">
         <div className="mb-8">
           <Link href="/admin" className="inline-flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-4 transition-colors">
             <ArrowLeft className="w-4 h-4" /> Back to Admin
           </Link>
           <h1 className="text-3xl font-bold text-gray-900 mb-2">Dropdown Image Library</h1>
-          <p className="text-gray-400">Export and import the thumbnail images used in selection dropdowns</p>
+          <p className="text-gray-500">Export and import the thumbnail images used in selection dropdowns</p>
         </div>
 
         {loading ? (

@@ -44,7 +44,7 @@ export default function AdminDashboard() {
 
   if (!mounted || status === 'loading') {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
+      <div className="min-h-screen flex items-center justify-center ">
         <Loader2 className="w-8 h-8 animate-spin text-rose-500" />
       </div>
     );

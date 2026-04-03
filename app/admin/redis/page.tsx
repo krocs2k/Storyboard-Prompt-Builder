@@ -104,7 +104,7 @@ export default function RedisConfigPage() {
 
   if (!mounted || status === 'loading') {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
+      <div className="min-h-screen flex items-center justify-center ">
         <Loader2 className="w-8 h-8 animate-spin text-rose-500" />
       </div>
     );
@@ -113,16 +113,16 @@ export default function RedisConfigPage() {
   if (status !== 'authenticated' || session?.user?.role !== 'admin') return null;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
+    <div className="min-h-screen ">
       <div className="max-w-3xl mx-auto p-6">
         <div className="mb-8">
-          <Link href="/admin" className="flex items-center gap-2 text-gray-400 hover:text-white transition-colors mb-4">
+          <Link href="/admin" className="flex items-center gap-2 text-gray-500 hover:text-gray-900 transition-colors mb-4">
             <ArrowLeft size={18} /> Back to Admin
           </Link>
           <h1 className="text-3xl font-bold text-gray-900 mb-2 flex items-center gap-3">
             <Database className="text-red-400" /> Redis Cache
           </h1>
-          <p className="text-gray-400">Configure Redis for caching prompts, API responses, and improving performance.</p>
+          <p className="text-gray-500">Configure Redis for caching prompts, API responses, and improving performance.</p>
         </div>
 
         {/* Current Status */}

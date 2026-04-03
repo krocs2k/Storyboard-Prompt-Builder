@@ -290,7 +290,7 @@ export default function MovieStylesAdmin() {
 
   if (!mounted || status === 'loading') {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
+      <div className="min-h-screen flex items-center justify-center ">
         <Loader2 className="w-8 h-8 animate-spin text-rose-500" />
       </div>
     );
@@ -736,7 +736,7 @@ export default function MovieStylesAdmin() {
                           ) : (
                             <button
                               onClick={() => setDeleteConfirmId(style.id)}
-                              className="p-1.5 rounded-lg bg-gray-700 hover:bg-red-600/80 text-gray-400 hover:text-white transition-colors"
+                              className="p-1.5 rounded-lg bg-gray-700 hover:bg-red-600/80 text-gray-500 hover:text-gray-900 transition-colors"
                               title="Delete style"
                             >
                               <Trash2 className="w-3.5 h-3.5" />

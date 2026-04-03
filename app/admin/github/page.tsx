@@ -250,7 +250,7 @@ export default function GitHubBackupPage() {
 
   if (!mounted || status === 'loading') {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
+      <div className="min-h-screen flex items-center justify-center ">
         <Loader2 className="w-8 h-8 animate-spin text-rose-500" />
       </div>
     );
@@ -265,7 +265,7 @@ export default function GitHubBackupPage() {
     : 0;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
+    <div className="min-h-screen ">
       {/* Toast */}
       {toast && (
         <div className={`fixed top-4 right-4 z-50 px-4 py-3 rounded-lg shadow-lg flex items-center gap-2 text-sm font-medium transition-all ${
@@ -281,7 +281,7 @@ export default function GitHubBackupPage() {
         <div className="mb-8">
           <Link
             href="/admin"
-            className="inline-flex items-center gap-2 text-gray-400 hover:text-white transition-colors mb-4"
+            className="inline-flex items-center gap-2 text-gray-500 hover:text-gray-900 transition-colors mb-4"
           >
             <ArrowLeft className="w-4 h-4" />
             Back to Admin
@@ -292,7 +292,7 @@ export default function GitHubBackupPage() {
             </div>
             <div>
               <h1 className="text-2xl font-bold text-white">GitHub Backup</h1>
-              <p className="text-gray-400 text-sm">Backup your application source code to GitHub</p>
+              <p className="text-gray-500 text-sm">Backup your application source code to GitHub</p>
             </div>
           </div>
         </div>
@@ -340,7 +340,7 @@ export default function GitHubBackupPage() {
                 <button
                   type="button"
                   onClick={() => setShowToken(!showToken)}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-900"
                 >
                   {showToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>

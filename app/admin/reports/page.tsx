@@ -192,7 +192,7 @@ export default function ReportsPage() {
 
   if (!mounted || status === 'loading') {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
+      <div className="min-h-screen flex items-center justify-center ">
         <Loader2 className="w-8 h-8 animate-spin text-cyan-500" />
       </div>
     );
@@ -203,7 +203,7 @@ export default function ReportsPage() {
   const currentMonthLabel = data ? new Date(data.months[data.months.length - 1] + '-01').toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) : '';
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
+    <div className="min-h-screen ">
       <div className="max-w-6xl mx-auto p-6">
         <div className="mb-8">
           <Link href="/admin" className="inline-flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-4 transition-colors">

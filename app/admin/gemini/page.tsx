@@ -98,7 +98,7 @@ export default function GeminiConfigPage() {
 
   if (!mounted || status === 'loading') {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
+      <div className="min-h-screen flex items-center justify-center ">
         <Loader2 className="w-8 h-8 animate-spin text-amber-500" />
       </div>
     );
@@ -107,14 +107,14 @@ export default function GeminiConfigPage() {
   if (status !== 'authenticated' || session?.user?.role !== 'admin') return null;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
+    <div className="min-h-screen ">
       <div className="max-w-3xl mx-auto p-6">
         <div className="mb-8">
           <Link href="/admin" className="inline-flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-4 transition-colors">
             <ArrowLeft className="w-4 h-4" /> Back to Admin
           </Link>
           <h1 className="text-3xl font-bold text-gray-900 mb-2">Gemini API Configuration</h1>
-          <p className="text-gray-400">Manage the Google Gemini / Imagen API key used for image generation</p>
+          <p className="text-gray-500">Manage the Google Gemini / Imagen API key used for image generation</p>
         </div>
 
         {loading ? (
@@ -274,7 +274,7 @@ export default function GeminiConfigPage() {
                   />
                   <button
                     onClick={() => setShowKey(!showKey)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white transition-colors"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-900 transition-colors"
                   >
                     {showKey ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                   </button>

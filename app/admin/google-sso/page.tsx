@@ -88,7 +88,7 @@ export default function GoogleSSOPage() {
 
   if (!mounted || status === 'loading' || loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
+      <div className="min-h-screen flex items-center justify-center ">
         <Loader2 className="w-8 h-8 animate-spin text-rose-500" />
       </div>
     );
@@ -103,7 +103,7 @@ export default function GoogleSSOPage() {
     : '/api/auth/callback/google';
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
+    <div className="min-h-screen ">
       <div className="max-w-3xl mx-auto p-6">
         <div className="mb-8">
           <Link
@@ -113,7 +113,7 @@ export default function GoogleSSOPage() {
             <ArrowLeft className="w-4 h-4" /> Back to Admin
           </Link>
           <h1 className="text-3xl font-bold text-gray-900 mb-2">Google SSO Configuration</h1>
-          <p className="text-gray-400">Configure Google OAuth for user authentication</p>
+          <p className="text-gray-500">Configure Google OAuth for user authentication</p>
         </div>
 
         {message && (

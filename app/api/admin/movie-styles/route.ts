@@ -107,6 +107,9 @@ export async function GET(req: NextRequest) {
     });
   }
 
+  // Sort alphabetically by name
+  styles.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+
   return NextResponse.json({ styles, settings, isAdmin });
 }
 

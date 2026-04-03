@@ -18,6 +18,28 @@ import sharp from 'sharp';
  *   - quality: WebP quality 1-100 (default 80)
  *   - dryRun: if "true", only returns stats without modifying files
  */
+/**
+ * Recursively collect all image files from a directory and its subdirectories.
+ */
+function collectImageFiles(dir: string): string[] {
+  const results: string[] = [];
+  if (!fs.existsSync(dir)) return results;
+
+  const entries = fs.readdirSync(dir, { withFileTypes: true });
+  for (const entry of entries) {
+    const fullPath = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      results.push(...collectImageFiles(fullPath));
+    } else if (entry.isFile()) {
+      const ext = entry.name.toLowerCase().split('.').pop();
+      if (['png', 'jpg', 'jpeg', 'webp', 'gif', 'tiff'].includes(ext || '')) {
+        results.push(fullPath);
+      }
+    }
+  }
+  return results;
+}
+
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
   if (!session?.user || (session.user as { role?: string }).role !== 'admin') {
@@ -29,30 +51,28 @@ export async function POST(req: Request) {
   const quality = parseInt(url.searchParams.get('quality') || '80', 10);
   const dryRun = url.searchParams.get('dryRun') === 'true';
 
-  const imagesDir = path.join(process.cwd(), 'public', 'images', 'data');
+  const imagesDir = path.join(process.cwd(), 'public', 'images');
 
   if (!fs.existsSync(imagesDir)) {
     return NextResponse.json({ error: 'No images directory found' }, { status: 404 });
   }
 
-  const files = fs.readdirSync(imagesDir).filter(f => {
-    const ext = f.toLowerCase().split('.').pop();
-    return ['png', 'jpg', 'jpeg', 'webp', 'gif', 'tiff'].includes(ext || '');
-  });
+  // Recursively collect all image files from all subdirectories
+  const filePaths = collectImageFiles(imagesDir);
 
-  if (files.length === 0) {
+  if (filePaths.length === 0) {
     return NextResponse.json({ error: 'No image files found' }, { status: 404 });
   }
 
   // Analyze current state
   let totalOriginalSize = 0;
   let alreadyOptimized = 0;
-  const filesToProcess: Array<{ name: string; size: number; width: number; height: number }> = [];
+  const filesToProcess: Array<{ fullPath: string; relName: string; size: number; width: number; height: number }> = [];
 
-  for (const file of files) {
-    const fullPath = path.join(imagesDir, file);
+  for (const fullPath of filePaths) {
     const stat = fs.statSync(fullPath);
     totalOriginalSize += stat.size;
+    const relName = path.relative(imagesDir, fullPath);
 
     try {
       const meta = await sharp(fullPath).metadata();
@@ -63,18 +83,18 @@ export async function POST(req: Request) {
       if (w <= targetSize && h <= targetSize) {
         alreadyOptimized++;
       } else {
-        filesToProcess.push({ name: file, size: stat.size, width: w, height: h });
+        filesToProcess.push({ fullPath, relName, size: stat.size, width: w, height: h });
       }
     } catch {
       // Skip files that can't be read by sharp
-      console.warn(`Skipping unreadable file: ${file}`);
+      console.warn(`Skipping unreadable file: ${relName}`);
     }
   }
 
   if (dryRun) {
     return NextResponse.json({
       dryRun: true,
-      totalFiles: files.length,
+      totalFiles: filePaths.length,
       alreadyOptimized,
       toProcess: filesToProcess.length,
       currentSizeMB: Math.round((totalOriginalSize / (1024 * 1024)) * 10) / 10,
@@ -90,11 +110,10 @@ export async function POST(req: Request) {
   const errors: string[] = [];
 
   for (const fileInfo of filesToProcess) {
-    const fullPath = path.join(imagesDir, fileInfo.name);
-    const ext = fileInfo.name.toLowerCase().split('.').pop() || 'png';
+    const ext = fileInfo.relName.toLowerCase().split('.').pop() || 'png';
 
     try {
-      const inputBuffer = fs.readFileSync(fullPath);
+      const inputBuffer = fs.readFileSync(fileInfo.fullPath);
       const originalSize = inputBuffer.length;
 
       let outputBuffer: Buffer;
@@ -115,27 +134,26 @@ export async function POST(req: Request) {
         outputBuffer = await resized.png({ compressionLevel: 9, palette: false }).toBuffer();
       }
 
-      fs.writeFileSync(fullPath, outputBuffer);
+      fs.writeFileSync(fileInfo.fullPath, outputBuffer);
       savedBytes += originalSize - outputBuffer.length;
       processed++;
     } catch (err) {
       failed++;
-      errors.push(`${fileInfo.name}: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      errors.push(`${fileInfo.relName}: ${err instanceof Error ? err.message : 'Unknown error'}`);
     }
   }
 
   // Calculate new total size
   let newTotalSize = 0;
-  for (const file of files) {
-    const fullPath = path.join(imagesDir, file);
-    if (fs.existsSync(fullPath)) {
-      newTotalSize += fs.statSync(fullPath).size;
+  for (const fp of filePaths) {
+    if (fs.existsSync(fp)) {
+      newTotalSize += fs.statSync(fp).size;
     }
   }
 
   return NextResponse.json({
     success: true,
-    totalFiles: files.length,
+    totalFiles: filePaths.length,
     alreadyOptimized,
     processed,
     failed,
