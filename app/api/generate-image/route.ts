@@ -3,13 +3,14 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { generateImage } from '@/lib/imagen';
+import { generateImage, ReferenceImage } from '@/lib/imagen';
 import { getMovieStyleSettings, loadStyleReferenceImage } from '@/lib/movie-style-ref';
 
 /**
  * POST - Generate an image from any prompt and return it as base64
  * Used for character prompts, environment prompts, and the constructed prompt.
  * Optionally passes a movie style image as a style reference when enabled in admin.
+ * Optionally accepts referenceImages for character/environment references.
  */
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -18,7 +19,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const { prompt, aspectRatio, movieStyleId } = await req.json();
+    const { prompt, aspectRatio, movieStyleId, referenceImages: clientRefImages } = await req.json();
 
     if (!prompt) {
       return NextResponse.json({ error: 'prompt is required' }, { status: 400 });
@@ -33,10 +34,26 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Parse client reference images (character/environment)
+    const referenceImages: ReferenceImage[] = [];
+    if (Array.isArray(clientRefImages)) {
+      for (const ref of clientRefImages) {
+        if (ref.base64 && ref.mimeType && ref.role && ref.label) {
+          referenceImages.push({
+            base64: ref.base64,
+            mimeType: ref.mimeType,
+            role: ref.role,
+            label: ref.label,
+          });
+        }
+      }
+    }
+
     const results = await generateImage(prompt, {
       aspectRatio: aspectRatio || '16:9',
       numberOfImages: 1,
       styleReferenceImage,
+      referenceImages: referenceImages.length > 0 ? referenceImages : undefined,
     });
 
     const imageData = results[0];

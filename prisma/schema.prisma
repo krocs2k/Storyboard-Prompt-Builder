@@ -102,6 +102,7 @@ model Project {
   screenplay       Screenplay?
   storyboard       Storyboard?
   storyboardImages StoryboardImage[]
+  galleryImages    GalleryImage[]
   selections       Json?
   recommendations  Json?
   createdAt        DateTime          @default(now())
@@ -152,6 +153,24 @@ model StoryboardImage {
 
   @@index([projectId])
   @@unique([projectId, blockNumber])
+}
+
+model GalleryImage {
+  id          String   @id @default(cuid())
+  projectId   String
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  imageKey    String   // e.g. 'constructed', 'char-0', 'env-1'
+  prompt      String   @db.Text
+  label       String   @default("") // human-readable label
+  imagePath   String   // relative to data dir
+  fileName    String
+  aspectRatio String   @default("16:9")
+  width       Int      @default(0)
+  height      Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([projectId])
 }
 
 model InviteToken {

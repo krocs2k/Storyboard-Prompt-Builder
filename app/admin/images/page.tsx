@@ -9,6 +9,7 @@ import {
   Shrink, Zap
 } from 'lucide-react';
 import Link from 'next/link';
+import JSZip from 'jszip';
 
 interface ResizePreview {
   totalFiles: number;
@@ -102,6 +103,8 @@ export default function ImagesAdminPage() {
     }
   };
 
+  const [importProgress, setImportProgress] = useState('');
+
   const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -120,26 +123,108 @@ export default function ImagesAdminPage() {
 
     setImporting(true);
     setMessage(null);
-    try {
-      const formData = new FormData();
-      formData.append('file', file);
+    setImportProgress('Reading ZIP file...');
 
-      const res = await fetch('/api/admin/images/import', {
-        method: 'POST',
-        body: formData,
+    try {
+      // Extract ZIP client-side
+      const arrayBuffer = await file.arrayBuffer();
+      const zip = await JSZip.loadAsync(arrayBuffer);
+
+      // Collect image entries
+      const entries: Array<{ path: string; zipObj: JSZip.JSZipObject }> = [];
+      zip.forEach((relativePath, zipEntry) => {
+        if (zipEntry.dir) return;
+        if (relativePath === 'manifest.json') return;
+        if (relativePath.startsWith('images/')) {
+          const subPath = relativePath.slice('images/'.length);
+          if (subPath) entries.push({ path: subPath, zipObj: zipEntry });
+        }
       });
 
-      const data = await res.json();
-      if (data.success) {
-        setMessage({ type: 'success', text: data.message });
-        fetchStats();
-      } else {
-        setMessage({ type: 'error', text: data.error || 'Import failed' });
+      if (entries.length === 0) {
+        throw new Error('No image files found in ZIP. Expected files in an "images/" folder.');
       }
+
+      // Determine subdirs to clear
+      const subdirs = new Set<string>();
+      for (const { path: p } of entries) {
+        const parts = p.split('/');
+        if (parts.length > 1) subdirs.add(parts[0]);
+      }
+      // If flat structure, clear data/
+      const subdirsStr = subdirs.size > 0 ? [...subdirs].join(',') : 'data';
+
+      // Build batches (~3 MB each to stay under proxy limits)
+      const MAX_BATCH_BYTES = 3 * 1024 * 1024;
+      const batches: Array<Array<{ path: string; blob: Blob }>> = [];
+      let currentBatch: Array<{ path: string; blob: Blob }> = [];
+      let currentSize = 0;
+
+      setImportProgress(`Extracting ${entries.length} files...`);
+
+      for (let i = 0; i < entries.length; i++) {
+        const data = await entries[i].zipObj.async('blob');
+        let destPath = entries[i].path;
+        // Flat ZIP → prefix with data/
+        if (subdirs.size === 0 && !destPath.includes('/')) {
+          destPath = `data/${destPath}`;
+        }
+        currentBatch.push({ path: destPath, blob: data });
+        currentSize += data.size;
+
+        if (currentSize >= MAX_BATCH_BYTES || i === entries.length - 1) {
+          batches.push(currentBatch);
+          currentBatch = [];
+          currentSize = 0;
+        }
+      }
+
+      // Upload batches
+      let totalImported = 0;
+      let totalResized = 0;
+
+      for (let b = 0; b < batches.length; b++) {
+        const batch = batches[b];
+        setImportProgress(`Uploading batch ${b + 1}/${batches.length} (${batch.length} files)...`);
+
+        const formData = new FormData();
+        formData.append('action', b === 0 ? 'init' : 'append');
+        if (b === 0) formData.append('subdirs', subdirsStr);
+
+        for (const item of batch) {
+          formData.append('files[]', item.blob, item.path.split('/').pop() || 'image');
+          formData.append('paths[]', item.path);
+        }
+
+        const res = await fetch('/api/admin/images/import', {
+          method: 'POST',
+          body: formData,
+        });
+
+        const contentType = res.headers.get('content-type') || '';
+        if (!contentType.includes('application/json')) {
+          throw new Error(`Server error on batch ${b + 1} (HTTP ${res.status}). Try re-importing.`);
+        }
+
+        const data = await res.json();
+        if (!data.success) {
+          throw new Error(data.error || `Batch ${b + 1} failed`);
+        }
+        totalImported += data.imported || 0;
+        totalResized += data.resized || 0;
+      }
+
+      const subdirList = subdirs.size > 0 ? ` across ${subdirs.size} directories (${[...subdirs].join(', ')})` : '';
+      setMessage({
+        type: 'success',
+        text: `Successfully imported ${totalImported} images${subdirList} (${totalResized} auto-resized to 384×384). They are now active in the system.`
+      });
+      fetchStats();
     } catch (err) {
       setMessage({ type: 'error', text: err instanceof Error ? err.message : 'Import failed' });
     } finally {
       setImporting(false);
+      setImportProgress('');
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
@@ -283,9 +368,12 @@ export default function ImagesAdminPage() {
                   className="flex items-center gap-2 px-5 py-2.5 bg-amber-600 hover:bg-amber-500 disabled:bg-gray-700 disabled:text-gray-500 text-white rounded-lg transition-colors font-medium cursor-pointer"
                 >
                   {importing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-                  {importing ? 'Importing...' : 'Select ZIP to Import'}
+                  {importing ? (importProgress || 'Importing...') : 'Select ZIP to Import'}
                 </button>
               </label>
+              {importing && importProgress && (
+                <p className="text-xs text-gray-400 mt-1">{importProgress}</p>
+              )}
             </div>
 
             {/* Resize Worker */}

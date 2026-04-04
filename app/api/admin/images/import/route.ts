@@ -5,20 +5,22 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import * as fs from 'fs';
 import * as path from 'path';
-import JSZip from 'jszip';
 import sharp from 'sharp';
 
 const THUMB_SIZE = 384;
 const THUMB_QUALITY = 80;
 
 /**
- * POST - Import images from an uploaded ZIP file.
- * Expects a ZIP with:
- *   - images/<subdir>/<filename> — image files in subdirectories (data/, movie-styles/, etc.)
- *   - images/<filename> — legacy flat structure (imported to data/ subfolder)
- *   - manifest.json (optional) — mapping of category→items (informational)
- * All existing files in public/images/ subdirectories are replaced
- * with the contents of the ZIP images/ folder.
+ * POST - Import images in batches.
+ * 
+ * The client extracts the ZIP in the browser (using JSZip) and uploads
+ * files in small batches to avoid proxy body-size limits (~4 MB per request).
+ * 
+ * FormData fields:
+ *   - files[]        : one or more image File objects
+ *   - paths[]        : matching relative paths (e.g. "data/lens-types/image.jpg")
+ *   - action         : "init" (first batch — clears target dirs) or "append" (subsequent)
+ *   - subdirs        : comma-separated list of subdirs to clear on "init" (e.g. "data,movie-styles")
  */
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -28,102 +30,60 @@ export async function POST(req: NextRequest) {
 
   try {
     const formData = await req.formData();
-    const file = formData.get('file') as File | null;
+    const action = (formData.get('action') as string) || 'init';
+    const subdirsCsv = (formData.get('subdirs') as string) || '';
+    const files = formData.getAll('files[]') as File[];
+    const paths = formData.getAll('paths[]') as string[];
 
-    if (!file) {
-      return NextResponse.json({ error: 'No file provided' }, { status: 400 });
+    if (files.length === 0) {
+      return NextResponse.json({ error: 'No files in batch' }, { status: 400 });
     }
-
-    if (!file.name.endsWith('.zip')) {
-      return NextResponse.json({ error: 'File must be a ZIP archive' }, { status: 400 });
-    }
-
-    const arrayBuffer = await file.arrayBuffer();
-    const zip = await JSZip.loadAsync(arrayBuffer);
-
-    // Find all image files in the ZIP (in images/ folder, preserving subdirs)
-    const imageFiles: Array<{ relativePath: string; file: JSZip.JSZipObject }> = [];
-    zip.forEach((relativePath, zipEntry) => {
-      if (zipEntry.dir) return;
-      if (relativePath === 'manifest.json') return;
-      // Accept files under images/ prefix
-      if (relativePath.startsWith('images/')) {
-        const subPath = relativePath.slice('images/'.length);
-        if (subPath) {
-          imageFiles.push({ relativePath: subPath, file: zipEntry });
-        }
-      }
-    });
-
-    if (imageFiles.length === 0) {
-      return NextResponse.json(
-        { error: 'No image files found in ZIP. Expected files in an "images/" folder.' },
-        { status: 400 }
-      );
+    if (files.length !== paths.length) {
+      return NextResponse.json({ error: 'files[] and paths[] count mismatch' }, { status: 400 });
     }
 
     const imagesRoot = path.join(process.cwd(), 'public', 'images');
 
-    // Determine which subdirectories are in the ZIP
-    const subdirsInZip = new Set<string>();
-    for (const { relativePath } of imageFiles) {
-      const parts = relativePath.split('/');
-      if (parts.length > 1) {
-        subdirsInZip.add(parts[0]);
-      }
-    }
-
-    // If the ZIP has subdirectories, clear those specific subdirectories
-    // If it's a flat structure (legacy), clear the data/ directory
-    if (subdirsInZip.size > 0) {
-      for (const subdir of subdirsInZip) {
+    // On "init" batch, clear target subdirectories
+    if (action === 'init' && subdirsCsv) {
+      const subdirs = subdirsCsv.split(',').map(s => s.trim()).filter(Boolean);
+      for (const subdir of subdirs) {
+        // Prevent path traversal
+        if (subdir.includes('..') || subdir.startsWith('/')) continue;
         const subdirPath = path.join(imagesRoot, subdir);
         if (fs.existsSync(subdirPath)) {
           const existing = fs.readdirSync(subdirPath);
           for (const f of existing) {
             const fullPath = path.join(subdirPath, f);
-            if (fs.statSync(fullPath).isFile()) {
-              fs.unlinkSync(fullPath);
-            }
-          }
-        }
-      }
-    } else {
-      // Legacy flat ZIP — clear data/ directory
-      const dataDir = path.join(imagesRoot, 'data');
-      if (fs.existsSync(dataDir)) {
-        const existing = fs.readdirSync(dataDir);
-        for (const f of existing) {
-          const fullPath = path.join(dataDir, f);
-          if (fs.statSync(fullPath).isFile()) {
-            fs.unlinkSync(fullPath);
+            try {
+              if (fs.statSync(fullPath).isFile()) fs.unlinkSync(fullPath);
+            } catch { /* skip */ }
           }
         }
       }
     }
 
-    // Extract and auto-resize images
+    // Write each file, auto-resizing if oversized
     let imported = 0;
     let resized = 0;
-    for (const { relativePath, file: zipEntry } of imageFiles) {
-      const buffer = await zipEntry.async('nodebuffer');
-      const ext = relativePath.toLowerCase().split('.').pop() || '';
 
-      // For flat ZIPs (no subdirs), place in data/
-      let destRelative = relativePath;
-      if (subdirsInZip.size === 0 && !relativePath.includes('/')) {
-        destRelative = `data/${relativePath}`;
-      }
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      let relativePath = paths[i];
 
-      const destPath = path.join(imagesRoot, destRelative);
+      // Prevent path traversal
+      if (relativePath.includes('..')) continue;
 
-      // Ensure parent directory exists
+      const destPath = path.join(imagesRoot, relativePath);
       const destDir = path.dirname(destPath);
       if (!fs.existsSync(destDir)) {
         fs.mkdirSync(destDir, { recursive: true });
       }
 
-      // Auto-resize oversized images
+      const arrayBuffer = await file.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
+      const ext = relativePath.toLowerCase().split('.').pop() || '';
+
       if (['png', 'jpg', 'jpeg', 'webp', 'gif', 'tiff'].includes(ext)) {
         try {
           const meta = await sharp(buffer).metadata();
@@ -151,7 +111,6 @@ export async function POST(req: NextRequest) {
             fs.writeFileSync(destPath, buffer);
           }
         } catch {
-          // If resize fails, write original
           fs.writeFileSync(destPath, buffer);
         }
       } else {
@@ -160,15 +119,9 @@ export async function POST(req: NextRequest) {
       imported++;
     }
 
-    const subdirList = subdirsInZip.size > 0 ? ` across ${subdirsInZip.size} directories (${[...subdirsInZip].join(', ')})` : '';
-    return NextResponse.json({
-      success: true,
-      imported,
-      resized,
-      message: `Successfully imported ${imported} images${subdirList} (${resized} auto-resized to ${THUMB_SIZE}×${THUMB_SIZE}). They are now active in the system.`,
-    });
+    return NextResponse.json({ success: true, imported, resized });
   } catch (err) {
-    console.error('Image import failed:', err);
+    console.error('Image import batch failed:', err);
     return NextResponse.json(
       { error: err instanceof Error ? err.message : 'Import failed' },
       { status: 500 }

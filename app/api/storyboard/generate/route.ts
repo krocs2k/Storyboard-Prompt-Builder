@@ -30,7 +30,7 @@ function buildConstructedPrompt(
 ): string {
   const parts: string[] = [];
   
-  parts.push('Create a multi-shot of 4 cinematic film stills that tell a short story');
+  parts.push('Create a multi-shot of 9 cinematic film stills that tell a short story');
   
   if (selections?.imageType) {
     parts.push(`, a ${selections.imageType.name} image of a`);

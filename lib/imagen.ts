@@ -92,6 +92,13 @@ export interface ImageGenerationResult {
   mimeType: string;
 }
 
+export interface ReferenceImage {
+  base64: string;
+  mimeType: string;
+  role: 'character' | 'environment' | 'style';
+  label: string; // e.g. "Sarah", "Dark Alley"
+}
+
 // ── Gemini-specific generation functions ──
 
 async function generateWithGemini(
@@ -213,34 +220,142 @@ async function generateWithGeminiStyleRef(
   return results;
 }
 
+/**
+ * Gemini multimodal generation with character/environment/style reference images.
+ * Combines all reference images into a single multimodal request.
+ */
+async function generateWithGeminiMultiRef(
+  ai: GoogleGenAI,
+  model: string,
+  prompt: string,
+  options: {
+    aspectRatio?: string;
+    numberOfImages?: number;
+    styleReferenceImage?: { base64: string; mimeType: string } | null;
+    referenceImages?: ReferenceImage[];
+  }
+): Promise<ImageGenerationResult[]> {
+  const results: ImageGenerationResult[] = [];
+  const count = options.numberOfImages || 1;
+  const refs = options.referenceImages || [];
+
+  for (let i = 0; i < count; i++) {
+    const parts: Array<Record<string, unknown>> = [];
+
+    // Add style reference image first
+    if (options.styleReferenceImage) {
+      parts.push({
+        inlineData: {
+          data: options.styleReferenceImage.base64,
+          mimeType: options.styleReferenceImage.mimeType,
+        },
+      });
+    }
+
+    // Add character/environment reference images
+    for (const ref of refs) {
+      parts.push({
+        inlineData: {
+          data: ref.base64,
+          mimeType: ref.mimeType,
+        },
+      });
+    }
+
+    // Build text instruction
+    const textParts: string[] = [];
+    if (options.styleReferenceImage) {
+      textParts.push('Use the first image as a visual style reference. Generate a new image matching that visual aesthetic and style.');
+    }
+    if (refs.length > 0) {
+      textParts.push(buildRefImagePreamble(refs));
+    }
+    textParts.push(prompt);
+    parts.push({ text: textParts.join(' ') });
+
+    const response = await ai.models.generateContent({
+      model,
+      contents: [{ role: 'user', parts: parts as any }],
+      config: {
+        responseModalities: ['IMAGE'] as any,
+        imageConfig: {
+          aspectRatio: options.aspectRatio || '16:9',
+        } as any,
+      } as any,
+    });
+
+    if (response.candidates?.[0]?.content?.parts) {
+      for (const part of response.candidates[0].content.parts) {
+        if ((part as any).inlineData?.data) {
+          results.push({
+            imageBytes: (part as any).inlineData.data,
+            mimeType: (part as any).inlineData.mimeType || 'image/png',
+          });
+        }
+      }
+    }
+  }
+
+  return results;
+}
+
 // ── Abacus AI generation function ──
 
 async function generateWithAbacus(
   apiKey: string,
   model: string,
   prompt: string,
-  options: { aspectRatio?: string; numberOfImages?: number; styleReferenceImage?: { base64: string; mimeType: string } | null }
+  options: {
+    aspectRatio?: string;
+    numberOfImages?: number;
+    styleReferenceImage?: { base64: string; mimeType: string } | null;
+    referenceImages?: ReferenceImage[];
+  }
 ): Promise<ImageGenerationResult[]> {
   const count = options.numberOfImages || 1;
   const results: ImageGenerationResult[] = [];
+  const refs = options.referenceImages || [];
+  const hasAnyImages = !!options.styleReferenceImage || refs.length > 0;
 
   for (let i = 0; i < count; i++) {
     let messageContent: string | Array<{ type: string; text?: string; image_url?: { url: string } }> = prompt;
 
-    // If style reference, use multimodal message
-    if (options.styleReferenceImage) {
-      messageContent = [
-        {
+    // If any reference images, use multimodal message
+    if (hasAnyImages) {
+      const contentParts: Array<{ type: string; text?: string; image_url?: { url: string } }> = [];
+
+      // Style reference first
+      if (options.styleReferenceImage) {
+        contentParts.push({
           type: 'image_url',
           image_url: {
             url: `data:${options.styleReferenceImage.mimeType};base64,${options.styleReferenceImage.base64}`,
           },
-        },
-        {
-          type: 'text',
-          text: `Use the above image as a visual style reference. Generate a new image matching that visual aesthetic and style. ${prompt}`,
-        },
-      ];
+        });
+      }
+
+      // Character/environment references
+      for (const ref of refs) {
+        contentParts.push({
+          type: 'image_url',
+          image_url: {
+            url: `data:${ref.mimeType};base64,${ref.base64}`,
+          },
+        });
+      }
+
+      // Build text
+      const textParts: string[] = [];
+      if (options.styleReferenceImage) {
+        textParts.push('Use the first image as a visual style reference. Generate a new image matching that visual aesthetic and style.');
+      }
+      if (refs.length > 0) {
+        textParts.push(buildRefImagePreamble(refs));
+      }
+      textParts.push(prompt);
+
+      contentParts.push({ type: 'text', text: textParts.join(' ') });
+      messageContent = contentParts;
     }
 
     // Abacus supports: 1:1, 2:3, 3:2, 3:4, 4:3 (16:9 and 9:16 are Gemini-only)
@@ -310,6 +425,22 @@ async function generateWithAbacus(
 }
 
 /**
+ * Build a text preamble describing the reference images for the model.
+ */
+function buildRefImagePreamble(refs: ReferenceImage[]): string {
+  const parts: string[] = [];
+  const chars = refs.filter(r => r.role === 'character');
+  const envs = refs.filter(r => r.role === 'environment');
+  if (chars.length > 0) {
+    parts.push(`The following ${chars.length === 1 ? 'image is a character reference' : 'images are character references'}: ${chars.map(c => `"${c.label}"`).join(', ')}. Use ${chars.length === 1 ? 'this' : 'these'} as the visual reference for ${chars.length === 1 ? 'that character' : 'those characters'} in the generated image.`);
+  }
+  if (envs.length > 0) {
+    parts.push(`The following ${envs.length === 1 ? 'image is an environment/location reference' : 'images are environment/location references'}: ${envs.map(e => `"${e.label}"`).join(', ')}. Use ${envs.length === 1 ? 'this' : 'these'} as the visual reference for the setting/location in the generated image.`);
+  }
+  return parts.join(' ');
+}
+
+/**
  * Generate images using the configured provider and model.
  * Automatically routes to Gemini SDK or Abacus AI API based on admin settings.
  */
@@ -319,6 +450,7 @@ export async function generateImage(
     aspectRatio?: '1:1' | '3:4' | '4:3' | '9:16' | '16:9';
     numberOfImages?: number;
     styleReferenceImage?: { base64: string; mimeType: string } | null;
+    referenceImages?: ReferenceImage[];
   } = {}
 ): Promise<ImageGenerationResult[]> {
   const config = await loadImageConfig();
@@ -326,6 +458,10 @@ export async function generateImage(
   let results: ImageGenerationResult[];
   let usedModel: string;
   let usedProvider: ApiProvider;
+
+  const hasRefImages = options.referenceImages && options.referenceImages.length > 0;
+  const hasStyleRef = !!options.styleReferenceImage;
+  const needsMultimodal = hasRefImages || hasStyleRef;
 
   // ── Abacus AI path ──
   if (config.provider === 'abacus' && config.abacusKey) {
@@ -339,15 +475,11 @@ export async function generateImage(
     const ai = await getGeminiClient();
     const model = config.imagenModel || 'imagen-4.0-generate-001';
 
-    if (options.styleReferenceImage) {
+    if (needsMultimodal) {
+      // Use Gemini multimodal model when any reference images are present
       const geminiModel = GEMINI_IMAGE_MODELS[0] || 'gemini-3.1-flash-image-preview';
       usedModel = geminiModel;
-      results = await generateWithGeminiStyleRef(
-        ai, geminiModel, prompt,
-        options.styleReferenceImage.base64,
-        options.styleReferenceImage.mimeType,
-        options
-      );
+      results = await generateWithGeminiMultiRef(ai, geminiModel, prompt, options);
     } else if (GEMINI_IMAGE_MODELS.includes(model)) {
       usedModel = model;
       results = await generateWithGemini(ai, model, prompt, options);

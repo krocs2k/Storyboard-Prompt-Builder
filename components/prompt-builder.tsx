@@ -9,7 +9,7 @@ import {
   Trash2, Film, Aperture, Image as ImageIcon, Save, History,
   FolderOpen, Plus, Download, Loader2, Clapperboard, Upload,
   LayoutGrid, Users, MapPin, ChevronDown, X, FolderPlus, Edit3, Grid3X3, Mic, RefreshCw,
-  LogOut, Settings, User
+  LogOut, Settings, User, Star, AtSign, Maximize2, ZoomIn, ChevronLeft, ChevronRight
 } from 'lucide-react';
 import { SectionCard } from './section-card';
 import { SelectionButton } from './selection-button';
@@ -20,6 +20,8 @@ import ScreenplayCreator from './screenplay-creator';
 import ScreenplayAnalyzer from './screenplay-analyzer';
 import ImageGridCutter from './image-grid-cutter';
 import StoryboardViewer from './storyboard-viewer';
+import ImageGallery, { GalleryImageItem } from './image-gallery';
+import ShotImageGallery from './shot-image-gallery';
 import {
   imageTypes, shotTypes, lightingSources, cameraBodies, focalLengths,
   lensTypes, filmStocks, aspectRatios, photographerStyles, movieStyles as defaultMovieStyles, filterEffects,
@@ -123,6 +125,18 @@ export function PromptBuilder() {
   const [generatedImages, setGeneratedImages] = useState<Map<string, { base64: string; mimeType: string }>>(new Map());
   const [imageGenError, setImageGenError] = useState<string | null>(null);
 
+  // Image Gallery state
+  const [galleryImages, setGalleryImages] = useState<GalleryImageItem[]>([]);
+
+  // Primary reference images for characters and environments
+  // Key: "char:CharName" or "env:EnvName", Value: {base64, mimeType}
+  const [primaryImages, setPrimaryImages] = useState<Map<string, { base64: string; mimeType: string; label: string }>>(new Map());
+
+  // Storyboard shot gallery state
+  const [shotLightbox, setShotLightbox] = useState<{ blockNum: number; imageIndex: number } | null>(null);
+  const [upscalingShotId, setUpscalingShotId] = useState<string | null>(null);
+  const [deletingShotId, setDeletingShotId] = useState<string | null>(null);
+
   // Project Management State
   const [folders, setFolders] = useState<ProjectFolder[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -160,6 +174,8 @@ export function PromptBuilder() {
     setIsPromptManuallyEdited(false);
     setGeneratedImages(new Map());
     setImageGenError(null);
+    setGalleryImages([]);
+    setPrimaryImages(new Map());
   }, []);
 
   // Load folders and projects on mount
@@ -248,6 +264,38 @@ export function PromptBuilder() {
         setCurrentProject(saved);
         setNewProjectName('');
         loadProjects();
+
+        // Persist any unsaved (in-memory) gallery images
+        const unsaved = galleryImages.filter(img => img.base64);
+        if (unsaved.length > 0) {
+          const persisted: GalleryImageItem[] = [];
+          for (const img of unsaved) {
+            try {
+              const saveRes = await authFetch('/api/gallery-images', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  projectId: saved.id,
+                  imageKey: img.imageKey,
+                  prompt: img.prompt,
+                  label: img.label,
+                  base64: img.base64,
+                  mimeType: img.mimeType,
+                  aspectRatio: img.aspectRatio,
+                }),
+              });
+              const saveData = await saveRes.json();
+              if (saveData.success && saveData.image) {
+                persisted.push(saveData.image);
+              }
+            } catch { /* skip */ }
+          }
+          // Replace unsaved with persisted versions
+          setGalleryImages(prev => {
+            const saved2 = prev.filter(img => !img.base64);
+            return [...persisted, ...saved2];
+          });
+        }
       }
     } catch (err) {
       console.error('Failed to save project:', err);
@@ -292,6 +340,18 @@ export function PromptBuilder() {
       });
     }
     setShowProjectManager(false);
+
+    // Load gallery images for this project
+    try {
+      const galleryRes = await authFetch(`/api/gallery-images?projectId=${project.id}`);
+      const galleryData = await galleryRes.json();
+      if (galleryData.images) {
+        setGalleryImages(galleryData.images);
+      }
+    } catch (err) {
+      console.error('Failed to load gallery images:', err);
+      setGalleryImages([]);
+    }
   };
 
   const generateCharacterEnvironmentPrompts = async () => {
@@ -488,6 +548,86 @@ export function PromptBuilder() {
     }
   };
 
+  // Get gallery images for a specific storyboard block
+  const getBlockImages = useCallback((blockNumber: number): GalleryImageItem[] => {
+    const imgKey = `storyboard-${blockNumber}`;
+    return galleryImages.filter(img => img.imageKey === imgKey);
+  }, [galleryImages]);
+
+  // Get image src for gallery item
+  const getShotImageSrc = useCallback((img: GalleryImageItem) => {
+    if (img.base64) return `data:${img.mimeType || 'image/png'};base64,${img.base64}`;
+    return `/api/images?path=${encodeURIComponent(img.imagePath)}`;
+  }, []);
+
+  // Upscale a storyboard shot image
+  const upscaleShotImage = useCallback(async (img: GalleryImageItem) => {
+    if (!img.id || img.base64) {
+      alert('Please save the project first to upscale images.');
+      return;
+    }
+    setUpscalingShotId(img.id);
+    try {
+      const res = await authFetch('/api/gallery-images/upscale', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageId: img.id }),
+      });
+      const data = await res.json();
+      if (data.success && data.image) {
+        setGalleryImages(prev => prev.map(g => g.id === img.id ? { ...g, ...data.image } : g));
+      } else {
+        alert(data.error || 'Upscale failed');
+      }
+    } catch (err) {
+      console.error('Upscale failed:', err);
+      alert('Upscale failed. Please try again.');
+    } finally {
+      setUpscalingShotId(null);
+    }
+  }, []);
+
+  // Delete a storyboard shot image
+  const deleteShotImage = useCallback(async (img: GalleryImageItem) => {
+    if (img.id && !img.base64) {
+      setDeletingShotId(img.id);
+      try {
+        const res = await authFetch('/api/gallery-images', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: img.id }),
+        });
+        const data = await res.json();
+        if (data.success) {
+          setGalleryImages(prev => prev.filter(g => g.id !== img.id));
+        }
+      } catch (err) {
+        console.error('Failed to delete image:', err);
+      } finally {
+        setDeletingShotId(null);
+      }
+    } else {
+      setGalleryImages(prev => prev.filter(g => g !== img));
+    }
+    // Close lightbox if viewing this image
+    if (shotLightbox) setShotLightbox(null);
+  }, [shotLightbox]);
+
+  // Download a storyboard shot image
+  const downloadShotImage = useCallback((img: GalleryImageItem) => {
+    const a = document.createElement('a');
+    if (img.base64) {
+      a.href = `data:${img.mimeType || 'image/png'};base64,${img.base64}`;
+      a.download = img.label ? `${img.label.replace(/[^a-zA-Z0-9]/g, '_')}.png` : 'shot_image.png';
+    } else {
+      a.href = `/api/images?path=${encodeURIComponent(img.imagePath)}`;
+      a.download = img.fileName || 'shot_image.png';
+    }
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  }, []);
+
   const downloadStoryboard = () => {
     if (!storyboard) return;
     const storyTitle = screenplay?.title || 'STORYBOARD';
@@ -590,6 +730,8 @@ export function PromptBuilder() {
     setIsPromptManuallyEdited(false);
     setGeneratedImages(new Map());
     setImageGenError(null);
+    setGalleryImages([]);
+    setPrimaryImages(new Map());
   }, []);
 
   // Get filter style based on image type selection
@@ -609,7 +751,7 @@ export function PromptBuilder() {
   const buildPromptFromSelections = useCallback(() => {
     const parts: string[] = [];
     
-    parts.push('Create a multi-shot of 4 cinematic film stills that tell a short story');
+    parts.push('Create a multi-shot of 9 cinematic film stills that tell a short story');
     
     // Image type
     if (selections?.imageType) {
@@ -694,7 +836,7 @@ export function PromptBuilder() {
     atmosphere: string,
   ): string => {
     const parts: string[] = [];
-    parts.push('Create a multi-shot of 4 cinematic film stills that tell a short story');
+    parts.push('Create a multi-shot of 9 cinematic film stills that tell a short story');
     if (selections?.imageType) {
       parts.push(`, a ${selections.imageType.name} image of a`);
     }
@@ -814,22 +956,111 @@ export function PromptBuilder() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [buildPromptFromParts]);
 
+  // ── Reference Image Helpers ──
+
+  // Create a @Token from a name (e.g. "Sarah Connor" → "@Sarah_Connor")
+  const makeRefToken = useCallback((name: string): string => {
+    return '@' + name.trim().replace(/\s+/g, '_');
+  }, []);
+
+  // Get all available reference tokens and their primary images
+  const availableRefTokens = useMemo(() => {
+    const tokens: Array<{ token: string; key: string; label: string; role: 'character' | 'environment'; hasPrimary: boolean }> = [];
+    characterPrompts.forEach((cp, i) => {
+      const key = `char:${cp.name}`;
+      tokens.push({
+        token: makeRefToken(cp.name),
+        key,
+        label: cp.name,
+        role: 'character',
+        hasPrimary: primaryImages.has(key),
+      });
+    });
+    environmentPrompts.forEach((ep, i) => {
+      const key = `env:${ep.name}`;
+      tokens.push({
+        token: makeRefToken(ep.name),
+        key,
+        label: ep.name,
+        role: 'environment',
+        hasPrimary: primaryImages.has(key),
+      });
+    });
+    return tokens;
+  }, [characterPrompts, environmentPrompts, primaryImages, makeRefToken]);
+
+  // Detect reference tokens in text and return matching reference images
+  const detectReferenceImages = useCallback((subjectText: string, envText: string) => {
+    const refs: Array<{ base64: string; mimeType: string; role: 'character' | 'environment'; label: string }> = [];
+    const combinedText = `${subjectText} ${envText}`;
+
+    for (const tok of availableRefTokens) {
+      if (!tok.hasPrimary) continue;
+      const img = primaryImages.get(tok.key);
+      if (!img) continue;
+      // Check if token appears in the combined text
+      if (combinedText.includes(tok.token)) {
+        refs.push({ base64: img.base64, mimeType: img.mimeType, role: tok.role, label: tok.label });
+      }
+    }
+    return refs;
+  }, [availableRefTokens, primaryImages]);
+
+  // Set a primary image for a character/environment from a generated image
+  const setPrimaryImageFromGenerated = useCallback((key: string, label: string, imageData: { base64: string; mimeType: string }) => {
+    setPrimaryImages(prev => {
+      const next = new Map(prev);
+      next.set(key, { base64: imageData.base64, mimeType: imageData.mimeType, label });
+      return next;
+    });
+  }, []);
+
+  // Get ALL primary reference images (for storyboard generation)
+  const getAllPrimaryRefImages = useCallback(() => {
+    const refs: Array<{ base64: string; mimeType: string; role: 'character' | 'environment'; label: string }> = [];
+    primaryImages.forEach((img, key) => {
+      const role = key.startsWith('char:') ? 'character' as const : 'environment' as const;
+      refs.push({ base64: img.base64, mimeType: img.mimeType, role, label: img.label });
+    });
+    return refs;
+  }, [primaryImages]);
+
+  // Clear a primary image
+  const clearPrimaryImage = useCallback((key: string) => {
+    setPrimaryImages(prev => {
+      const next = new Map(prev);
+      next.delete(key);
+      return next;
+    });
+  }, []);
+
   // The active prompt is what's shown in Section 6 - either edited or auto-built
   const activePrompt = editedPrompt || constructedPrompt;
 
-  // Generate image from any prompt text
-  const generateImageFromPrompt = useCallback(async (promptText: string, imageKey: string) => {
+  // Generate image from any prompt text and add to gallery
+  const generateImageFromPrompt = useCallback(async (
+    promptText: string,
+    imageKey: string,
+    label?: string,
+    explicitRefImages?: Array<{ base64: string; mimeType: string; role: string; label: string }>
+  ) => {
     setGeneratingImageFor(imageKey);
     setImageGenError(null);
     try {
+      // Use explicit refs if provided, otherwise detect @tokens from Section 2 fields
+      const refImgs = explicitRefImages ?? detectReferenceImages(selections?.subjectAction ?? '', selections?.environment ?? '');
+      const bodyPayload: Record<string, unknown> = {
+        prompt: promptText,
+        aspectRatio: selections?.aspectRatio || '16:9',
+        movieStyleId: selections?.movie?.id || undefined,
+      };
+      if (refImgs.length > 0) {
+        bodyPayload.referenceImages = refImgs;
+      }
       const res = await authFetch('/api/generate-image', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          prompt: promptText,
-          aspectRatio: selections?.aspectRatio || '16:9',
-          movieStyleId: selections?.movie?.id || undefined,
-        }),
+        body: JSON.stringify(bodyPayload),
       });
       const ct = res.headers.get('content-type') || '';
       if (!ct.includes('application/json')) {
@@ -837,18 +1068,67 @@ export function PromptBuilder() {
       }
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Image generation failed');
+
+      const { base64, mimeType } = data.image;
+
+      // Update inline preview
       setGeneratedImages(prev => {
         const newMap = new Map(prev);
         newMap.set(imageKey, data.image);
         return newMap;
       });
+
+      // Add to gallery
+      const galleryLabel = label || (imageKey === 'constructed' ? 'Constructed Prompt' : imageKey);
+      if (currentProject?.id) {
+        // Save to DB immediately if project exists
+        try {
+          const saveRes = await authFetch('/api/gallery-images', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              projectId: currentProject.id,
+              imageKey,
+              prompt: promptText,
+              label: galleryLabel,
+              base64,
+              mimeType,
+              aspectRatio: selections?.aspectRatio || '16:9',
+            }),
+          });
+          const saveData = await saveRes.json();
+          if (saveData.success && saveData.image) {
+            setGalleryImages(prev => [saveData.image, ...prev]);
+          }
+        } catch (err) {
+          console.error('Failed to save to gallery:', err);
+        }
+      } else {
+        // In-memory only (unsaved project)
+        const tempItem: GalleryImageItem = {
+          id: `temp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          projectId: '',
+          imageKey,
+          prompt: promptText,
+          label: galleryLabel,
+          imagePath: '',
+          fileName: '',
+          aspectRatio: selections?.aspectRatio || '16:9',
+          width: 0,
+          height: 0,
+          createdAt: new Date().toISOString(),
+          base64,
+          mimeType,
+        };
+        setGalleryImages(prev => [tempItem, ...prev]);
+      }
     } catch (err) {
       console.error('Image generation failed:', err);
       setImageGenError(err instanceof Error ? err.message : 'Image generation failed');
     } finally {
       setGeneratingImageFor(null);
     }
-  }, [selections?.aspectRatio, selections?.movie?.id]);
+  }, [selections?.aspectRatio, selections?.movie?.id, selections?.subjectAction, selections?.environment, currentProject?.id, detectReferenceImages]);
 
   const copyToClipboard = async () => {
     try {
@@ -1076,6 +1356,36 @@ export function PromptBuilder() {
                 placeholder="Describe the subject and their action..."
                 multiline
               />
+              {/* Reference token chips for Subject */}
+              {availableRefTokens.filter(t => t.role === 'character').length > 0 && (
+                <div className="flex flex-wrap gap-1.5 -mt-1 mb-1">
+                  <span className="text-[10px] text-slate-500 flex items-center gap-1"><AtSign size={10} /> Refs:</span>
+                  {availableRefTokens.filter(t => t.role === 'character').map(tok => (
+                    <button
+                      key={tok.key}
+                      onClick={() => {
+                        const current = selections?.subjectAction ?? '';
+                        const tokenText = tok.token;
+                        if (!current.includes(tokenText)) {
+                          updateSelection('subjectAction', current ? `${current} ${tokenText}` : tokenText);
+                        }
+                      }}
+                      className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors ${
+                        tok.hasPrimary
+                          ? (selections?.subjectAction ?? '').includes(tok.token)
+                            ? 'bg-amber-500/30 text-amber-300 border border-amber-500/50'
+                            : 'bg-green-500/20 text-green-400 border border-green-500/30 hover:bg-green-500/30'
+                          : 'bg-slate-700/50 text-slate-500 border border-slate-600/30 cursor-not-allowed'
+                      }`}
+                      disabled={!tok.hasPrimary}
+                      title={tok.hasPrimary ? `Click to insert ${tok.token}` : `Generate & set a primary image for ${tok.label} first`}
+                    >
+                      {tok.hasPrimary && <Star size={8} className="fill-current" />}
+                      {tok.token}
+                    </button>
+                  ))}
+                </div>
+              )}
               <SelectionButton
                 label="Shot Type / Angle"
                 value={selections?.shotType?.name ?? null}
@@ -1088,6 +1398,36 @@ export function PromptBuilder() {
                 onChange={(v) => updateSelection('environment', v)}
                 placeholder="Describe the setting or location..."
               />
+              {/* Reference token chips for Environment */}
+              {availableRefTokens.filter(t => t.role === 'environment').length > 0 && (
+                <div className="flex flex-wrap gap-1.5 -mt-1 mb-1">
+                  <span className="text-[10px] text-slate-500 flex items-center gap-1"><AtSign size={10} /> Refs:</span>
+                  {availableRefTokens.filter(t => t.role === 'environment').map(tok => (
+                    <button
+                      key={tok.key}
+                      onClick={() => {
+                        const current = selections?.environment ?? '';
+                        const tokenText = tok.token;
+                        if (!current.includes(tokenText)) {
+                          updateSelection('environment', current ? `${current} ${tokenText}` : tokenText);
+                        }
+                      }}
+                      className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors ${
+                        tok.hasPrimary
+                          ? (selections?.environment ?? '').includes(tok.token)
+                            ? 'bg-amber-500/30 text-amber-300 border border-amber-500/50'
+                            : 'bg-green-500/20 text-green-400 border border-green-500/30 hover:bg-green-500/30'
+                          : 'bg-slate-700/50 text-slate-500 border border-slate-600/30 cursor-not-allowed'
+                      }`}
+                      disabled={!tok.hasPrimary}
+                      title={tok.hasPrimary ? `Click to insert ${tok.token}` : `Generate & set a primary image for ${tok.label} first`}
+                    >
+                      {tok.hasPrimary && <Star size={8} className="fill-current" />}
+                      {tok.token}
+                    </button>
+                  ))}
+                </div>
+              )}
             </SectionCard>
 
             {/* Section 3: Lighting & Mood */}
@@ -1264,6 +1604,23 @@ export function PromptBuilder() {
           </SectionCard>
         </motion.div>
 
+        {/* Image Gallery */}
+        {galleryImages.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mt-6"
+          >
+            <div className="bg-slate-800/60 rounded-xl border border-purple-500/20 p-5">
+              <ImageGallery
+                projectId={currentProject?.id || null}
+                images={galleryImages}
+                onImagesChange={setGalleryImages}
+              />
+            </div>
+          </motion.div>
+        )}
+
         {/* Screenplay & Storyboard Section */}
         {screenplay && (
           <motion.div
@@ -1435,9 +1792,23 @@ export function PromptBuilder() {
                       return (
                         <div key={i} className="bg-slate-800 rounded-lg p-4 border border-slate-700/50">
                           <div className="flex items-start justify-between gap-3 mb-2">
-                            <p className="text-purple-300 font-semibold text-sm">{cp.name}</p>
+                            <div className="flex items-center gap-2">
+                              {primaryImages.has(`char:${cp.name}`) && (
+                                <div className="w-6 h-6 rounded-full overflow-hidden border border-amber-500/60 flex-shrink-0">
+                                  <img
+                                    src={`data:${primaryImages.get(`char:${cp.name}`)!.mimeType};base64,${primaryImages.get(`char:${cp.name}`)!.base64}`}
+                                    alt="Primary ref"
+                                    className="w-full h-full object-cover"
+                                  />
+                                </div>
+                              )}
+                              <p className="text-purple-300 font-semibold text-sm">{cp.name}</p>
+                              {primaryImages.has(`char:${cp.name}`) && (
+                                <span className="text-[9px] text-amber-400 font-medium bg-amber-500/10 px-1 rounded">{makeRefToken(cp.name)}</span>
+                              )}
+                            </div>
                             <button
-                              onClick={() => generateImageFromPrompt(cp.prompt, imgKey)}
+                              onClick={() => generateImageFromPrompt(cp.prompt, imgKey, `Character: ${cp.name}`)}
                               disabled={generatingImageFor === imgKey}
                               className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-400 hover:to-purple-500 disabled:from-slate-600 disabled:to-slate-700 text-white rounded-lg transition-all"
                             >
@@ -1460,23 +1831,47 @@ export function PromptBuilder() {
                               </button>
                             )}
                           </div>
-                          {generatedImages.has(imgKey) && (
+                          {generatedImages.has(imgKey) && (() => {
+                            const charKey = `char:${cp.name}`;
+                            const isPrimary = primaryImages.has(charKey);
+                            return (
                             <div className="mt-3 relative rounded-lg overflow-hidden border border-purple-500/20">
                               <img
                                 src={`data:${generatedImages.get(imgKey)!.mimeType};base64,${generatedImages.get(imgKey)!.base64}`}
                                 alt={`Generated image for ${cp.name}`}
                                 className="w-full max-h-[300px] object-contain bg-slate-950"
                               />
-                              <button
-                                onClick={() => {
-                                  setGeneratedImages(prev => { const m = new Map(prev); m.delete(imgKey); return m; });
-                                }}
-                                className="absolute top-2 right-2 p-1 bg-slate-900/80 hover:bg-red-600/80 rounded transition-colors"
-                              >
-                                <X size={14} className="text-white" />
-                              </button>
+                              <div className="absolute top-2 right-2 flex gap-1">
+                                <button
+                                  onClick={() => {
+                                    if (isPrimary) {
+                                      clearPrimaryImage(charKey);
+                                    } else {
+                                      setPrimaryImageFromGenerated(charKey, cp.name, generatedImages.get(imgKey)!);
+                                    }
+                                  }}
+                                  className={`p-1 rounded transition-colors ${isPrimary ? 'bg-amber-500/90 hover:bg-amber-600' : 'bg-slate-900/80 hover:bg-amber-500/80'}`}
+                                  title={isPrimary ? 'Remove as primary reference' : 'Set as primary reference image'}
+                                >
+                                  <Star size={14} className={isPrimary ? 'text-white fill-white' : 'text-white'} />
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setGeneratedImages(prev => { const m = new Map(prev); m.delete(imgKey); return m; });
+                                  }}
+                                  className="p-1 bg-slate-900/80 hover:bg-red-600/80 rounded transition-colors"
+                                >
+                                  <X size={14} className="text-white" />
+                                </button>
+                              </div>
+                              {isPrimary && (
+                                <div className="absolute bottom-2 left-2 px-2 py-0.5 bg-amber-500/90 text-white text-[10px] font-bold rounded flex items-center gap-1">
+                                  <Star size={10} className="fill-white" /> PRIMARY REF
+                                </div>
+                              )}
                             </div>
-                          )}
+                            );
+                          })()}
                         </div>
                       );
                     })}
@@ -1497,9 +1892,23 @@ export function PromptBuilder() {
                       return (
                         <div key={i} className="bg-slate-800 rounded-lg p-4 border border-slate-700/50">
                           <div className="flex items-start justify-between gap-3 mb-2">
-                            <p className="text-cyan-300 font-semibold text-sm">{ep.name}</p>
+                            <div className="flex items-center gap-2">
+                              {primaryImages.has(`env:${ep.name}`) && (
+                                <div className="w-6 h-6 rounded-full overflow-hidden border border-amber-500/60 flex-shrink-0">
+                                  <img
+                                    src={`data:${primaryImages.get(`env:${ep.name}`)!.mimeType};base64,${primaryImages.get(`env:${ep.name}`)!.base64}`}
+                                    alt="Primary ref"
+                                    className="w-full h-full object-cover"
+                                  />
+                                </div>
+                              )}
+                              <p className="text-cyan-300 font-semibold text-sm">{ep.name}</p>
+                              {primaryImages.has(`env:${ep.name}`) && (
+                                <span className="text-[9px] text-amber-400 font-medium bg-amber-500/10 px-1 rounded">{makeRefToken(ep.name)}</span>
+                              )}
+                            </div>
                             <button
-                              onClick={() => generateImageFromPrompt(ep.prompt, imgKey)}
+                              onClick={() => generateImageFromPrompt(ep.prompt, imgKey, `Environment: ${ep.name}`)}
                               disabled={generatingImageFor === imgKey}
                               className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-400 hover:to-cyan-500 disabled:from-slate-600 disabled:to-slate-700 text-white rounded-lg transition-all"
                             >
@@ -1522,23 +1931,47 @@ export function PromptBuilder() {
                               </button>
                             )}
                           </div>
-                          {generatedImages.has(imgKey) && (
+                          {generatedImages.has(imgKey) && (() => {
+                            const envKey = `env:${ep.name}`;
+                            const isPrimary = primaryImages.has(envKey);
+                            return (
                             <div className="mt-3 relative rounded-lg overflow-hidden border border-cyan-500/20">
                               <img
                                 src={`data:${generatedImages.get(imgKey)!.mimeType};base64,${generatedImages.get(imgKey)!.base64}`}
                                 alt={`Generated image for ${ep.name}`}
                                 className="w-full max-h-[300px] object-contain bg-slate-950"
                               />
-                              <button
-                                onClick={() => {
-                                  setGeneratedImages(prev => { const m = new Map(prev); m.delete(imgKey); return m; });
-                                }}
-                                className="absolute top-2 right-2 p-1 bg-slate-900/80 hover:bg-red-600/80 rounded transition-colors"
-                              >
-                                <X size={14} className="text-white" />
-                              </button>
+                              <div className="absolute top-2 right-2 flex gap-1">
+                                <button
+                                  onClick={() => {
+                                    if (isPrimary) {
+                                      clearPrimaryImage(envKey);
+                                    } else {
+                                      setPrimaryImageFromGenerated(envKey, ep.name, generatedImages.get(imgKey)!);
+                                    }
+                                  }}
+                                  className={`p-1 rounded transition-colors ${isPrimary ? 'bg-amber-500/90 hover:bg-amber-600' : 'bg-slate-900/80 hover:bg-amber-500/80'}`}
+                                  title={isPrimary ? 'Remove as primary reference' : 'Set as primary reference image'}
+                                >
+                                  <Star size={14} className={isPrimary ? 'text-white fill-white' : 'text-white'} />
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setGeneratedImages(prev => { const m = new Map(prev); m.delete(imgKey); return m; });
+                                  }}
+                                  className="p-1 bg-slate-900/80 hover:bg-red-600/80 rounded transition-colors"
+                                >
+                                  <X size={14} className="text-white" />
+                                </button>
+                              </div>
+                              {isPrimary && (
+                                <div className="absolute bottom-2 left-2 px-2 py-0.5 bg-amber-500/90 text-white text-[10px] font-bold rounded flex items-center gap-1">
+                                  <Star size={10} className="fill-white" /> PRIMARY REF
+                                </div>
+                              )}
                             </div>
-                          )}
+                            );
+                          })()}
                         </div>
                       );
                     })}
@@ -1580,49 +2013,65 @@ export function PromptBuilder() {
                   <div className="mt-4 bg-slate-900/50 rounded-lg p-4">
                     <div className="flex items-center justify-between mb-3">
                       <h4 className="text-amber-400 font-medium">Storyboard Preview</h4>
-                      <span className="text-slate-400 text-sm">
-                        {storyboard.blocks.length} blocks | {storyboard.summary?.uniqueLocations || Object.keys(storyboard.shotlist).length} locations
-                      </span>
+                      <div className="flex items-center gap-3">
+                        {primaryImages.size > 0 && (
+                          <span className="text-[10px] text-green-400 bg-green-500/10 px-2 py-0.5 rounded flex items-center gap-1">
+                            <Star size={10} className="fill-current" /> {primaryImages.size} ref image{primaryImages.size !== 1 ? 's' : ''} active
+                          </span>
+                        )}
+                        <span className="text-slate-400 text-sm">
+                          {storyboard.blocks.length} blocks | {storyboard.summary?.uniqueLocations || Object.keys(storyboard.shotlist).length} locations
+                        </span>
+                      </div>
                     </div>
-                    <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-[500px] overflow-y-auto">
+                    <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-[700px] overflow-y-auto pr-1">
                       {storyboard.blocks.map((block, i) => {
                         const imgKey = `storyboard-${block.blockNumber}`;
                         const blockPrompt = block.prompt || `${block.subjectAction || block.action || ''}, set in ${block.environment || ''}`;
+                        const blockImgs = getBlockImages(block.blockNumber);
+                        const hasInlineOnly = generatedImages.has(imgKey) && blockImgs.length === 0;
+                        // Track which image index is displayed in the mini-gallery
+                        const displayCount = blockImgs.length + (hasInlineOnly ? 1 : 0);
+
                         return (
                           <div key={i} className="bg-slate-800 rounded-lg p-3 border border-slate-700/50">
                             <div className="flex items-center justify-between mb-2">
                               <span className="text-cyan-400 font-medium text-sm">Block {block.blockNumber}</span>
                               <span className="text-slate-500 text-xs">{block.timestampStart}</span>
                             </div>
-                            <p className="text-slate-300 text-xs mb-1">{block.action ? block.action.substring(0, 100) : (block.subjectAction ? block.subjectAction.substring(0, 100) : 'No action')}</p>
+                            <p className="text-slate-300 text-xs mb-1 line-clamp-2">{block.action ? block.action.substring(0, 120) : (block.subjectAction ? block.subjectAction.substring(0, 120) : 'No action')}</p>
                             <p className="text-slate-500 text-xs mb-2">{block.shotType}</p>
+
+                            {/* Generate Image button - passes all primary ref images */}
                             <button
-                              onClick={() => generateImageFromPrompt(blockPrompt, imgKey)}
+                              onClick={() => {
+                                const allRefs = getAllPrimaryRefImages();
+                                generateImageFromPrompt(blockPrompt, imgKey, `Block ${block.blockNumber}`, allRefs.length > 0 ? allRefs : undefined);
+                              }}
                               disabled={generatingImageFor === imgKey}
                               className="w-full flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs font-medium bg-gradient-to-r from-cyan-500/80 to-cyan-600/80 hover:from-cyan-400 hover:to-cyan-500 disabled:from-slate-600 disabled:to-slate-700 text-white rounded-lg transition-all"
                             >
                               {generatingImageFor === imgKey ? (
                                 <><Loader2 size={12} className="animate-spin" /> Generating...</>
                               ) : (
-                                <><Sparkles size={12} /> Generate Image</>
+                                <><Sparkles size={12} /> {displayCount > 0 ? 'Generate Another' : 'Generate Image'}</>
                               )}
                             </button>
-                            {generatedImages.has(imgKey) && (
-                              <div className="mt-2 relative rounded-lg overflow-hidden border border-cyan-500/20">
-                                <img
-                                  src={`data:${generatedImages.get(imgKey)!.mimeType};base64,${generatedImages.get(imgKey)!.base64}`}
-                                  alt={`Block ${block.blockNumber} image`}
-                                  className="w-full max-h-[200px] object-contain bg-slate-950"
-                                />
-                                <button
-                                  onClick={() => {
-                                    setGeneratedImages(prev => { const m = new Map(prev); m.delete(imgKey); return m; });
-                                  }}
-                                  className="absolute top-1 right-1 p-1 bg-slate-900/80 hover:bg-red-600/80 rounded transition-colors"
-                                >
-                                  <X size={12} className="text-white" />
-                                </button>
-                              </div>
+
+                            {/* Shot Image Gallery */}
+                            {displayCount > 0 && (
+                              <ShotImageGallery
+                                blockNumber={block.blockNumber}
+                                images={blockImgs}
+                                inlineImage={hasInlineOnly ? generatedImages.get(imgKey)! : undefined}
+                                onUpscale={upscaleShotImage}
+                                onDelete={deleteShotImage}
+                                onDownload={downloadShotImage}
+                                onFullscreen={(blockNum, idx) => setShotLightbox({ blockNum, imageIndex: idx })}
+                                getImageSrc={getShotImageSrc}
+                                upscalingId={upscalingShotId}
+                                deletingId={deletingShotId}
+                              />
                             )}
                           </div>
                         );
@@ -1644,6 +2093,82 @@ export function PromptBuilder() {
                     )}
                   </div>
                 )}
+
+                {/* Shot Lightbox */}
+                <AnimatePresence>
+                  {shotLightbox && (() => {
+                    const lbBlockImgs = getBlockImages(shotLightbox.blockNum);
+                    const lbImg = lbBlockImgs[shotLightbox.imageIndex];
+                    if (!lbImg) return null;
+                    return (
+                      <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-[100] bg-black/95 flex items-center justify-center"
+                        onClick={() => setShotLightbox(null)}
+                      >
+                        <div className="max-w-[95vw] max-h-[95vh] flex flex-col" onClick={e => e.stopPropagation()}>
+                          <div className="flex items-center justify-between p-3 text-white">
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium truncate">Block {shotLightbox.blockNum} — Image {shotLightbox.imageIndex + 1} of {lbBlockImgs.length}</p>
+                              {lbImg.width > 0 && <p className="text-slate-400 text-xs">{lbImg.width} × {lbImg.height}px</p>}
+                            </div>
+                            <div className="flex items-center gap-2 ml-3">
+                              <button
+                                onClick={() => upscaleShotImage(lbImg)}
+                                disabled={upscalingShotId === lbImg.id || !!lbImg.base64}
+                                className="flex items-center gap-1.5 px-3 py-1.5 bg-cyan-600/80 hover:bg-cyan-500 disabled:bg-slate-700 disabled:text-slate-500 rounded-lg text-sm transition-colors"
+                                title={lbImg.base64 ? 'Save project first' : 'Upscale 4x'}
+                              >
+                                {upscalingShotId === lbImg.id ? <Loader2 size={14} className="animate-spin" /> : <ZoomIn size={14} />}
+                                Upscale 4x
+                              </button>
+                              <button onClick={() => downloadShotImage(lbImg)} className="p-2 bg-slate-700 rounded-lg hover:bg-slate-600 transition-colors" title="Download">
+                                <Download size={18} />
+                              </button>
+                              <button onClick={() => deleteShotImage(lbImg)} className="p-2 bg-red-600/40 rounded-lg hover:bg-red-600/70 transition-colors" title="Delete">
+                                <Trash2 size={18} />
+                              </button>
+                              <button onClick={() => setShotLightbox(null)} className="p-2 bg-slate-700 rounded-lg hover:bg-slate-600 transition-colors">
+                                <X size={18} />
+                              </button>
+                            </div>
+                          </div>
+                          <div className="flex-1 flex items-center justify-center relative min-h-0 px-4">
+                            {shotLightbox.imageIndex > 0 && (
+                              <button
+                                onClick={() => setShotLightbox(prev => prev ? { ...prev, imageIndex: prev.imageIndex - 1 } : null)}
+                                className="absolute left-2 p-2 bg-black/60 rounded-full text-white hover:bg-black/80 z-10"
+                              >
+                                <ChevronLeft size={24} />
+                              </button>
+                            )}
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={getShotImageSrc(lbImg)}
+                              alt={lbImg.label || `Block ${shotLightbox.blockNum}`}
+                              className="max-w-full max-h-[80vh] object-contain rounded-lg"
+                            />
+                            {shotLightbox.imageIndex < lbBlockImgs.length - 1 && (
+                              <button
+                                onClick={() => setShotLightbox(prev => prev ? { ...prev, imageIndex: prev.imageIndex + 1 } : null)}
+                                className="absolute right-2 p-2 bg-black/60 rounded-full text-white hover:bg-black/80 z-10"
+                              >
+                                <ChevronRight size={24} />
+                              </button>
+                            )}
+                          </div>
+                          {lbImg.prompt && (
+                            <div className="p-3 bg-slate-900/80 rounded-b-xl mt-2 max-h-24 overflow-y-auto">
+                              <p className="text-slate-400 text-xs leading-relaxed">{lbImg.prompt}</p>
+                            </div>
+                          )}
+                        </div>
+                      </motion.div>
+                    );
+                  })()}
+                </AnimatePresence>
               </div>
 
               {/* Storyboard Images Viewer */}
