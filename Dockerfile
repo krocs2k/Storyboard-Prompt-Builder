@@ -1,13 +1,19 @@
 # ==============================================================================
-# Storyshot Creator — Docker Build v12
+# Storyshot Creator — Docker Build v13
 # No dependencies on Abacus.AI platform
 # Uses server.js spawn wrapper + next start (no standalone mode)
-# Uses Debian slim (glibc) to avoid Alpine musl SWC compilation issues
+# Uses Debian slim (glibc) for native SWC support
 #
-# NOTE: The GitHub backup (lib/github.ts → applyGitHubReadiness) already
-# transforms Prisma schema, package.json, .yarnrc.yml, and next.config.js
-# before pushing to this repo.  The Dockerfile only does a lightweight
-# safety-check — not a full re-patch — to stay idempotent.
+# IMPORTANT: The GitHub backup (lib/github.ts → applyGitHubReadiness) transforms
+# all platform-specific files BEFORE they reach this repo:
+#   - prisma/schema.prisma  → generic output path + Docker binary targets
+#   - package.json          → @next/swc-wasm-nodejs removed
+#   - .yarnrc.yml           → Abacus cache paths stripped
+#   - next.config.js        → experimental/distDir removed
+#   - layout.tsx            → Abacus chatllm script removed
+#   - scripts/seed.ts       → test credentials → env-var placeholders
+#
+# This Dockerfile assumes a CLEAN repo — no re-patching needed.
 # ==============================================================================
 
 FROM node:20-slim AS base
@@ -21,16 +27,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /build
 
-# Copy package manifest and lock file
 COPY package.json ./
 COPY yarn.loc[k] yarn.lock.ba[k] ./
 
-# Use yarn.lock.bak as the canonical lock file
+# yarn.lock.bak is the canonical lock file from the backup
 RUN if [ -f yarn.lock.bak ] && [ ! -s yarn.lock ]; then \
       cp yarn.lock.bak yarn.lock; \
     fi
 
-# Install dependencies
 RUN if [ -s yarn.lock ]; then \
       yarn install --frozen-lockfile --network-timeout 120000 || yarn install --network-timeout 120000; \
     else \
@@ -52,31 +56,19 @@ COPY --from=deps /build/yarn.lock ./
 
 COPY . .
 
-# Resolve symlinks left over from dev environment
+# Resolve any leftover dev symlinks
 RUN if [ -L yarn.lock ]; then rm -f yarn.lock; fi; \
     if [ -f yarn.lock.bak ] && [ ! -s yarn.lock ]; then cp yarn.lock.bak yarn.lock; fi
 
 # Use Docker-specific next.config (no standalone, no experimental)
 RUN cp next.config.docker.js next.config.js
 
-# Safety-check: ensure Prisma schema has correct output + binary targets
-# (backup already applies these — this is a no-op guard for manual clones)
-RUN if [ -f prisma/schema.prisma ]; then \
-      sed -i '/output.*=.*"\/home\/ubuntu/d' prisma/schema.prisma && \
-      if ! grep -q '^[[:space:]]*output' prisma/schema.prisma; then \
-        sed -i '/provider.*=.*"prisma-client-js"/a\    output = "../node_modules/.prisma/client"' prisma/schema.prisma; \
-      fi && \
-      if ! grep -q 'debian-openssl-3.0.x' prisma/schema.prisma; then \
-        sed -i 's/binaryTargets.*=.*/binaryTargets = ["native", "linux-musl-openssl-3.0.x", "linux-musl-arm64-openssl-3.0.x", "debian-openssl-3.0.x"]/' prisma/schema.prisma; \
-      fi && \
-      echo "[Docker] Prisma schema OK"; \
-    else \
-      echo "[Docker] ERROR: prisma/schema.prisma not found" && exit 1; \
-    fi
+# Verify Prisma schema exists (already transformed by backup)
+RUN test -f prisma/schema.prisma || (echo "ERROR: prisma/schema.prisma not found" && exit 1)
 
 RUN npx prisma generate
 
-# Compile seed script to JS for production (no tsx at runtime)
+# Compile seed script to JS (no tsx at runtime)
 RUN mkdir -p scripts/compiled && \
     npx esbuild scripts/seed.ts --bundle --platform=node \
       --outfile=scripts/compiled/seed.js \
@@ -125,7 +117,6 @@ COPY --from=builder --chown=nextjs:nodejs /build/docker-entrypoint.sh ./docker-e
 RUN chmod +x /srv/app/docker-entrypoint.sh
 
 USER nextjs
-
 EXPOSE 3000
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
