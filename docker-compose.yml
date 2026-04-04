@@ -1,5 +1,5 @@
 # ==============================================================================
-# Storyshot Creator — Docker Compose
+# Storyshot Creator — Docker Compose v11
 # Fully self-contained: App + PostgreSQL + optional Redis
 # ==============================================================================
 
@@ -11,6 +11,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    container_name: ssc-app
     ports:
       - '3000:3000'
     environment:
@@ -20,6 +21,8 @@ services:
       # Auth — generate a unique secret: openssl rand -base64 32
       - NEXTAUTH_SECRET=${NEXTAUTH_SECRET:-change-me-to-a-random-secret}
       - NEXTAUTH_URL=${NEXTAUTH_URL:-http://localhost:3000}
+      # File Storage
+      - DATA_DIR=/srv/app/data
       # LLM Provider — choose ONE:
       # Option A: Google Gemini (free tier available)
       #- GEMINI_API_KEY=${GEMINI_API_KEY}
@@ -38,15 +41,22 @@ services:
     env_file:
       - .env
     volumes:
-      - storyboard-data:/app/data
+      - storyboard-data:/srv/app/data
     depends_on:
       db:
         condition: service_healthy
     restart: unless-stopped
+    healthcheck:
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://localhost:3000/api/health']
+      interval: 30s
+      timeout: 10s
+      start_period: 60s
+      retries: 3
 
   # ---------- PostgreSQL Database ----------
   db:
     image: postgres:16-alpine
+    container_name: ssc-db
     environment:
       POSTGRES_DB: storyboard_prompt_builder
       POSTGRES_USER: spb_user
@@ -57,7 +67,7 @@ services:
       - '5432:5432'
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U spb_user -d storyboard_prompt_builder']
-      interval: 5s
+      interval: 10s
       timeout: 5s
       retries: 5
     restart: unless-stopped
@@ -73,5 +83,7 @@ services:
 
 volumes:
   storyboard-data:
+    driver: local
   postgres-data:
+    driver: local
   # redis-data:

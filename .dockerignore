@@ -8,28 +8,54 @@ out
 dist
 build
 
-# Development / IDE
+# Lock files (symlinked in dev environment)
+yarn.lock
+package-lock.json
+
+# Environment files (provided at runtime)
+.env
+.env.*
+!.env.example
+
+# Git
 .git
 .gitignore
+
+# IDE
 .vscode
 .idea
-.env.local
-.env.development
-.env.test
-*.log
-coverage
-.nyc_output
+*.swp
+*.swo
+
+# Documentation (keep README)
+*.md
+!README.md
 
 # OS files
 .DS_Store
 Thumbs.db
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
-# Abacus.AI platform files (not needed in Docker)
+# Deployment reference files
+DEEP-AGENT-*.md
+DEEP-AGENT-*.pdf
+DOCKER-DEPLOY.*
+
+# Test and coverage
+coverage
+.nyc_output
+
+# Abacus.AI specific
 .abacus.donotdelete
 .deploy
 
 # IMPORTANT: Do NOT ignore these — needed for Docker builds:
-# - yarn.lock (if real file exists in repo)
-# - yarn.lock.bak (platform-resolved lock file, if available)
+# - yarn.lock.bak (platform-resolved lock file)
 # - package.json
 # - prisma/
+# - server.js
+# - next.config.docker.js
+# - docker-entrypoint.sh
