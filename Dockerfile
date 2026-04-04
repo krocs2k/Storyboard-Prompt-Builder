@@ -2,14 +2,17 @@
 # Storyshot Creator — Docker Build v11
 # No dependencies on Abacus.AI platform
 # Uses server.js spawn wrapper + next start (no standalone mode)
+# Uses Debian slim (glibc) to avoid Alpine musl SWC compilation issues
 # ==============================================================================
 
-FROM node:20-alpine AS base
+FROM node:20-slim AS base
 
 # ---------- Stage 1: Install dependencies ----------
 FROM base AS deps
 
-RUN apk add --no-cache libc6-compat wget openssl python3 make g++
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      openssl wget python3 make g++ ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /build
 
@@ -24,7 +27,7 @@ RUN if [ -f yarn.lock.bak ] && [ ! -s yarn.lock ]; then \
 
 # Install dependencies (--frozen-lockfile if lock exists, otherwise fresh install)
 RUN if [ -s yarn.lock ]; then \
-      yarn install --frozen-lockfile --network-timeout 120000; \
+      yarn install --frozen-lockfile --network-timeout 120000 || yarn install --network-timeout 120000; \
     else \
       yarn install --network-timeout 120000; \
     fi
@@ -32,7 +35,9 @@ RUN if [ -s yarn.lock ]; then \
 # ---------- Stage 2: Build the application ----------
 FROM base AS builder
 
-RUN apk add --no-cache libc6-compat wget openssl
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      openssl wget ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /build
 
@@ -53,15 +58,21 @@ RUN cp next.config.docker.js next.config.js && \
     echo "=== next.config.js (v11) ===" && cat next.config.js
 
 # Patch Prisma schema: remove Abacus-specific hardcoded output path,
-# ensure Docker-compatible binary targets
+# add explicit generic output path, ensure Docker-compatible binary targets
 RUN if [ -f prisma/schema.prisma ]; then \
       echo "[Docker Build] Patching Prisma schema for Docker environment..." && \
       sed -i '/output.*=.*"\/home\/ubuntu/d' prisma/schema.prisma && \
+      if ! grep -q '^[[:space:]]*output' prisma/schema.prisma; then \
+        sed -i '/provider.*=.*"prisma-client-js"/a\    output = "../node_modules/.prisma/client"' prisma/schema.prisma; \
+      fi && \
       if ! grep -q 'linux-musl-openssl-3.0.x' prisma/schema.prisma; then \
-        sed -i 's/binaryTargets.*=.*/binaryTargets = ["native", "linux-musl-openssl-3.0.x", "linux-musl-arm64-openssl-3.0.x"]/' prisma/schema.prisma; \
+        sed -i 's/binaryTargets.*=.*/binaryTargets = ["native", "linux-musl-openssl-3.0.x", "linux-musl-arm64-openssl-3.0.x", "debian-openssl-3.0.x"]/' prisma/schema.prisma; \
+      fi && \
+      if ! grep -q 'debian-openssl-3.0.x' prisma/schema.prisma; then \
+        sed -i 's/binaryTargets.*=.*\[/binaryTargets = ["debian-openssl-3.0.x", /' prisma/schema.prisma; \
       fi && \
       echo "[Docker Build] Prisma schema patched successfully." && \
-      head -5 prisma/schema.prisma; \
+      head -7 prisma/schema.prisma; \
     else \
       echo "[Docker Build] ERROR: Prisma schema not found" && exit 1; \
     fi
@@ -81,6 +92,13 @@ RUN mkdir -p scripts/compiled && \
 # Clean previous build artifacts
 RUN rm -rf .next
 
+# Verify SWC works before attempting build
+RUN echo "[Docker Build] Verifying SWC compiler..." && \
+    node -e "try { require('@next/swc-linux-x64-gnu'); console.log('Native SWC (glibc x64): OK'); } catch(e) { console.log('Native SWC (glibc x64): not available -', e.message); }" && \
+    node -e "try { require('@next/swc-linux-arm64-gnu'); console.log('Native SWC (glibc arm64): OK'); } catch(e) { console.log('Native SWC (glibc arm64): not available -', e.message); }" && \
+    node -e "try { require('@next/swc-wasm-nodejs'); console.log('WASM SWC fallback: OK'); } catch(e) { console.log('WASM SWC fallback: not available -', e.message); }" && \
+    echo "[Docker Build] SWC verification complete."
+
 # Build Next.js WITHOUT standalone mode
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NEXT_OUTPUT_MODE=""
@@ -93,13 +111,15 @@ RUN ! test -d .next/standalone || (echo "Removing standalone" && rm -rf .next/st
 # ---------- Stage 3: Production runner ----------
 FROM base AS runner
 
-RUN apk add --no-cache libc6-compat openssl wget bash
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      openssl wget bash ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /srv/app
 
 # Runtime user
 RUN addgroup --system --gid 1001 nodejs && \
-    adduser --system --uid 1001 nextjs
+    adduser --system --uid 1001 --ingroup nodejs nextjs
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1

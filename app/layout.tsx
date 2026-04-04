@@ -57,9 +57,6 @@ export default function RootLayout({
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <meta name="apple-mobile-web-app-title" content="SSC" />
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-{/* Chatbot script loaded only in Abacus.AI environment */}
-        {process.env.ABACUSAI_API_KEY && (
-)}
       </head>
       <body className={`${inter.className} antialiased`}>
         <ServiceWorkerRegistration />

@@ -2,12 +2,12 @@
  * GitHub Integration Utility
  * Handles INCREMENTAL backup of application code to GitHub using Personal Access Token.
  * Only uploads files that have changed or been added since the last backup.
- * Applies GitHub Readiness transformations before backup:
- *   1. Prisma schema: remove output line, add Alpine binary targets
- *   2. Layout: remove Abacus.AI chatllm script
- *   3. next.config.js: remove outputFileTracingRoot, default to standalone
- *   4. Dockerfile & .dockerignore: ensure present
- *   5. Health check endpoint: ensure present
+ * Applies GitHub Readiness transformations before backup (v11 architecture):
+ *   1. Prisma schema: remove Abacus output, add generic output path, add Docker binary targets
+ *   2. Layout: remove entire Abacus.AI chatllm conditional block
+ *   3. next.config.js: remove outputFileTracingRoot & distDir (Docker uses next.config.docker.js)
+ *   4. Docker files: Dockerfile, .dockerignore, server.js, docker-entrypoint.sh, docker-compose.yml
+ *   5. Lock files: yarn.lock.bak included for Docker builds
  */
 import { Octokit } from '@octokit/rest';
 import * as fs from 'fs';
@@ -72,6 +72,7 @@ const INCLUDE_EXTENSIONS = [
   '.prisma', '.env.example', '.gitignore', '.txt', '.yaml', '.yml',
   '.png', '.jpg', '.jpeg', '.gif', '.svg', '.ico', '.webp',
   '.html', '.xml', '.webmanifest',
+  '.sh', '.bak',
 ];
 
 export interface GitHubConfig {
@@ -97,39 +98,59 @@ export interface TestConnectionResult {
 
 /**
  * Apply GitHub Readiness transformations to the project files.
- * Modifies Prisma schema in-memory content to remove output line
- * and add Alpine binary targets.
+ * Modifies file content in-memory before pushing to GitHub to ensure
+ * Docker/VPS deployment compatibility.
+ *
+ * Transforms:
+ *   1. Prisma schema: remove Abacus output path, add generic output, ensure Docker binary targets
+ *   2. layout.tsx: remove entire Abacus.AI chatllm conditional block
+ *   3. next.config.js: remove Abacus-specific settings (outputFileTracingRoot, distDir)
  */
 function applyGitHubReadiness(filePath: string, content: string): string {
   const fileName = path.basename(filePath);
 
   // Fix Prisma schema
   if (fileName === 'schema.prisma') {
-    // Remove the output line
+    // Remove the Abacus-specific hardcoded output line
     content = content.replace(/^\s*output\s*=\s*"[^"]*"\s*\n/m, '');
-    // Replace binaryTargets line with Alpine-compatible ones
+    // Add explicit generic output path (suppresses Prisma 7 deprecation warning)
+    if (!/^\s*output\s*=/m.test(content)) {
+      content = content.replace(
+        /(provider\s*=\s*"prisma-client-js")/,
+        '$1\n    output = "../node_modules/.prisma/client"'
+      );
+    }
+    // Replace binaryTargets line with Docker-compatible ones (both Debian and Alpine)
     content = content.replace(
       /binaryTargets\s*=\s*\[[^\]]*\]/,
       'binaryTargets = ["native", "linux-musl-openssl-3.0.x", "linux-musl-arm64-openssl-3.0.x", "debian-openssl-3.0.x"]'
     );
   }
 
-  // Remove Abacus.AI chatllm script from layout (not needed in self-hosted)
+  // Remove Abacus.AI chatllm script block from layout (not needed in self-hosted)
   if (fileName === 'layout.tsx') {
-    content = content.replace(/\s*<script src="https:\/\/apps\.abacus\.ai\/chatllm\/appllm-lib\.js"><\/script>\s*/g, '\n');
+    // Remove the full conditional block: comment + env check + script tag
+    content = content.replace(
+      /\s*\{\/\*.*?Chatbot.*?\*\/\}\s*\{process\.env\.ABACUSAI_API_KEY\s*&&\s*\(\s*<script\s+src="https:\/\/apps\.abacus\.ai\/chatllm\/appllm-lib\.js"><\/script>\s*\)\}/gs,
+      ''
+    );
+    // Fallback: also remove bare script tag if present without conditional wrapper
+    content = content.replace(
+      /\s*<script\s+src="https:\/\/apps\.abacus\.ai\/chatllm\/appllm-lib\.js"><\/script>\s*/g,
+      '\n'
+    );
   }
 
-  // Fix next.config.js for standalone Docker builds
+  // Fix next.config.js for Docker/VPS builds (v11 architecture)
   if (fileName === 'next.config.js') {
-    // Remove the require('path') line
+    // Remove the require('path') line (only needed for Abacus outputFileTracingRoot)
     content = content.replace(/^const path = require\('path'\);\s*\n/m, '');
     // Remove experimental outputFileTracingRoot (Abacus-specific nested dir)
     content = content.replace(/\s*experimental:\s*\{[^}]*outputFileTracingRoot[^}]*\},?\s*/g, '\n');
-    // Set output to standalone by default for Docker
-    content = content.replace(
-      /output:\s*process\.env\.NEXT_OUTPUT_MODE,/,
-      "output: process.env.NEXT_OUTPUT_MODE || 'standalone',"
-    );
+    // Remove distDir env var (Docker uses default .next)
+    content = content.replace(/\s*distDir:\s*process\.env\.[^,]*,?\s*\n/g, '\n');
+    // Keep output as env var only — do NOT default to standalone
+    // v11 architecture uses next.config.docker.js + server.js + next start
   }
 
   return content;
