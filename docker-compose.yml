@@ -1,12 +1,40 @@
+# ==============================================================================
+# Storyshot Creator — Docker Compose
+# Fully self-contained: App + PostgreSQL + optional Redis
+# ==============================================================================
+
 version: '3.8'
 
 services:
+  # ---------- Next.js Application ----------
   app:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
     ports:
       - '3000:3000'
     environment:
       - NODE_ENV=production
+      # Database (uses the 'db' service below)
+      - DATABASE_URL=postgresql://spb_user:${POSTGRES_PASSWORD:-changeme_strong_password}@db:5432/storyboard_prompt_builder?schema=public
+      # Auth — generate a unique secret: openssl rand -base64 32
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET:-change-me-to-a-random-secret}
+      - NEXTAUTH_URL=${NEXTAUTH_URL:-http://localhost:3000}
+      # LLM Provider — choose ONE:
+      # Option A: Google Gemini (free tier available)
+      #- GEMINI_API_KEY=${GEMINI_API_KEY}
+      # Option B: Any OpenAI-compatible API
+      #- LLM_API_KEY=${LLM_API_KEY}
+      #- LLM_API_BASE_URL=${LLM_API_BASE_URL:-https://api.openai.com/v1/chat/completions}
+      #- LLM_MODEL=${LLM_MODEL:-gpt-4o}
+      # Email (SMTP) — optional, for email verification & invites
+      #- SMTP_HOST=${SMTP_HOST}
+      #- SMTP_PORT=${SMTP_PORT:-587}
+      #- SMTP_USER=${SMTP_USER}
+      #- SMTP_PASS=${SMTP_PASS}
+      #- SMTP_FROM=${SMTP_FROM}
+      # Redis (optional caching) — uncomment redis service below
+      #- REDIS_URL=redis://redis:6379
     env_file:
       - .env
     volumes:
@@ -16,12 +44,13 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  # ---------- PostgreSQL Database ----------
   db:
     image: postgres:16-alpine
     environment:
       POSTGRES_DB: storyboard_prompt_builder
       POSTGRES_USER: spb_user
-      POSTGRES_PASSWORD: changeme_strong_password
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme_strong_password}
     volumes:
       - postgres-data:/var/lib/postgresql/data
     ports:
@@ -33,7 +62,7 @@ services:
       retries: 5
     restart: unless-stopped
 
-  # Optional: Redis for caching
+  # ---------- Redis (Optional — uncomment to enable caching) ----------
   # redis:
   #   image: redis:7-alpine
   #   ports:

@@ -1,9 +1,5 @@
-# Dependencies
+# Dependencies (will be installed fresh in Docker)
 node_modules
-
-# Symlinks (Abacus.AI specific)
-yarn.lock
-package-lock.json
 
 # Build outputs
 .next
@@ -12,26 +8,25 @@ out
 dist
 build
 
-# Development
+# Development / IDE
 .git
 .gitignore
+.vscode
+.idea
 .env.local
 .env.development
 .env.test
 *.log
-
-# IDE
-.vscode
-.idea
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Testing
 coverage
 .nyc_output
 
-# Misc
-*.md
-!README.md
+# OS files
+.DS_Store
+Thumbs.db
+
+# Abacus.AI platform files (not needed in Docker)
+.abacus.donotdelete
+.deploy
+
+# Docs (keep DOCKER-DEPLOY.md readable but skip others)
+# NOTE: Do NOT ignore yarn.lock.bak — it's the resolved lock file for Docker
