@@ -1,8 +1,13 @@
 # ==============================================================================
-# Storyshot Creator — Docker Build v11
+# Storyshot Creator — Docker Build v12
 # No dependencies on Abacus.AI platform
 # Uses server.js spawn wrapper + next start (no standalone mode)
 # Uses Debian slim (glibc) to avoid Alpine musl SWC compilation issues
+#
+# NOTE: The GitHub backup (lib/github.ts → applyGitHubReadiness) already
+# transforms Prisma schema, package.json, .yarnrc.yml, and next.config.js
+# before pushing to this repo.  The Dockerfile only does a lightweight
+# safety-check — not a full re-patch — to stay idempotent.
 # ==============================================================================
 
 FROM node:20-slim AS base
@@ -16,16 +21,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /build
 
-# Copy package manifest and any available lock file
+# Copy package manifest and lock file
 COPY package.json ./
 COPY yarn.loc[k] yarn.lock.ba[k] ./
 
-# Rename yarn.lock.bak → yarn.lock if it exists and yarn.lock is missing/empty
+# Use yarn.lock.bak as the canonical lock file
 RUN if [ -f yarn.lock.bak ] && [ ! -s yarn.lock ]; then \
       cp yarn.lock.bak yarn.lock; \
     fi
 
-# Install dependencies (--frozen-lockfile if lock exists, otherwise fresh install)
+# Install dependencies
 RUN if [ -s yarn.lock ]; then \
       yarn install --frozen-lockfile --network-timeout 120000 || yarn install --network-timeout 120000; \
     else \
@@ -41,72 +46,49 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /build
 
-# Copy dependencies from deps stage
 COPY --from=deps /build/node_modules ./node_modules
 COPY --from=deps /build/package.json ./
 COPY --from=deps /build/yarn.lock ./
 
-# Copy full source
 COPY . .
 
-# Ensure yarn.lock is a real file (not a symlink to Abacus.AI platform paths)
+# Resolve symlinks left over from dev environment
 RUN if [ -L yarn.lock ]; then rm -f yarn.lock; fi; \
     if [ -f yarn.lock.bak ] && [ ! -s yarn.lock ]; then cp yarn.lock.bak yarn.lock; fi
 
-# Use clean next.config.js for Docker (no standalone mode, no experimental options)
-RUN cp next.config.docker.js next.config.js && \
-    echo "=== next.config.js (v11) ===" && cat next.config.js
+# Use Docker-specific next.config (no standalone, no experimental)
+RUN cp next.config.docker.js next.config.js
 
-# Patch Prisma schema: remove Abacus-specific hardcoded output path,
-# add explicit generic output path, ensure Docker-compatible binary targets
+# Safety-check: ensure Prisma schema has correct output + binary targets
+# (backup already applies these — this is a no-op guard for manual clones)
 RUN if [ -f prisma/schema.prisma ]; then \
-      echo "[Docker Build] Patching Prisma schema for Docker environment..." && \
       sed -i '/output.*=.*"\/home\/ubuntu/d' prisma/schema.prisma && \
       if ! grep -q '^[[:space:]]*output' prisma/schema.prisma; then \
         sed -i '/provider.*=.*"prisma-client-js"/a\    output = "../node_modules/.prisma/client"' prisma/schema.prisma; \
       fi && \
-      if ! grep -q 'linux-musl-openssl-3.0.x' prisma/schema.prisma; then \
+      if ! grep -q 'debian-openssl-3.0.x' prisma/schema.prisma; then \
         sed -i 's/binaryTargets.*=.*/binaryTargets = ["native", "linux-musl-openssl-3.0.x", "linux-musl-arm64-openssl-3.0.x", "debian-openssl-3.0.x"]/' prisma/schema.prisma; \
       fi && \
-      if ! grep -q 'debian-openssl-3.0.x' prisma/schema.prisma; then \
-        sed -i 's/binaryTargets.*=.*\[/binaryTargets = ["debian-openssl-3.0.x", /' prisma/schema.prisma; \
-      fi && \
-      echo "[Docker Build] Prisma schema patched successfully." && \
-      head -7 prisma/schema.prisma; \
+      echo "[Docker] Prisma schema OK"; \
     else \
-      echo "[Docker Build] ERROR: Prisma schema not found" && exit 1; \
+      echo "[Docker] ERROR: prisma/schema.prisma not found" && exit 1; \
     fi
 
-# Generate Prisma client
 RUN npx prisma generate
 
-# Compile seed script to JS so it can run without tsx in production
+# Compile seed script to JS for production (no tsx at runtime)
 RUN mkdir -p scripts/compiled && \
-    (npx esbuild scripts/seed.ts --bundle --platform=node --outfile=scripts/compiled/seed.js \
+    npx esbuild scripts/seed.ts --bundle --platform=node \
+      --outfile=scripts/compiled/seed.js \
       --external:@prisma/client --external:bcryptjs 2>/dev/null || \
-    npx tsc scripts/seed.ts --outDir scripts/compiled \
-      --esModuleInterop --module commonjs --target es2020 \
-      --resolveJsonModule --skipLibCheck --types node 2>/dev/null || \
-    echo "[Docker Build] WARNING: Seed script compilation failed")
+    echo "[Docker] WARNING: Seed compilation skipped"
 
-# Clean previous build artifacts
 RUN rm -rf .next
 
-# Verify SWC works before attempting build
-RUN echo "[Docker Build] Verifying SWC compiler..." && \
-    node -e "try { require('@next/swc-linux-x64-gnu'); console.log('Native SWC (glibc x64): OK'); } catch(e) { console.log('Native SWC (glibc x64): not available -', e.message); }" && \
-    node -e "try { require('@next/swc-linux-arm64-gnu'); console.log('Native SWC (glibc arm64): OK'); } catch(e) { console.log('Native SWC (glibc arm64): not available -', e.message); }" && \
-    node -e "try { require('@next/swc-wasm-nodejs'); console.log('WASM SWC fallback: OK'); } catch(e) { console.log('WASM SWC fallback: not available -', e.message); }" && \
-    echo "[Docker Build] SWC verification complete."
-
-# Build Next.js WITHOUT standalone mode
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NEXT_OUTPUT_MODE=""
 
 RUN yarn build
-
-# Verify NO standalone was created
-RUN ! test -d .next/standalone || (echo "Removing standalone" && rm -rf .next/standalone)
 
 # ---------- Stage 3: Production runner ----------
 FROM base AS runner
@@ -117,7 +99,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /srv/app
 
-# Runtime user
 RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 --ingroup nodejs nextjs
 
@@ -127,29 +108,19 @@ ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 ENV DATA_DIR=/srv/app/data
 
-# Copy from builder - full node_modules (not standalone traced deps)
 COPY --from=builder --chown=nextjs:nodejs /build/package.json ./
 COPY --from=builder --chown=nextjs:nodejs /build/next.config.js ./
 COPY --from=builder --chown=nextjs:nodejs /build/node_modules ./node_modules
 COPY --from=builder --chown=nextjs:nodejs /build/.next ./.next
 COPY --from=builder --chown=nextjs:nodejs /build/public ./public
-
-# Copy Prisma schema + client for runtime migrations
 COPY --from=builder --chown=nextjs:nodejs /build/prisma ./prisma
-
-# Copy seed script (compiled JS version)
 COPY --from=builder --chown=nextjs:nodejs /build/scripts ./scripts
-
-# Copy server.js that spawns next start (works with deployment platforms)
 COPY --from=builder --chown=nextjs:nodejs /build/server.js ./server.js
 
-# Create data directory for storyboard images (mount as Docker volume)
 RUN mkdir -p /srv/app/data/images && chown -R nextjs:nodejs /srv/app
 
-# Ensure Prisma CLI is in PATH
 ENV PATH="/srv/app/node_modules/.bin:$PATH"
 
-# Copy entrypoint script (external file avoids heredoc escaping issues)
 COPY --from=builder --chown=nextjs:nodejs /build/docker-entrypoint.sh ./docker-entrypoint.sh
 RUN chmod +x /srv/app/docker-entrypoint.sh
 
@@ -157,7 +128,6 @@ USER nextjs
 
 EXPOSE 3000
 
-# Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
   CMD wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1
 

@@ -52,8 +52,11 @@ coverage
 .abacus.donotdelete
 .deploy
 
+# Redundant files
+docker-prepare-prisma.sh
+
 # IMPORTANT: Do NOT ignore these — needed for Docker builds:
-# - yarn.lock.bak (platform-resolved lock file)
+# - yarn.lock.bak (canonical lock file)
 # - package.json
 # - prisma/
 # - server.js
