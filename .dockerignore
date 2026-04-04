@@ -1,0 +1,35 @@
+# Dependencies (will be installed fresh in Docker)
+node_modules
+
+# Build outputs
+.next
+.build
+out
+dist
+build
+
+# Development / IDE
+.git
+.gitignore
+.vscode
+.idea
+.env.local
+.env.development
+.env.test
+*.log
+coverage
+.nyc_output
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Abacus.AI platform files (not needed in Docker)
+.abacus.donotdelete
+.deploy
+
+# IMPORTANT: Do NOT ignore these — needed for Docker builds:
+# - yarn.lock (if real file exists in repo)
+# - yarn.lock.bak (platform-resolved lock file, if available)
+# - package.json
+# - prisma/
