@@ -1,0 +1,37 @@
+# Dependencies
+node_modules
+
+# Symlinks (Abacus.AI specific)
+yarn.lock
+package-lock.json
+
+# Build outputs
+.next
+.build
+out
+dist
+build
+
+# Development
+.git
+.gitignore
+.env.local
+.env.development
+.env.test
+*.log
+
+# IDE
+.vscode
+.idea
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Testing
+coverage
+.nyc_output
+
+# Misc
+*.md
+!README.md
