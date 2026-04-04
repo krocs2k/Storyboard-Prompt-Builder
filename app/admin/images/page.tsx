@@ -6,10 +6,34 @@ import { useEffect, useState, useRef } from 'react';
 import {
   Loader2, ArrowLeft, Download, Upload, Image as ImageIcon,
   AlertCircle, CheckCircle, HardDrive, FileArchive, Trash2,
-  Shrink, Zap
+  Shrink, Zap, Link2, FolderOpen, BarChart3, Wand2
 } from 'lucide-react';
 import Link from 'next/link';
 import JSZip from 'jszip';
+
+interface CategoryStats {
+  label: string;
+  section: string;
+  stats: {
+    total: number;
+    withImage: number;
+    localFound: number;
+    missing: number;
+    externalCount: number;
+  };
+}
+
+interface SubdirStats {
+  fileCount: number;
+  sizeMB: number;
+}
+
+interface StatsData {
+  fileCount: number;
+  totalSizeMB: number;
+  categories: Record<string, CategoryStats>;
+  subdirs: Record<string, SubdirStats>;
+}
 
 interface ResizePreview {
   totalFiles: number;
@@ -33,6 +57,15 @@ interface ResizeResult {
   errors?: string[];
 }
 
+interface AssociateResult {
+  totalStyles: number;
+  summary: { alreadyCorrectCount: number; toAssociateCount: number; noMatchCount: number };
+  toAssociate: Array<{ styleId: string; styleName: string; currentImage: string; newImage: string; matchType: string }>;
+  alreadyCorrect: Array<{ styleId: string; styleName: string; image: string }>;
+  noMatch: Array<{ styleId: string; styleName: string; currentImage: string }>;
+  message?: string;
+}
+
 export default function ImagesAdminPage() {
   const sessionData = useSession();
   const session = sessionData?.data;
@@ -40,24 +73,29 @@ export default function ImagesAdminPage() {
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [stats, setStats] = useState<{ fileCount: number; totalSizeMB: number } | null>(null);
+  const [stats, setStats] = useState<StatsData | null>(null);
   const [exporting, setExporting] = useState(false);
   const [importing, setImporting] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Resize worker state
+  // Resize state
   const [resizing, setResizing] = useState(false);
   const [resizePreview, setResizePreview] = useState<ResizePreview | null>(null);
   const [resizeResult, setResizeResult] = useState<ResizeResult | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
+
+  // Associate state
+  const [associating, setAssociating] = useState(false);
+  const [associatePreview, setAssociatePreview] = useState<AssociateResult | null>(null);
+  const [associateLoading, setAssociateLoading] = useState(false);
 
   useEffect(() => { setMounted(true); }, []);
 
   useEffect(() => {
     if (!mounted) return;
     if (status === 'unauthenticated') router.replace('/login');
-    else if (status === 'authenticated' && session?.user?.role !== 'admin') router.replace('/');
+    else if (status === 'authenticated' && (session?.user as any)?.role !== 'admin') router.replace('/');
   }, [status, session, router, mounted]);
 
   const fetchStats = async () => {
@@ -74,425 +112,454 @@ export default function ImagesAdminPage() {
   };
 
   useEffect(() => {
-    if (session?.user?.role === 'admin') fetchStats();
+    if (session?.user && (session.user as any).role === 'admin') fetchStats();
   }, [session]);
+
+  const showMsg = (type: 'success' | 'error', text: string) => {
+    setMessage({ type, text });
+    setTimeout(() => setMessage(null), 5000);
+  };
 
   const handleExport = async () => {
     setExporting(true);
-    setMessage(null);
     try {
       const res = await fetch('/api/admin/images/export');
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || 'Export failed');
-      }
+      if (!res.ok) throw new Error('Export failed');
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `storyshot-images-${new Date().toISOString().slice(0, 10)}.zip`;
-      document.body.appendChild(a);
+      a.download = `images-export-${new Date().toISOString().split('T')[0]}.zip`;
       a.click();
-      a.remove();
       URL.revokeObjectURL(url);
-      setMessage({ type: 'success', text: 'Images exported successfully. Check your downloads.' });
-    } catch (err) {
-      setMessage({ type: 'error', text: err instanceof Error ? err.message : 'Export failed' });
+      showMsg('success', 'Images exported successfully');
+    } catch (err: any) {
+      showMsg('error', err.message || 'Export failed');
     } finally {
       setExporting(false);
     }
   };
 
-  const [importProgress, setImportProgress] = useState('');
-
   const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
-    if (!file.name.endsWith('.zip')) {
-      setMessage({ type: 'error', text: 'Please select a ZIP file.' });
-      return;
-    }
-
-    if (!confirm(
-      `Import "${file.name}"?\n\nThis will DELETE all existing dropdown images and replace them with the contents of this ZIP file. This action cannot be undone.\n\nContinue?`
-    )) {
-      if (fileInputRef.current) fileInputRef.current.value = '';
-      return;
-    }
-
     setImporting(true);
-    setMessage(null);
-    setImportProgress('Reading ZIP file...');
-
     try {
-      // Extract ZIP client-side
-      const arrayBuffer = await file.arrayBuffer();
-      const zip = await JSZip.loadAsync(arrayBuffer);
-
-      // Collect image entries
-      const entries: Array<{ path: string; zipObj: JSZip.JSZipObject }> = [];
-      zip.forEach((relativePath, zipEntry) => {
-        if (zipEntry.dir) return;
-        if (relativePath === 'manifest.json') return;
-        if (relativePath.startsWith('images/')) {
-          const subPath = relativePath.slice('images/'.length);
-          if (subPath) entries.push({ path: subPath, zipObj: zipEntry });
-        }
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await fetch('/api/admin/images/import', {
+        method: 'POST',
+        body: formData,
       });
-
-      if (entries.length === 0) {
-        throw new Error('No image files found in ZIP. Expected files in an "images/" folder.');
-      }
-
-      // Determine subdirs to clear
-      const subdirs = new Set<string>();
-      for (const { path: p } of entries) {
-        const parts = p.split('/');
-        if (parts.length > 1) subdirs.add(parts[0]);
-      }
-      // If flat structure, clear data/
-      const subdirsStr = subdirs.size > 0 ? [...subdirs].join(',') : 'data';
-
-      // Build batches (~3 MB each to stay under proxy limits)
-      const MAX_BATCH_BYTES = 3 * 1024 * 1024;
-      const batches: Array<Array<{ path: string; blob: Blob }>> = [];
-      let currentBatch: Array<{ path: string; blob: Blob }> = [];
-      let currentSize = 0;
-
-      setImportProgress(`Extracting ${entries.length} files...`);
-
-      for (let i = 0; i < entries.length; i++) {
-        const data = await entries[i].zipObj.async('blob');
-        let destPath = entries[i].path;
-        // Flat ZIP → prefix with data/
-        if (subdirs.size === 0 && !destPath.includes('/')) {
-          destPath = `data/${destPath}`;
-        }
-        currentBatch.push({ path: destPath, blob: data });
-        currentSize += data.size;
-
-        if (currentSize >= MAX_BATCH_BYTES || i === entries.length - 1) {
-          batches.push(currentBatch);
-          currentBatch = [];
-          currentSize = 0;
-        }
-      }
-
-      // Upload batches
-      let totalImported = 0;
-      let totalResized = 0;
-
-      for (let b = 0; b < batches.length; b++) {
-        const batch = batches[b];
-        setImportProgress(`Uploading batch ${b + 1}/${batches.length} (${batch.length} files)...`);
-
-        const formData = new FormData();
-        formData.append('action', b === 0 ? 'init' : 'append');
-        if (b === 0) formData.append('subdirs', subdirsStr);
-
-        for (const item of batch) {
-          formData.append('files[]', item.blob, item.path.split('/').pop() || 'image');
-          formData.append('paths[]', item.path);
-        }
-
-        const res = await fetch('/api/admin/images/import', {
-          method: 'POST',
-          body: formData,
-        });
-
-        const contentType = res.headers.get('content-type') || '';
-        if (!contentType.includes('application/json')) {
-          throw new Error(`Server error on batch ${b + 1} (HTTP ${res.status}). Try re-importing.`);
-        }
-
-        const data = await res.json();
-        if (!data.success) {
-          throw new Error(data.error || `Batch ${b + 1} failed`);
-        }
-        totalImported += data.imported || 0;
-        totalResized += data.resized || 0;
-      }
-
-      const subdirList = subdirs.size > 0 ? ` across ${subdirs.size} directories (${[...subdirs].join(', ')})` : '';
-      setMessage({
-        type: 'success',
-        text: `Successfully imported ${totalImported} images${subdirList} (${totalResized} auto-resized to 384×384). They are now active in the system.`
-      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Import failed');
+      showMsg('success', `Imported ${data.imported} images (${data.skipped} skipped, ${data.resized} auto-resized)`);
       fetchStats();
-    } catch (err) {
-      setMessage({ type: 'error', text: err instanceof Error ? err.message : 'Import failed' });
+    } catch (err: any) {
+      showMsg('error', err.message || 'Import failed');
     } finally {
       setImporting(false);
-      setImportProgress('');
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 
   const handleResizePreview = async () => {
     setPreviewLoading(true);
-    setResizeResult(null);
-    setMessage(null);
     try {
-      const res = await fetch('/api/admin/images/resize?dryRun=true&size=384&quality=80', { method: 'POST' });
+      const res = await fetch('/api/admin/images/resize?preview=true');
       const data = await res.json();
-      if (data.error) throw new Error(data.error);
-      setResizePreview(data as ResizePreview);
+      setResizePreview(data);
     } catch (err) {
-      setMessage({ type: 'error', text: err instanceof Error ? err.message : 'Failed to analyze images' });
+      showMsg('error', 'Failed to preview resize');
     } finally {
       setPreviewLoading(false);
     }
   };
 
   const handleResize = async () => {
-    if (!confirm(
-      'Resize all oversized images to 384×384?\n\nThis will overwrite the original files in-place. Make sure you have exported a backup first.\n\nContinue?'
-    )) return;
-
     setResizing(true);
-    setMessage(null);
-    setResizeResult(null);
     try {
-      const res = await fetch('/api/admin/images/resize?size=384&quality=80', { method: 'POST' });
+      const res = await fetch('/api/admin/images/resize', { method: 'POST' });
       const data = await res.json();
-      if (data.error) throw new Error(data.error);
-      setResizeResult(data as ResizeResult);
+      setResizeResult(data);
       setResizePreview(null);
-      setMessage({
-        type: 'success',
-        text: `Resized ${data.processed} images. Saved ${data.savedMB} MB (${data.originalSizeMB} MB → ${data.newSizeMB} MB).`
-      });
+      showMsg('success', `Resized ${data.processed} images, saved ${data.savedMB}MB`);
       fetchStats();
     } catch (err) {
-      setMessage({ type: 'error', text: err instanceof Error ? err.message : 'Resize failed' });
+      showMsg('error', 'Resize failed');
     } finally {
       setResizing(false);
     }
   };
 
+  // Auto-associate movie style images
+  const handleAssociatePreview = async () => {
+    setAssociateLoading(true);
+    try {
+      const res = await fetch('/api/admin/images/associate');
+      const data = await res.json();
+      setAssociatePreview(data);
+    } catch (err) {
+      showMsg('error', 'Failed to preview associations');
+    } finally {
+      setAssociateLoading(false);
+    }
+  };
+
+  const handleAssociate = async () => {
+    setAssociating(true);
+    try {
+      const res = await fetch('/api/admin/images/associate', { method: 'POST' });
+      const data = await res.json();
+      showMsg('success', data.message || `Associated ${data.summary?.toAssociateCount || 0} styles`);
+      setAssociatePreview(null);
+      fetchStats();
+    } catch (err) {
+      showMsg('error', 'Association failed');
+    } finally {
+      setAssociating(false);
+    }
+  };
+
+  const getCategoryHealth = (cat: CategoryStats) => {
+    const { total, withImage, localFound, externalCount } = cat.stats;
+    const covered = localFound + externalCount;
+    if (total === 0) return { color: 'gray', label: 'Empty' };
+    const pct = covered / total;
+    if (pct >= 0.95) return { color: 'emerald', label: 'Complete' };
+    if (pct >= 0.5) return { color: 'amber', label: 'Partial' };
+    return { color: 'red', label: 'Missing' };
+  };
+
   if (!mounted || status === 'loading') {
     return (
-      <div className="min-h-screen flex items-center justify-center ">
-        <Loader2 className="w-8 h-8 animate-spin text-cyan-500" />
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-rose-500" />
       </div>
     );
   }
 
-  if (status !== 'authenticated' || session?.user?.role !== 'admin') return null;
+  if (status !== 'authenticated' || (session?.user as any)?.role !== 'admin') return null;
+
+  const sectionOrder = ['Section 1', 'Section 2', 'Section 3', 'Section 4', 'Section 5'];
 
   return (
-    <div className="min-h-screen ">
-      <div className="max-w-3xl mx-auto p-6">
+    <div className="min-h-screen">
+      <div className="max-w-7xl mx-auto p-6">
+        {/* Header */}
         <div className="mb-8">
-          <Link href="/admin" className="inline-flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-4 transition-colors">
-            <ArrowLeft className="w-4 h-4" /> Back to Admin
-          </Link>
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Dropdown Image Library</h1>
-          <p className="text-gray-500">Export and import the thumbnail images used in selection dropdowns</p>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <Link href="/admin" className="p-2 bg-gray-700 rounded-lg hover:bg-gray-600 transition-colors">
+                <ArrowLeft className="w-5 h-5 text-white" />
+              </Link>
+              <div>
+                <h1 className="text-3xl font-bold text-gray-900 mb-1">Image Management</h1>
+                <p className="text-gray-600">Manage images across all prompt builder categories</p>
+              </div>
+            </div>
+          </div>
         </div>
 
-        {loading ? (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="w-8 h-8 animate-spin text-cyan-500" />
+        {/* Message */}
+        {message && (
+          <div className={`mb-6 px-4 py-3 rounded-lg text-sm flex items-center gap-2 ${
+            message.type === 'success' ? 'bg-emerald-500/20 border border-emerald-500/30 text-emerald-300' : 'bg-red-500/20 border border-red-500/30 text-red-300'
+          }`}>
+            {message.type === 'success' ? <CheckCircle className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
+            {message.text}
           </div>
-        ) : (
-          <div className="space-y-6">
-            {/* Stats */}
-            <div className="bg-gray-800 border border-gray-700 shadow-lg rounded-xl p-6">
-              <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-                <HardDrive className="w-5 h-5 text-cyan-400" />
-                Current Library
-              </h2>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="bg-gray-900/50 rounded-lg p-4 text-center">
-                  <div className="text-3xl font-bold text-white">{stats?.fileCount ?? 0}</div>
-                  <div className="text-gray-400 text-sm mt-1">Image Files</div>
+        )}
+
+        {loading ? (
+          <div className="flex items-center justify-center py-20">
+            <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
+          </div>
+        ) : stats ? (
+          <>
+            {/* Overview Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+              <div className="bg-gray-800 border border-gray-700 rounded-xl p-5">
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="p-2 bg-amber-500/20 rounded-lg">
+                    <ImageIcon className="w-5 h-5 text-amber-400" />
+                  </div>
+                  <span className="text-gray-400 text-sm">Total Images on Disk</span>
                 </div>
-                <div className="bg-gray-900/50 rounded-lg p-4 text-center">
-                  <div className="text-3xl font-bold text-white">{stats?.totalSizeMB ?? 0} MB</div>
-                  <div className="text-gray-400 text-sm mt-1">Total Size</div>
-                </div>
+                <p className="text-3xl font-bold text-white">{stats.fileCount}</p>
+                <p className="text-gray-500 text-xs mt-1">{stats.totalSizeMB} MB total</p>
               </div>
-              <p className="text-gray-500 text-xs mt-3">
-                These images are used as thumbnails in the selection modals (Image Types, Shot Types, Lighting, Cameras, Lenses, Film Stocks, Photographers, Movies, Filters, Focal Lengths).
-              </p>
+
+              <div className="bg-gray-800 border border-gray-700 rounded-xl p-5">
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="p-2 bg-cyan-500/20 rounded-lg">
+                    <FolderOpen className="w-5 h-5 text-cyan-400" />
+                  </div>
+                  <span className="text-gray-400 text-sm">Directories</span>
+                </div>
+                <p className="text-3xl font-bold text-white">{Object.keys(stats.subdirs).length}</p>
+                <p className="text-gray-500 text-xs mt-1">
+                  {Object.entries(stats.subdirs).map(([name, s]) => `${name}: ${s.fileCount}`).join(', ')}
+                </p>
+              </div>
+
+              <div className="bg-gray-800 border border-gray-700 rounded-xl p-5">
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="p-2 bg-purple-500/20 rounded-lg">
+                    <BarChart3 className="w-5 h-5 text-purple-400" />
+                  </div>
+                  <span className="text-gray-400 text-sm">Categories</span>
+                </div>
+                <p className="text-3xl font-bold text-white">{Object.keys(stats.categories).length}</p>
+                <p className="text-gray-500 text-xs mt-1">
+                  {Object.values(stats.categories).reduce((a, c) => a + c.stats.total, 0)} total items
+                </p>
+              </div>
             </div>
 
-            {/* Export */}
-            <div className="bg-gray-800 border border-gray-700 shadow-lg rounded-xl p-6">
+            {/* Per-Category Cards by Section */}
+            <h2 className="text-xl font-semibold text-white mb-4 flex items-center gap-2">
+              <BarChart3 className="w-5 h-5 text-amber-400" />
+              Category Breakdown
+            </h2>
+
+            {sectionOrder.map(section => {
+              const cats = Object.entries(stats.categories).filter(([, c]) => c.section === section);
+              if (cats.length === 0) return null;
+              return (
+                <div key={section} className="mb-6">
+                  <h3 className="text-sm font-medium text-gray-400 mb-3 uppercase tracking-wider">{section}</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                    {cats.map(([key, cat]) => {
+                      const health = getCategoryHealth(cat);
+                      const { total, withImage, localFound, missing, externalCount } = cat.stats;
+                      const covered = localFound + externalCount;
+                      const pct = total > 0 ? Math.round((covered / total) * 100) : 0;
+                      const manageHref = key === 'movie-styles' ? '/admin/movie-styles' : `/admin/categories/${key}`;
+                      return (
+                        <Link key={key} href={manageHref} className="block">
+                          <div className="bg-gray-800 border border-gray-700 rounded-xl p-5 hover:border-amber-500/40 hover:shadow-lg hover:shadow-amber-500/5 transition-all cursor-pointer group">
+                            <div className="flex items-center justify-between mb-3">
+                              <h4 className="text-white font-semibold text-sm group-hover:text-amber-300 transition-colors">{cat.label}</h4>
+                              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                                health.color === 'emerald' ? 'bg-emerald-500/20 text-emerald-400' :
+                                health.color === 'amber' ? 'bg-amber-500/20 text-amber-400' :
+                                health.color === 'red' ? 'bg-red-500/20 text-red-400' :
+                                'bg-gray-600/20 text-gray-500'
+                              }`}>{health.label}</span>
+                            </div>
+
+                            {/* Progress bar */}
+                            <div className="w-full h-2 bg-gray-700 rounded-full mb-3 overflow-hidden">
+                              <div
+                                className={`h-full rounded-full transition-all ${
+                                  health.color === 'emerald' ? 'bg-emerald-500' :
+                                  health.color === 'amber' ? 'bg-amber-500' : 'bg-red-500'
+                                }`}
+                                style={{ width: `${pct}%` }}
+                              />
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                              <div className="text-gray-500">Total items</div>
+                              <div className="text-gray-300 text-right">{total}</div>
+                              <div className="text-gray-500">With image field</div>
+                              <div className="text-gray-300 text-right">{withImage}</div>
+                              <div className="text-gray-500">Local files found</div>
+                              <div className="text-emerald-400 text-right">{localFound}</div>
+                              {externalCount > 0 && (
+                                <>
+                                  <div className="text-gray-500">External URLs</div>
+                                  <div className="text-cyan-400 text-right">{externalCount}</div>
+                                </>
+                              )}
+                              {missing > 0 && (
+                                <>
+                                  <div className="text-gray-500">Missing files</div>
+                                  <div className="text-red-400 text-right">{missing}</div>
+                                </>
+                              )}
+                            </div>
+
+                            <div className="mt-3 pt-3 border-t border-gray-700">
+                              <span className="text-xs text-amber-400 group-hover:text-amber-300 flex items-center gap-1">
+                                <Wand2 className="w-3 h-3" /> Manage {cat.label} →
+                              </span>
+                            </div>
+                          </div>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+
+            {/* Auto-Associate Movie Styles */}
+            <div className="mt-8 bg-gray-800 border border-gray-700 rounded-xl p-6">
               <h2 className="text-lg font-semibold text-white mb-2 flex items-center gap-2">
-                <Download className="w-5 h-5 text-emerald-400" />
-                Export Images
+                <Link2 className="w-5 h-5 text-cyan-400" />
+                Auto-Associate Movie Style Images
               </h2>
               <p className="text-gray-400 text-sm mb-4">
-                Download all dropdown images as a ZIP archive. Includes a manifest.json mapping each image to its category and item.
+                Scans the <code className="text-cyan-400/80 bg-gray-900 px-1.5 py-0.5 rounded text-xs">/images/movie-styles/</code> directory
+                and matches image filenames to movie style IDs. Creates database overrides so styles show their correct images.
               </p>
-              <button
-                onClick={handleExport}
-                disabled={exporting || !stats?.fileCount}
-                className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-gray-700 disabled:text-gray-500 text-white rounded-lg transition-colors font-medium"
-              >
-                {exporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileArchive className="w-4 h-4" />}
-                {exporting ? 'Creating ZIP...' : `Export ${stats?.fileCount ?? 0} Images as ZIP`}
-              </button>
+
+              {associatePreview && (
+                <div className="mb-4 p-4 bg-gray-900 rounded-lg border border-gray-700">
+                  <div className="grid grid-cols-3 gap-4 text-center mb-4">
+                    <div>
+                      <div className="text-2xl font-bold text-emerald-400">{associatePreview.summary.alreadyCorrectCount}</div>
+                      <div className="text-xs text-gray-500">Already Correct</div>
+                    </div>
+                    <div>
+                      <div className="text-2xl font-bold text-amber-400">{associatePreview.summary.toAssociateCount}</div>
+                      <div className="text-xs text-gray-500">To Associate</div>
+                    </div>
+                    <div>
+                      <div className="text-2xl font-bold text-gray-500">{associatePreview.summary.noMatchCount}</div>
+                      <div className="text-xs text-gray-500">No Match</div>
+                    </div>
+                  </div>
+                  {associatePreview.toAssociate.length > 0 && (
+                    <div className="max-h-48 overflow-y-auto space-y-1">
+                      {associatePreview.toAssociate.map(a => (
+                        <div key={a.styleId} className="flex items-center justify-between text-xs py-1 px-2 bg-gray-800 rounded">
+                          <span className="text-white">{a.styleName}</span>
+                          <span className="text-gray-500">{a.matchType}</span>
+                          <span className="text-cyan-400 truncate max-w-[200px]">{a.newImage}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="flex gap-3">
+                <button
+                  onClick={handleAssociatePreview}
+                  disabled={associateLoading}
+                  className="flex items-center gap-2 px-4 py-2 bg-gray-700 hover:bg-gray-600 text-gray-200 rounded-lg text-sm transition-colors disabled:opacity-50"
+                >
+                  {associateLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <BarChart3 className="w-4 h-4" />}
+                  Preview
+                </button>
+                <button
+                  onClick={handleAssociate}
+                  disabled={associating || !!(associatePreview && associatePreview.summary.toAssociateCount === 0)}
+                  className="flex items-center gap-2 px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+                >
+                  {associating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Link2 className="w-4 h-4" />}
+                  Associate Images
+                </button>
+              </div>
             </div>
 
-            {/* Import */}
-            <div className="bg-gray-800 border border-gray-700 shadow-lg rounded-xl p-6">
-              <h2 className="text-lg font-semibold text-white mb-2 flex items-center gap-2">
-                <Upload className="w-5 h-5 text-amber-400" />
-                Import Images
-              </h2>
-              <p className="text-gray-400 text-sm mb-2">
-                Upload a ZIP file to replace all existing dropdown images. The ZIP should contain an <code className="text-amber-400 bg-gray-900 px-1 rounded">images/</code> folder with the image files.
-              </p>
-              <div className="bg-red-500/5 border border-red-500/20 rounded-lg p-3 mb-4">
-                <div className="flex items-start gap-2">
-                  <Trash2 className="w-4 h-4 text-red-400 mt-0.5 flex-shrink-0" />
-                  <p className="text-red-400/80 text-xs"><strong>Warning:</strong> Importing will delete all existing images first, then replace them with the ZIP contents. Make sure to export a backup before importing.</p>
-                </div>
+            {/* Import / Export / Resize */}
+            <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Export */}
+              <div className="bg-gray-800 border border-gray-700 rounded-xl p-6">
+                <h3 className="text-white font-semibold mb-2 flex items-center gap-2">
+                  <Download className="w-4 h-4 text-amber-400" />
+                  Export Images
+                </h3>
+                <p className="text-gray-500 text-xs mb-4">
+                  Download all images as a ZIP archive for backup or transfer.
+                </p>
+                <button
+                  onClick={handleExport}
+                  disabled={exporting}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-amber-600 hover:bg-amber-500 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+                >
+                  {exporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileArchive className="w-4 h-4" />}
+                  {exporting ? 'Exporting...' : 'Export ZIP'}
+                </button>
               </div>
-              <label className="relative">
+
+              {/* Import */}
+              <div className="bg-gray-800 border border-gray-700 rounded-xl p-6">
+                <h3 className="text-white font-semibold mb-2 flex items-center gap-2">
+                  <Upload className="w-4 h-4 text-emerald-400" />
+                  Import Images
+                </h3>
+                <p className="text-gray-500 text-xs mb-4">
+                  Upload a ZIP of images. Matching directory structure preserved.
+                </p>
                 <input
                   ref={fileInputRef}
                   type="file"
                   accept=".zip"
                   onChange={handleImport}
-                  disabled={importing}
                   className="hidden"
                 />
                 <button
                   onClick={() => fileInputRef.current?.click()}
                   disabled={importing}
-                  className="flex items-center gap-2 px-5 py-2.5 bg-amber-600 hover:bg-amber-500 disabled:bg-gray-700 disabled:text-gray-500 text-white rounded-lg transition-colors font-medium cursor-pointer"
+                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
                 >
                   {importing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-                  {importing ? (importProgress || 'Importing...') : 'Select ZIP to Import'}
+                  {importing ? 'Importing...' : 'Import ZIP'}
                 </button>
-              </label>
-              {importing && importProgress && (
-                <p className="text-xs text-gray-400 mt-1">{importProgress}</p>
-              )}
-            </div>
+              </div>
 
-            {/* Resize Worker */}
-            <div className="bg-gray-800 border border-gray-700 shadow-lg rounded-xl p-6">
-              <h2 className="text-lg font-semibold text-white mb-2 flex items-center gap-2">
-                <Shrink className="w-5 h-5 text-violet-400" />
-                Optimize Images
-              </h2>
-              <p className="text-gray-400 text-sm mb-4">
-                Resize all oversized images to <strong className="text-white">384×384px</strong> thumbnails to reduce storage size and improve load times. 
-                Images already at or below this size are skipped.
-              </p>
-
-              {/* Dry-run preview */}
-              {resizePreview && (
-                <div className="bg-violet-500/10 border border-violet-500/20 rounded-lg p-4 mb-4">
-                  <h3 className="text-violet-400 font-medium text-sm mb-2 flex items-center gap-1.5">
-                    <Zap className="w-4 h-4" /> Analysis Result
-                  </h3>
-                  <div className="grid grid-cols-3 gap-3 text-center">
-                    <div className="bg-gray-900/50 rounded-lg p-3">
-                      <div className="text-xl font-bold text-white">{resizePreview.toProcess}</div>
-                      <div className="text-gray-400 text-xs mt-0.5">Need Resizing</div>
+              {/* Resize */}
+              <div className="bg-gray-800 border border-gray-700 rounded-xl p-6">
+                <h3 className="text-white font-semibold mb-2 flex items-center gap-2">
+                  <Shrink className="w-4 h-4 text-purple-400" />
+                  Optimize Images
+                </h3>
+                <p className="text-gray-500 text-xs mb-4">
+                  Resize large images to save disk space and improve load times.
+                </p>
+                {resizePreview && (
+                  <div className="mb-3 p-3 bg-gray-900 rounded-lg text-xs">
+                    <div className="flex justify-between text-gray-400 mb-1">
+                      <span>To process</span>
+                      <span className="text-amber-400">{resizePreview.toProcess}</span>
                     </div>
-                    <div className="bg-gray-900/50 rounded-lg p-3">
-                      <div className="text-xl font-bold text-white">{resizePreview.alreadyOptimized}</div>
-                      <div className="text-gray-400 text-xs mt-0.5">Already Optimal</div>
-                    </div>
-                    <div className="bg-gray-900/50 rounded-lg p-3">
-                      <div className="text-xl font-bold text-white">{resizePreview.currentSizeMB} MB</div>
-                      <div className="text-gray-400 text-xs mt-0.5">Current Size</div>
+                    <div className="flex justify-between text-gray-400">
+                      <span>Already optimized</span>
+                      <span className="text-emerald-400">{resizePreview.alreadyOptimized}</span>
                     </div>
                   </div>
-                  {resizePreview.toProcess > 0 && (
-                    <button
-                      onClick={handleResize}
-                      disabled={resizing}
-                      className="mt-4 w-full flex items-center justify-center gap-2 px-5 py-2.5 bg-violet-600 hover:bg-violet-500 disabled:bg-gray-700 disabled:text-gray-500 text-white rounded-lg transition-colors font-medium"
-                    >
-                      {resizing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Shrink className="w-4 h-4" />}
-                      {resizing ? 'Resizing...' : `Resize ${resizePreview.toProcess} Images Now`}
-                    </button>
-                  )}
-                  {resizePreview.toProcess === 0 && (
-                    <p className="mt-3 text-green-400 text-sm text-center">✓ All images are already optimized!</p>
-                  )}
-                </div>
-              )}
-
-              {/* Resize result */}
-              {resizeResult && (
-                <div className="bg-green-500/10 border border-green-500/20 rounded-lg p-4 mb-4">
-                  <h3 className="text-green-400 font-medium text-sm mb-2">Resize Complete</h3>
-                  <div className="grid grid-cols-3 gap-3 text-center">
-                    <div className="bg-gray-900/50 rounded-lg p-3">
-                      <div className="text-xl font-bold text-white">{resizeResult.processed}</div>
-                      <div className="text-gray-400 text-xs mt-0.5">Resized</div>
+                )}
+                {resizeResult && (
+                  <div className="mb-3 p-3 bg-gray-900 rounded-lg text-xs">
+                    <div className="flex justify-between text-gray-400 mb-1">
+                      <span>Processed</span>
+                      <span className="text-emerald-400">{resizeResult.processed}</span>
                     </div>
-                    <div className="bg-gray-900/50 rounded-lg p-3">
-                      <div className="text-xl font-bold text-white">{resizeResult.savedMB} MB</div>
-                      <div className="text-gray-400 text-xs mt-0.5">Saved</div>
-                    </div>
-                    <div className="bg-gray-900/50 rounded-lg p-3">
-                      <div className="text-xl font-bold text-white">{resizeResult.newSizeMB} MB</div>
-                      <div className="text-gray-400 text-xs mt-0.5">New Total</div>
+                    <div className="flex justify-between text-gray-400">
+                      <span>Saved</span>
+                      <span className="text-emerald-400">{resizeResult.savedMB} MB</span>
                     </div>
                   </div>
-                  {resizeResult.failed > 0 && (
-                    <p className="text-amber-400 text-xs mt-2">{resizeResult.failed} file(s) failed to resize.</p>
-                  )}
+                )}
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleResizePreview}
+                    disabled={previewLoading}
+                    className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 bg-gray-700 hover:bg-gray-600 text-gray-200 rounded-lg text-sm transition-colors disabled:opacity-50"
+                  >
+                    {previewLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
+                    Preview
+                  </button>
+                  <button
+                    onClick={handleResize}
+                    disabled={resizing}
+                    className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 bg-purple-600 hover:bg-purple-500 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+                  >
+                    {resizing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Shrink className="w-3.5 h-3.5" />}
+                    Resize
+                  </button>
                 </div>
-              )}
-
-              {!resizePreview && !resizeResult && (
-                <button
-                  onClick={handleResizePreview}
-                  disabled={previewLoading || !stats?.fileCount}
-                  className="flex items-center gap-2 px-5 py-2.5 bg-violet-600 hover:bg-violet-500 disabled:bg-gray-700 disabled:text-gray-500 text-white rounded-lg transition-colors font-medium"
-                >
-                  {previewLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
-                  {previewLoading ? 'Analyzing...' : 'Analyze & Preview'}
-                </button>
-              )}
-
-              {resizeResult && (
-                <button
-                  onClick={() => { setResizeResult(null); handleResizePreview(); }}
-                  disabled={previewLoading}
-                  className="flex items-center gap-2 px-4 py-2 text-sm text-violet-400 hover:text-violet-300 transition-colors"
-                >
-                  Re-analyze
-                </button>
-              )}
-            </div>
-
-            {/* Message */}
-            {message && (
-              <div className={`p-4 rounded-lg border flex items-start gap-3 ${
-                message.type === 'success'
-                  ? 'bg-green-500/10 border-green-500/30 text-green-400'
-                  : 'bg-red-500/10 border-red-500/30 text-red-400'
-              }`}>
-                {message.type === 'success' ? <CheckCircle className="w-5 h-5 flex-shrink-0 mt-0.5" /> : <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />}
-                <span>{message.text}</span>
-              </div>
-            )}
-
-            {/* Info */}
-            <div className="bg-cyan-500/5 border border-cyan-500/20 rounded-xl p-5">
-              <h3 className="text-cyan-400 font-medium mb-2">ZIP File Format</h3>
-              <div className="text-gray-400 text-sm space-y-1">
-                <p>The exported ZIP contains:</p>
-                <ul className="list-disc list-inside space-y-1 ml-2">
-                  <li><code className="text-cyan-400 bg-gray-900 px-1 rounded">manifest.json</code> — Maps each image file to its category and item ID</li>
-                  <li><code className="text-cyan-400 bg-gray-900 px-1 rounded">images/</code> — All image files (PNG, JPG, etc.)</li>
-                </ul>
-                <p className="text-gray-500 text-xs mt-2">When importing, the filenames must match those referenced in the data files (lib/data/*.ts). The easiest approach is to export first, modify the images, then re-import.</p>
               </div>
             </div>
+          </>
+        ) : (
+          <div className="text-center py-20 text-gray-500">
+            Failed to load image statistics
           </div>
         )}
       </div>

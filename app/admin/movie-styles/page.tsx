@@ -3,7 +3,7 @@
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState, useCallback } from 'react';
-import { Loader2, ArrowLeft, Search, Save, RotateCcw, Image as ImageIcon, FileText, Edit3, Check, X, ToggleLeft, ToggleRight, Upload, Link2, Download, AlertCircle, Plus, Trash2 } from 'lucide-react';
+import { Loader2, ArrowLeft, Search, Save, RotateCcw, Image as ImageIcon, FileText, Edit3, Check, X, ToggleLeft, ToggleRight, Upload, Link2, Download, AlertCircle, Plus, Trash2, Sparkles } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
 
@@ -49,6 +49,7 @@ export default function MovieStylesAdmin() {
   const [addSaving, setAddSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [generatingId, setGeneratingId] = useState<string | null>(null);
 
   useEffect(() => { setMounted(true); }, []);
 
@@ -276,6 +277,60 @@ export default function MovieStylesAdmin() {
       console.error('Delete failed:', err);
     } finally {
       setDeletingId(null);
+    }
+  };
+
+  const handleGenerateImage = async (style: MovieStyleItem) => {
+    setGeneratingId(style.id);
+    try {
+      // Step 1: Generate image using AI
+      const genPrompt = `A cinematic still frame showcasing the visual style of "${style.name}". ${style.description}. Highly detailed, professional cinematography.`;
+      const genRes = await fetch('/api/generate-image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: genPrompt, aspectRatio: '16:9' }),
+      });
+      if (!genRes.ok) {
+        const err = await genRes.json();
+        throw new Error(err.error || 'Image generation failed');
+      }
+      const genData = await genRes.json();
+      if (!genData.success || !genData.image?.base64) throw new Error('No image returned');
+
+      // Step 2: Upload the generated image as a file
+      const ext = genData.image.mimeType?.includes('png') ? 'png' : 'jpg';
+      const byteChars = atob(genData.image.base64);
+      const byteArray = new Uint8Array(byteChars.length);
+      for (let i = 0; i < byteChars.length; i++) byteArray[i] = byteChars.charCodeAt(i);
+      const blob = new Blob([byteArray], { type: genData.image.mimeType || 'image/png' });
+      const file = new File([blob], `${style.id}.${ext}`, { type: blob.type });
+
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('styleId', style.id);
+      const uploadRes = await fetch('/api/admin/movie-styles/upload', {
+        method: 'POST',
+        body: formData,
+      });
+      if (!uploadRes.ok) throw new Error('Upload failed');
+      const uploadData = await uploadRes.json();
+
+      // Step 3: Save the override
+      const saveRes = await fetch('/api/admin/movie-styles', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: style.id, image: uploadData.path, description: style.description }),
+      });
+      if (!saveRes.ok) throw new Error('Save failed');
+
+      await fetchStyles();
+      showSuccess(`AI image generated for "${style.name}"`);
+    } catch (err: any) {
+      console.error('Generate failed:', err);
+      setSuccessMsg(null);
+      setUploadError(err.message || 'Generation failed');
+    } finally {
+      setGeneratingId(null);
     }
   };
 
@@ -543,6 +598,15 @@ export default function MovieStylesAdmin() {
                       >
                         <Upload className="w-3 h-3" /> Upload File
                       </button>
+                      <button
+                        onClick={() => handleGenerateImage(style)}
+                        disabled={generatingId === style.id}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors bg-purple-600/80 hover:bg-purple-500 text-white disabled:opacity-60"
+                        title="Generate image from description using AI"
+                      >
+                        {generatingId === style.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+                        {generatingId === style.id ? 'Generating...' : 'AI Generate'}
+                      </button>
                     </div>
 
                     {imageMode === 'url' ? (
@@ -708,6 +772,14 @@ export default function MovieStylesAdmin() {
                           )}
                         </h3>
                         <div className="flex gap-1 ml-2">
+                          <button
+                            onClick={() => handleGenerateImage(style)}
+                            disabled={generatingId === style.id}
+                            className="p-1.5 rounded-lg bg-gray-700 hover:bg-purple-600 text-gray-400 hover:text-white transition-colors disabled:opacity-60"
+                            title="Generate AI image"
+                          >
+                            {generatingId === style.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                          </button>
                           <button
                             onClick={() => startEdit(style)}
                             className="p-1.5 rounded-lg bg-gray-700 hover:bg-gray-600 text-gray-300 transition-colors"
