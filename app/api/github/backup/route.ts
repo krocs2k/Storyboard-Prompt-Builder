@@ -3,8 +3,69 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import { backupToGitHub } from '@/lib/github';
+import * as fs from 'fs';
+import * as path from 'path';
 
 export const dynamic = 'force-dynamic';
+
+/**
+ * Resolve the actual source directory for backup.
+ * 
+ * In the Abacus.AI production environment, `process.cwd()` points to the
+ * standalone build output (e.g., .build/standalone/nextjs_space/) which only
+ * contains compiled chunks — no source .ts/.tsx files, no Dockerfile, etc.
+ * 
+ * The actual source files live at ~/<project>/nextjs_space/ (the dev workspace).
+ * We detect this by checking for the presence of the app/ directory with .tsx files.
+ */
+function resolveSourcePath(): string {
+  const cwd = process.cwd();
+
+  // Check if cwd has source files (works in dev and Docker)
+  if (fs.existsSync(path.join(cwd, 'app', 'layout.tsx'))) {
+    return cwd;
+  }
+
+  // Abacus.AI production: source is at the dev workspace path
+  // Construct path dynamically using os.homedir()
+  const os = require('os');
+  const homeDir = os.homedir();
+  if (homeDir && fs.existsSync(homeDir)) {
+    try {
+      const projectDirs = fs.readdirSync(homeDir).filter((d: string) => {
+        try {
+          return fs.statSync(path.join(homeDir, d)).isDirectory() && !d.startsWith('.');
+        } catch { return false; }
+      });
+      for (const pdir of projectDirs) {
+        const candidates = [
+          path.join(homeDir, pdir, 'nextjs_space'),
+          path.join(homeDir, pdir),
+        ];
+        for (const candidate of candidates) {
+          if (fs.existsSync(path.join(candidate, 'app', 'layout.tsx'))) {
+            return candidate;
+          }
+        }
+      }
+    } catch { /* ignore read errors */ }
+  }
+
+  // Last resort: walk up from cwd to find a directory with app/layout.tsx
+  let dir = cwd;
+  for (let i = 0; i < 5; i++) {
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+    if (fs.existsSync(path.join(dir, 'app', 'layout.tsx'))) {
+      return dir;
+    }
+  }
+
+  // Fallback to cwd
+  console.warn('[GitHub Backup] Could not find source directory, falling back to cwd:', cwd);
+  return cwd;
+}
 
 export async function POST() {
   const session = await getServerSession(authOptions);
@@ -29,7 +90,8 @@ export async function POST() {
     data: { lastBackupStatus: 'IN_PROGRESS' },
   });
 
-  const projectPath = process.cwd();
+  const projectPath = resolveSourcePath();
+  console.log('[GitHub Backup] Using source path:', projectPath, '(cwd:', process.cwd(), ')');
   const encoder = new TextEncoder();
 
   const stream = new ReadableStream({

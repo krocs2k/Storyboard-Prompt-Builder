@@ -6,8 +6,11 @@
  *   1. Prisma schema: remove Abacus output, add generic output path, add Docker binary targets
  *   2. Layout: remove entire Abacus.AI chatllm conditional block
  *   3. next.config.js: remove outputFileTracingRoot & distDir (Docker uses next.config.docker.js)
- *   4. Docker files: Dockerfile, .dockerignore, server.js, docker-entrypoint.sh, docker-compose.yml
- *   5. Lock files: yarn.lock.bak included for Docker builds
+ *   4. .yarnrc.yml: strip Abacus-specific cache paths, keep nodeLinker only
+ *   5. package.json: remove @next/swc-wasm-nodejs (Abacus-only)
+ *   6. seed.ts: sanitize hardcoded test credentials → env-var placeholders
+ *   7. Docker files: Dockerfile, .dockerignore, server.js, docker-entrypoint.sh, docker-compose.yml
+ *   8. Lock files: single yarn.lock.bak for Docker builds (yarn.lock.docker removed)
  */
 import { Octokit } from '@octokit/rest';
 import * as fs from 'fs';
@@ -59,12 +62,16 @@ const EXCLUDE_PATTERNS = [
   '*.core',
   '*.dump',
   '*.dmp',
+  '*.pdf',               // binary docs — not source code
+  'yarn.lock.docker',    // duplicate of yarn.lock.bak
 ];
 
 // Paths excluded from backup (relative to project root)
 // ALL images are managed separately via Admin > Image Library export/import (ZIP download)
 const EXCLUDE_PATHS = [
   'public/images',
+  'data/images',       // empty dir placeholder — Docker volume handles this
+  '.build-test',       // local test artifacts
 ];
 
 const INCLUDE_EXTENSIONS = [
@@ -151,6 +158,46 @@ function applyGitHubReadiness(filePath: string, content: string): string {
     content = content.replace(/\s*distDir:\s*process\.env\.[^,]*,?\s*\n/g, '\n');
     // Keep output as env var only — do NOT default to standalone
     // v11 architecture uses next.config.docker.js + server.js + next start
+  }
+
+  // Clean .yarnrc.yml — remove Abacus-specific global cache paths
+  if (fileName === '.yarnrc.yml') {
+    content = 'nodeLinker: node-modules\n';
+  }
+
+  // Clean package.json — remove Abacus-only devDependencies and fix seed script
+  if (fileName === 'package.json') {
+    try {
+      const pkg = JSON.parse(content);
+      // Remove @next/swc-wasm-nodejs (Abacus-only, Docker builds use native SWC)
+      if (pkg.devDependencies?.['@next/swc-wasm-nodejs']) {
+        delete pkg.devDependencies['@next/swc-wasm-nodejs'];
+      }
+      content = JSON.stringify(pkg, null, 2) + '\n';
+    } catch {
+      // If JSON parse fails, return content unchanged
+    }
+  }
+
+  // Sanitize seed.ts — strip hardcoded test credentials
+  if (filePath === 'scripts/seed.ts') {
+    // Replace hardcoded email/password with env-var placeholders
+    content = content.replace(
+      /const testAdminEmail\s*=\s*'[^']*'/,
+      "const testAdminEmail = process.env.ADMIN_EMAIL || 'admin@example.com'"
+    );
+    content = content.replace(
+      /const testAdminPassword\s*=\s*'[^']*'/,
+      "const testAdminPassword = process.env.ADMIN_PASSWORD || 'changeme123'"
+    );
+    content = content.replace(
+      /const testUserEmail\s*=\s*'[^']*'/,
+      "const testUserEmail = process.env.TEST_USER_EMAIL || 'user@example.com'"
+    );
+    content = content.replace(
+      /const testUserPassword\s*=\s*'[^']*'/,
+      "const testUserPassword = process.env.TEST_USER_PASSWORD || 'changeme123'"
+    );
   }
 
   return content;

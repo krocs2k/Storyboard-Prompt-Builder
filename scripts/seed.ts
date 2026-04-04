@@ -5,8 +5,8 @@ const prisma = new PrismaClient();
 
 async function main() {
   // Create test admin user (hidden credentials)
-  const testAdminEmail = 'john@doe.com';
-  const testAdminPassword = 'johndoe123';
+  const testAdminEmail = process.env.ADMIN_EMAIL || 'admin@example.com';
+  const testAdminPassword = process.env.ADMIN_PASSWORD || 'changeme123';
   
   const existingAdmin = await prisma.user.findUnique({
     where: { email: testAdminEmail }
@@ -32,8 +32,8 @@ async function main() {
   }
 
   // Create test user for automated testing
-  const testUserEmail = 'test@email.com';
-  const testUserPassword = 'password123';
+  const testUserEmail = process.env.TEST_USER_EMAIL || 'user@example.com';
+  const testUserPassword = process.env.TEST_USER_PASSWORD || 'changeme123';
   
   const existingTestUser = await prisma.user.findUnique({
     where: { email: testUserEmail }

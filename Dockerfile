@@ -149,62 +149,9 @@ RUN mkdir -p /srv/app/data/images && chown -R nextjs:nodejs /srv/app
 # Ensure Prisma CLI is in PATH
 ENV PATH="/srv/app/node_modules/.bin:$PATH"
 
-# Embedded startup script
-RUN cat > /srv/app/start.sh << 'STARTSCRIPT'
-#!/bin/bash
-set -e
-
-echo ""
-echo "========================================"
-echo "  SSC v11 - $(date -u +%Y-%m-%dT%H:%M:%SZ)"
-echo "========================================"
-echo ""
-
-# Wait for database
-echo "Connecting to database..."
-until node -e "
-const { PrismaClient } = require('@prisma/client');
-const p = new PrismaClient();
-p.\$connect().then(() => process.exit(0)).catch(() => process.exit(1));
-" 2>/dev/null; do
-  sleep 2
-done
-echo "OK: Database connected"
-
-# Sync schema
-npx prisma db push --skip-generate --accept-data-loss 2>&1 || \
-  npx prisma db push --skip-generate 2>&1 || true
-echo "OK: Schema synced"
-
-# Seed if needed
-NEEDS_SEED=$(node -e "
-const { PrismaClient } = require('@prisma/client');
-const p = new PrismaClient();
-p.user.count().then(c => console.log(c === 0 ? 'true' : 'false')).catch(() => console.log('true'));
-" 2>/dev/null || echo "true")
-
-if [ "$NEEDS_SEED" = "true" ]; then
-  echo "Seeding database..."
-  if [ -f scripts/compiled/seed.js ]; then
-    node scripts/compiled/seed.js
-  elif [ -f scripts/seed.js ]; then
-    node scripts/seed.js
-  fi
-else
-  echo "Database has data, syncing..."
-  if [ -f scripts/compiled/seed.js ]; then
-    node scripts/compiled/seed.js || true
-  elif [ -f scripts/seed.js ]; then
-    node scripts/seed.js || true
-  fi
-fi
-
-echo ""
-echo "Starting Next.js..."
-exec node server.js
-STARTSCRIPT
-
-RUN chmod +x /srv/app/start.sh
+# Copy entrypoint script (external file avoids heredoc escaping issues)
+COPY --from=builder --chown=nextjs:nodejs /build/docker-entrypoint.sh ./docker-entrypoint.sh
+RUN chmod +x /srv/app/docker-entrypoint.sh
 
 USER nextjs
 
@@ -214,4 +161,4 @@ EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
   CMD wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1
 
-CMD ["/srv/app/start.sh"]
+ENTRYPOINT ["/srv/app/docker-entrypoint.sh"]

@@ -1,26 +1,53 @@
-#!/bin/sh
+#!/bin/bash
 set -e
 
-echo "[Entrypoint] Starting Storyshot Creator..."
+echo ""
+echo "========================================"
+echo "  SSC v11 - $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+echo "========================================"
+echo ""
 
-# Run Prisma migrations (push schema to database)
-if [ -f prisma/schema.prisma ]; then
-  echo "[Entrypoint] Running database migrations..."
-  npx prisma db push --skip-generate 2>&1 || {
-    echo "[Entrypoint] WARNING: Database migration failed. Retrying in 5 seconds..."
-    sleep 5
-    npx prisma db push --skip-generate 2>&1 || echo "[Entrypoint] ERROR: Database migration failed after retry."
-  }
+# Wait for database
+echo "Connecting to database..."
+until node -e "
+const { PrismaClient } = require('@prisma/client');
+const p = new PrismaClient();
+p.\$connect().then(() => { p.\$disconnect(); process.exit(0); }).catch(() => process.exit(1));
+" 2>/dev/null; do
+  echo "  Waiting for database..."
+  sleep 2
+done
+echo "OK: Database connected"
+
+# Sync schema
+echo "Syncing database schema..."
+npx prisma db push --skip-generate --accept-data-loss 2>&1 || \
+  npx prisma db push --skip-generate 2>&1 || true
+echo "OK: Schema synced"
+
+# Seed if needed
+NEEDS_SEED=$(node -e "
+const { PrismaClient } = require('@prisma/client');
+const p = new PrismaClient();
+p.user.count().then(c => { console.log(c === 0 ? 'true' : 'false'); p.\$disconnect(); }).catch(() => { console.log('true'); p.\$disconnect(); });
+" 2>/dev/null || echo "true")
+
+if [ "$NEEDS_SEED" = "true" ]; then
+  echo "Seeding database..."
+  if [ -f scripts/compiled/seed.js ]; then
+    node scripts/compiled/seed.js
+  elif [ -f scripts/seed.js ]; then
+    node scripts/seed.js
+  fi
+else
+  echo "Database has data, syncing..."
+  if [ -f scripts/compiled/seed.js ]; then
+    node scripts/compiled/seed.js || true
+  elif [ -f scripts/seed.js ]; then
+    node scripts/seed.js || true
+  fi
 fi
 
-# Run seed script if available (only creates missing records via upsert, safe to re-run)
-if [ -f scripts/compiled/seed.js ]; then
-  echo "[Entrypoint] Seeding database (compiled JS)..."
-  node scripts/compiled/seed.js 2>&1 || echo "[Entrypoint] WARNING: Seed script failed (may already be seeded)."
-elif [ -f scripts/seed.ts ]; then
-  echo "[Entrypoint] Seeding database (TypeScript via npx tsx)..."
-  npx tsx scripts/seed.ts 2>&1 || echo "[Entrypoint] WARNING: Seed script failed (may already be seeded)."
-fi
-
-echo "[Entrypoint] Starting Next.js server..."
+echo ""
+echo "Starting Next.js..."
 exec node server.js
