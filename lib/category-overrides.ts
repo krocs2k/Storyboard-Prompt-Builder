@@ -88,14 +88,14 @@ export const CATEGORY_CONFIG: Record<string, {
   dataFile: string;    // path relative to lib/data/
   imageDir?: string;   // subdirectory in public/images/ for name-based matching
 }> = {
-  'image-types': { label: 'Image Types', section: 'Section 1', dataExport: 'imageTypes', dataFile: 'image-types' },
+  'image-types': { label: 'Image Types', section: 'Section 1', dataExport: 'imageTypes', dataFile: 'image-types', imageDir: 'image-types' },
   'movie-styles': { label: 'Movie Styles', section: 'Section 1', dataExport: 'movieStyles', dataFile: 'movie-styles', imageDir: 'movie-styles' },
-  'shot-types': { label: 'Shot Types', section: 'Section 2', dataExport: 'shotTypes', dataFile: 'shot-types' },
-  'lighting-sources': { label: 'Lighting Sources', section: 'Section 3', dataExport: 'lightingSources', dataFile: 'lighting-sources' },
-  'camera-bodies': { label: 'Camera Bodies', section: 'Section 4', dataExport: 'cameraBodies', dataFile: 'camera-bodies' },
-  'focal-lengths': { label: 'Focal Lengths', section: 'Section 4', dataExport: 'focalLengths', dataFile: 'focal-lengths' },
-  'lens-types': { label: 'Lens Types', section: 'Section 4', dataExport: 'lensTypes', dataFile: 'lens-types' },
-  'film-stocks': { label: 'Film Stocks', section: 'Section 4', dataExport: 'filmStocks', dataFile: 'film-stocks' },
+  'shot-types': { label: 'Shot Types', section: 'Section 2', dataExport: 'shotTypes', dataFile: 'shot-types', imageDir: 'shot-types' },
+  'lighting-sources': { label: 'Lighting Sources', section: 'Section 3', dataExport: 'lightingSources', dataFile: 'lighting-sources', imageDir: 'lighting-sources' },
+  'camera-bodies': { label: 'Camera Bodies', section: 'Section 4', dataExport: 'cameraBodies', dataFile: 'camera-bodies', imageDir: 'camera-bodies' },
+  'focal-lengths': { label: 'Focal Lengths', section: 'Section 4', dataExport: 'focalLengths', dataFile: 'focal-lengths', imageDir: 'focal-lengths' },
+  'lens-types': { label: 'Lens Types', section: 'Section 4', dataExport: 'lensTypes', dataFile: 'lens-types', imageDir: 'lens-types' },
+  'film-stocks': { label: 'Film Stocks', section: 'Section 4', dataExport: 'filmStocks', dataFile: 'film-stocks', imageDir: 'film-stocks' },
   'photographer-styles': { label: 'Photographer Styles', section: 'Section 5', dataExport: 'photographerStyles', dataFile: 'photographer-styles', imageDir: 'photographer-styles' },
   'filter-effects': { label: 'Filter Effects', section: 'Section 5', dataExport: 'filterEffects', dataFile: 'filter-effects', imageDir: 'filter-effects' },
 };
