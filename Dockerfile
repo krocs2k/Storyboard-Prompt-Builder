@@ -49,7 +49,18 @@ RUN if [ -L yarn.lock ]; then rm -f yarn.lock; fi; \
 
 # Patch Prisma schema: remove Abacus-specific hardcoded output path,
 # ensure Docker-compatible binary targets
-RUN chmod +x docker-prepare-prisma.sh && sh docker-prepare-prisma.sh
+# (inlined to avoid dependency on external script being in build context)
+RUN if [ -f prisma/schema.prisma ]; then \
+      echo "[Docker Build] Patching Prisma schema for Docker environment..." && \
+      sed -i '/output.*=.*"\/home\/ubuntu/d' prisma/schema.prisma && \
+      if ! grep -q 'linux-musl-openssl-3.0.x' prisma/schema.prisma; then \
+        sed -i 's/binaryTargets.*=.*/binaryTargets = ["native", "linux-musl-openssl-3.0.x", "linux-musl-arm64-openssl-3.0.x"]/' prisma/schema.prisma; \
+      fi && \
+      echo "[Docker Build] Prisma schema patched successfully." && \
+      head -5 prisma/schema.prisma; \
+    else \
+      echo "[Docker Build] ERROR: Prisma schema not found" && exit 1; \
+    fi
 
 # Generate Prisma client
 RUN npx prisma generate
