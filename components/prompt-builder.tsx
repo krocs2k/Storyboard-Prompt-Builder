@@ -60,15 +60,42 @@ export function PromptBuilder() {
   const [copied, setCopied] = useState(false);
   const [copiedPromptId, setCopiedPromptId] = useState<string | null>(null);
 
-  // Load resolved movie styles (with admin overrides) on mount
+  // Load resolved category data (with admin overrides) on mount
   const [resolvedMovieStyles, setResolvedMovieStyles] = useState<MovieStyle[]>(defaultMovieStyles);
+  const [resolvedImageTypes, setResolvedImageTypes] = useState(imageTypes);
+  const [resolvedShotTypes, setResolvedShotTypes] = useState(shotTypes);
+  const [resolvedLightingSources, setResolvedLightingSources] = useState(lightingSources);
+  const [resolvedCameraBodies, setResolvedCameraBodies] = useState(cameraBodies);
+  const [resolvedFocalLengths, setResolvedFocalLengths] = useState(focalLengths);
+  const [resolvedLensTypes, setResolvedLensTypes] = useState(lensTypes);
+  const [resolvedFilmStocks, setResolvedFilmStocks] = useState(filmStocks);
+  const [resolvedPhotographerStyles, setResolvedPhotographerStyles] = useState(photographerStyles);
+  const [resolvedFilterEffects, setResolvedFilterEffects] = useState(filterEffects);
+
   useEffect(() => {
+    // Fetch movie styles with overrides
     authFetch('/api/admin/movie-styles')
       .then(res => res.json())
       .then(data => {
         if (data.styles) setResolvedMovieStyles(data.styles);
       })
       .catch(() => { /* fallback to defaults */ });
+
+    // Fetch all other category overrides
+    authFetch('/api/categories/overrides')
+      .then(res => res.json())
+      .then((data: any) => {
+        if (data.imageTypes) setResolvedImageTypes(data.imageTypes);
+        if (data.shotTypes) setResolvedShotTypes(data.shotTypes);
+        if (data.lightingSources) setResolvedLightingSources(data.lightingSources);
+        if (data.cameraBodies) setResolvedCameraBodies(data.cameraBodies);
+        if (data.focalLengths) setResolvedFocalLengths(data.focalLengths);
+        if (data.lensTypes) setResolvedLensTypes(data.lensTypes);
+        if (data.filmStocks) setResolvedFilmStocks(data.filmStocks);
+        if (data.photographerStyles) setResolvedPhotographerStyles(data.photographerStyles);
+        if (data.filterEffects) setResolvedFilterEffects(data.filterEffects);
+      })
+      .catch(() => { /* fallback to static defaults */ });
   }, []);
   
   const [selections, setSelections] = useState<Selections>({
@@ -2405,7 +2432,7 @@ export function PromptBuilder() {
         isOpen={activeModal === 'imageType'}
         onClose={() => setActiveModal(null)}
         title="Select Image Type"
-        options={imageTypes ?? []}
+        options={resolvedImageTypes ?? []}
         selectedId={selections?.imageType?.id ?? null}
         onSelect={(o) => updateSelection('imageType', o as ImageType)}
       />
@@ -2414,7 +2441,7 @@ export function PromptBuilder() {
         isOpen={activeModal === 'shotType'}
         onClose={() => setActiveModal(null)}
         title="Select Shot Type / Angle"
-        options={shotTypes ?? []}
+        options={resolvedShotTypes ?? []}
         selectedId={selections?.shotType?.id ?? null}
         onSelect={(o) => updateSelection('shotType', o)}
       />
@@ -2423,7 +2450,7 @@ export function PromptBuilder() {
         isOpen={activeModal === 'lighting'}
         onClose={() => setActiveModal(null)}
         title="Select Lighting Source"
-        options={lightingSources ?? []}
+        options={resolvedLightingSources ?? []}
         selectedId={selections?.lighting?.id ?? null}
         onSelect={(o) => updateSelection('lighting', o as LightingSource)}
         showDescription
@@ -2433,7 +2460,7 @@ export function PromptBuilder() {
         isOpen={activeModal === 'camera'}
         onClose={() => setActiveModal(null)}
         title="Select Camera Body"
-        options={cameraBodies ?? []}
+        options={resolvedCameraBodies ?? []}
         selectedId={selections?.camera?.id ?? null}
         onSelect={(o) => updateSelection('camera', o as CameraBody)}
         showDescription
@@ -2444,7 +2471,7 @@ export function PromptBuilder() {
         isOpen={activeModal === 'focalLength'}
         onClose={() => setActiveModal(null)}
         title="Select Focal Length"
-        options={focalLengths ?? []}
+        options={resolvedFocalLengths ?? []}
         selectedId={selections?.focalLength?.id ?? null}
         onSelect={(o) => updateSelection('focalLength', o as FocalLength)}
         showDescription
@@ -2454,7 +2481,7 @@ export function PromptBuilder() {
         isOpen={activeModal === 'lensType'}
         onClose={() => setActiveModal(null)}
         title="Select Lens Type"
-        options={lensTypes ?? []}
+        options={resolvedLensTypes ?? []}
         selectedId={selections?.lensType?.id ?? null}
         onSelect={(o) => updateSelection('lensType', o as LensType)}
         showDescription
@@ -2464,7 +2491,7 @@ export function PromptBuilder() {
         isOpen={activeModal === 'filmStock'}
         onClose={() => setActiveModal(null)}
         title="Select Film Stock"
-        options={filmStocks ?? []}
+        options={resolvedFilmStocks ?? []}
         selectedId={selections?.filmStock?.id ?? null}
         onSelect={(o) => updateSelection('filmStock', o as FilmStock)}
         showDescription
@@ -2474,7 +2501,7 @@ export function PromptBuilder() {
         isOpen={activeModal === 'photographer'}
         onClose={() => setActiveModal(null)}
         title="Select Photographer Style"
-        options={photographerStyles ?? []}
+        options={resolvedPhotographerStyles ?? []}
         selectedId={selections?.photographer?.id ?? null}
         onSelect={(o) => updateSelection('photographer', o as PhotographerStyle)}
         showDescription
@@ -2496,7 +2523,7 @@ export function PromptBuilder() {
         isOpen={activeModal === 'filter'}
         onClose={() => setActiveModal(null)}
         title="Select Filter Effect"
-        options={filterEffects ?? []}
+        options={resolvedFilterEffects ?? []}
         selectedId={selections?.filter?.id ?? null}
         onSelect={(o) => updateSelection('filter', o as FilterEffect)}
         showDescription
