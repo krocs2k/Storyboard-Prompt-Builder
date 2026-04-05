@@ -22,11 +22,10 @@ export async function GET() {
   const categoryImagesDir = path.join(DATA_DIR, 'category-images');
   const publicImagesDir = path.join(process.cwd(), 'public', 'images');
 
-  // Use data/category-images/ as primary, fall back to public/images/
-  const imagesRoot = fs.existsSync(categoryImagesDir) ? categoryImagesDir
-    : fs.existsSync(publicImagesDir) ? publicImagesDir : null;
+  const hasCategoryDir = fs.existsSync(categoryImagesDir);
+  const hasPublicDir = fs.existsSync(publicImagesDir);
 
-  if (!imagesRoot) {
+  if (!hasCategoryDir && !hasPublicDir) {
     return NextResponse.json({ error: 'No images directory found' }, { status: 404 });
   }
 
@@ -56,23 +55,25 @@ export async function GET() {
     'filter-effects': filterEffects,
   };
 
-  // Build manifest: all local images (starting with /images/)
+  // Build manifest: all local images (starting with /images/ or /api/category-images/)
   const manifest: Record<string, Array<{ id: string; name: string; imagePath: string }>> = {};
 
   for (const [cat, items] of Object.entries(categories)) {
     manifest[cat] = [];
     for (const item of items) {
-      if (item.image && item.image.startsWith('/images/')) {
+      if (item.image && (item.image.startsWith('/images/') || item.image.startsWith('/api/category-images/'))) {
         manifest[cat].push({ id: item.id, name: item.name, imagePath: item.image });
       }
     }
   }
 
-  // Recursively collect all files under public/images/
+  // Recursively collect all files from a directory
   function collectFiles(dir: string, relativeTo: string): Array<{ fullPath: string; zipPath: string }> {
     const results: Array<{ fullPath: string; zipPath: string }> = [];
+    if (!fs.existsSync(dir)) return results;
     const entries = fs.readdirSync(dir, { withFileTypes: true });
     for (const entry of entries) {
+      if (entry.name.startsWith('.')) continue; // skip .seeded marker etc
       const fullPath = path.join(dir, entry.name);
       const relPath = path.relative(relativeTo, fullPath);
       if (entry.isDirectory()) {
@@ -84,7 +85,27 @@ export async function GET() {
     return results;
   }
 
-  const allImageFiles = collectFiles(imagesRoot, imagesRoot);
+  // Collect from BOTH directories, deduplicating (data/category-images takes priority)
+  const seenZipPaths = new Set<string>();
+  const allImageFiles: Array<{ fullPath: string; zipPath: string }> = [];
+
+  // Priority 1: data/category-images/
+  if (hasCategoryDir) {
+    for (const f of collectFiles(categoryImagesDir, categoryImagesDir)) {
+      seenZipPaths.add(f.zipPath);
+      allImageFiles.push(f);
+    }
+  }
+
+  // Priority 2: public/images/ (only files not already in data/category-images/)
+  if (hasPublicDir) {
+    for (const f of collectFiles(publicImagesDir, publicImagesDir)) {
+      if (!seenZipPaths.has(f.zipPath)) {
+        seenZipPaths.add(f.zipPath);
+        allImageFiles.push(f);
+      }
+    }
+  }
 
   // Create ZIP archive
   const archive = archiver('zip', { zlib: { level: 6 } });

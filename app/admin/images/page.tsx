@@ -58,11 +58,15 @@ interface ResizeResult {
 }
 
 interface AssociateResult {
-  totalStyles: number;
-  summary: { alreadyCorrectCount: number; toAssociateCount: number; noMatchCount: number };
-  toAssociate: Array<{ styleId: string; styleName: string; currentImage: string; newImage: string; matchType: string }>;
-  alreadyCorrect: Array<{ styleId: string; styleName: string; image: string }>;
-  noMatch: Array<{ styleId: string; styleName: string; currentImage: string }>;
+  results: Array<{
+    category: string;
+    label: string;
+    totalItems: number;
+    alreadyCorrect: number;
+    toAssociate: Array<{ styleId: string; styleName: string; currentImage: string; newImage: string; matchType: string }>;
+    noMatch: number;
+  }>;
+  summary: { totalCategories: number; totalToAssociate: number; totalAlreadyCorrect: number; totalNoMatch: number };
   message?: string;
 }
 
@@ -76,6 +80,7 @@ export default function ImagesAdminPage() {
   const [stats, setStats] = useState<StatsData | null>(null);
   const [exporting, setExporting] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState('');
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -145,20 +150,73 @@ export default function ImagesAdminPage() {
     if (!file) return;
     setImporting(true);
     try {
-      const formData = new FormData();
-      formData.append('file', file);
-      const res = await fetch('/api/admin/images/import', {
-        method: 'POST',
-        body: formData,
+      // Extract ZIP in browser using JSZip
+      const zip = await JSZip.loadAsync(file);
+      const imageExtensions = ['png', 'jpg', 'jpeg', 'webp', 'gif', 'tiff', 'avif'];
+
+      // Collect all image files from the ZIP
+      const entries: Array<{ relativePath: string; zipEntry: JSZip.JSZipObject }> = [];
+      const subdirSet = new Set<string>();
+
+      zip.forEach((relativePath, zipEntry) => {
+        if (zipEntry.dir) return;
+        const ext = relativePath.split('.').pop()?.toLowerCase() || '';
+        if (!imageExtensions.includes(ext)) return;
+
+        // Strip leading "images/" prefix if present (export adds it)
+        let cleanPath = relativePath;
+        if (cleanPath.startsWith('images/')) cleanPath = cleanPath.slice('images/'.length);
+
+        // Track subdirs for the init batch
+        const firstSlash = cleanPath.indexOf('/');
+        if (firstSlash > 0) subdirSet.add(cleanPath.slice(0, firstSlash));
+
+        entries.push({ relativePath: cleanPath, zipEntry });
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Import failed');
-      showMsg('success', `Imported ${data.imported} images (${data.skipped} skipped, ${data.resized} auto-resized)`);
+
+      if (entries.length === 0) {
+        throw new Error('No image files found in ZIP');
+      }
+
+      setImportProgress(`Extracted ${entries.length} images from ZIP...`);
+
+      // Upload in batches of 10 files (~3-4 MB per batch)
+      const BATCH_SIZE = 10;
+      let totalImported = 0;
+      let totalResized = 0;
+
+      for (let i = 0; i < entries.length; i += BATCH_SIZE) {
+        const batch = entries.slice(i, i + BATCH_SIZE);
+        const formData = new FormData();
+
+        formData.append('action', i === 0 ? 'init' : 'append');
+        if (i === 0) formData.append('subdirs', Array.from(subdirSet).join(','));
+
+        for (const entry of batch) {
+          const blob = await entry.zipEntry.async('blob');
+          const fileName = entry.relativePath.split('/').pop() || 'image.png';
+          formData.append('files[]', new File([blob], fileName));
+          formData.append('paths[]', entry.relativePath);
+        }
+
+        const batchNum = Math.floor(i / BATCH_SIZE) + 1;
+        const totalBatches = Math.ceil(entries.length / BATCH_SIZE);
+        setImportProgress(`Uploading batch ${batchNum}/${totalBatches} (${totalImported + batch.length}/${entries.length})...`);
+
+        const res = await fetch('/api/admin/images/import', { method: 'POST', body: formData });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || `Batch ${batchNum} failed`);
+        totalImported += data.imported || 0;
+        totalResized += data.resized || 0;
+      }
+
+      showMsg('success', `Imported ${totalImported} images (${totalResized} auto-resized)`);
       fetchStats();
     } catch (err: any) {
       showMsg('error', err.message || 'Import failed');
     } finally {
       setImporting(false);
+      setImportProgress('');
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
@@ -166,7 +224,7 @@ export default function ImagesAdminPage() {
   const handleResizePreview = async () => {
     setPreviewLoading(true);
     try {
-      const res = await fetch('/api/admin/images/resize?preview=true');
+      const res = await fetch('/api/admin/images/resize?dryRun=true', { method: 'POST' });
       const data = await res.json();
       setResizePreview(data);
     } catch (err) {
@@ -211,7 +269,7 @@ export default function ImagesAdminPage() {
     try {
       const res = await fetch('/api/admin/images/associate', { method: 'POST' });
       const data = await res.json();
-      showMsg('success', data.message || `Associated ${data.summary?.toAssociateCount || 0} styles`);
+      showMsg('success', data.message || `Associated ${data.totalAssociated || 0} items`);
       setAssociatePreview(null);
       fetchStats();
     } catch (err) {
@@ -410,27 +468,29 @@ export default function ImagesAdminPage() {
                 <div className="mb-4 p-4 bg-gray-900 rounded-lg border border-gray-700">
                   <div className="grid grid-cols-3 gap-4 text-center mb-4">
                     <div>
-                      <div className="text-2xl font-bold text-emerald-400">{associatePreview.summary.alreadyCorrectCount}</div>
+                      <div className="text-2xl font-bold text-emerald-400">{associatePreview.summary.totalAlreadyCorrect}</div>
                       <div className="text-xs text-gray-500">Already Correct</div>
                     </div>
                     <div>
-                      <div className="text-2xl font-bold text-amber-400">{associatePreview.summary.toAssociateCount}</div>
+                      <div className="text-2xl font-bold text-amber-400">{associatePreview.summary.totalToAssociate}</div>
                       <div className="text-xs text-gray-500">To Associate</div>
                     </div>
                     <div>
-                      <div className="text-2xl font-bold text-gray-500">{associatePreview.summary.noMatchCount}</div>
+                      <div className="text-2xl font-bold text-gray-500">{associatePreview.summary.totalNoMatch}</div>
                       <div className="text-xs text-gray-500">No Match</div>
                     </div>
                   </div>
-                  {associatePreview.toAssociate.length > 0 && (
+                  {associatePreview.results.some(r => r.toAssociate.length > 0) && (
                     <div className="max-h-48 overflow-y-auto space-y-1">
-                      {associatePreview.toAssociate.map(a => (
-                        <div key={a.styleId} className="flex items-center justify-between text-xs py-1 px-2 bg-gray-800 rounded">
-                          <span className="text-white">{a.styleName}</span>
-                          <span className="text-gray-500">{a.matchType}</span>
-                          <span className="text-cyan-400 truncate max-w-[200px]">{a.newImage}</span>
-                        </div>
-                      ))}
+                      {associatePreview.results.flatMap(r =>
+                        r.toAssociate.map(a => (
+                          <div key={`${r.category}-${a.styleId}`} className="flex items-center justify-between text-xs py-1 px-2 bg-gray-800 rounded">
+                            <span className="text-white">{a.styleName}</span>
+                            <span className="text-gray-500">{a.matchType}</span>
+                            <span className="text-cyan-400 truncate max-w-[200px]">{a.newImage}</span>
+                          </div>
+                        ))
+                      )}
                     </div>
                   )}
                 </div>
@@ -447,7 +507,7 @@ export default function ImagesAdminPage() {
                 </button>
                 <button
                   onClick={handleAssociate}
-                  disabled={associating || !!(associatePreview && associatePreview.summary.toAssociateCount === 0)}
+                  disabled={associating || !!(associatePreview && associatePreview.summary.totalToAssociate === 0)}
                   className="flex items-center gap-2 px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
                 >
                   {associating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Link2 className="w-4 h-4" />}
@@ -501,6 +561,9 @@ export default function ImagesAdminPage() {
                   {importing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
                   {importing ? 'Importing...' : 'Import ZIP'}
                 </button>
+                {importProgress && (
+                  <p className="text-xs text-cyan-400 mt-2 text-center">{importProgress}</p>
+                )}
               </div>
 
               {/* Resize */}
