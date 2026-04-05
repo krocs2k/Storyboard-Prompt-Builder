@@ -6,7 +6,8 @@ import { useEffect, useState, useMemo } from 'react';
 import {
   Loader2, ArrowLeft, BarChart3, TrendingUp, DollarSign,
   Film, Image as ImageIcon, Sparkles, Bot, Cpu, Activity,
-  Users, FolderOpen, Clapperboard, LayoutGrid
+  Users, FolderOpen, Clapperboard, LayoutGrid, Search,
+  Type, Video, Volume2, ChevronDown, ChevronRight
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -34,6 +35,12 @@ interface ReportData {
     users: number;
   };
   costRates: Record<string, Record<string, { label: string; costPerUnit: number; unit: string }>>;
+  modelRegistry?: {
+    text_generation: Array<{ id: string; name: string; provider: string; cost: string | null }>;
+    image_generation: Array<{ id: string; name: string; provider: string; cost: string | null }>;
+    video_generation: Array<{ id: string; name: string; provider: string; cost: string | null }>;
+    audio_generation: Array<{ id: string; name: string; provider: string; cost: string | null }>;
+  };
 }
 
 const EVENT_LABELS: Record<string, { label: string; icon: string; color: string }> = {
@@ -161,6 +168,13 @@ export default function ReportsPage() {
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<ReportData | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [registrySearch, setRegistrySearch] = useState('');
+  const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({
+    text_generation: false,
+    image_generation: true,
+    video_generation: false,
+    audio_generation: false,
+  });
 
   useEffect(() => { setMounted(true); }, []);
 
@@ -391,6 +405,80 @@ export default function ReportsPage() {
                 <p className="text-gray-500 text-xs mt-3">Rates are estimates. Actual billing may differ based on usage tiers, token counts, and billing plans.</p>
               </div>
             ))}
+
+            {/* ── Model Registry (All Available Abacus Models) ── */}
+            {data.modelRegistry && (
+              <div className="bg-gray-800 border border-gray-700 shadow-lg rounded-xl p-6">
+                <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
+                  <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+                    <Bot className="w-5 h-5 text-cyan-400" /> Abacus Model Registry
+                  </h2>
+                  <div className="flex items-center gap-3 text-xs text-gray-400">
+                    <span className="bg-gray-700/50 px-2 py-1 rounded">
+                      {data.modelRegistry.text_generation.length + data.modelRegistry.image_generation.length + data.modelRegistry.video_generation.length + data.modelRegistry.audio_generation.length} models
+                    </span>
+                    <div className="relative">
+                      <Search className="w-3.5 h-3.5 absolute left-2 top-1/2 -translate-y-1/2 text-gray-500" />
+                      <input
+                        type="text"
+                        placeholder="Search models..."
+                        value={registrySearch}
+                        onChange={e => setRegistrySearch(e.target.value)}
+                        className="bg-gray-900 border border-gray-600 rounded-lg pl-7 pr-3 py-1.5 text-xs text-white placeholder-gray-500 w-48 focus:outline-none focus:border-cyan-500"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {([
+                  { key: 'text_generation' as const, label: 'Text Generation', icon: Type, color: 'text-violet-400', bgColor: 'bg-violet-500/10', borderColor: 'border-violet-500/30' },
+                  { key: 'image_generation' as const, label: 'Image Generation', icon: ImageIcon, color: 'text-rose-400', bgColor: 'bg-rose-500/10', borderColor: 'border-rose-500/30' },
+                  { key: 'video_generation' as const, label: 'Video Generation', icon: Video, color: 'text-amber-400', bgColor: 'bg-amber-500/10', borderColor: 'border-amber-500/30' },
+                  { key: 'audio_generation' as const, label: 'Audio Generation', icon: Volume2, color: 'text-emerald-400', bgColor: 'bg-emerald-500/10', borderColor: 'border-emerald-500/30' },
+                ] as const).map(({ key, label, icon: Icon, color, bgColor, borderColor }) => {
+                  const models = data.modelRegistry![key] || [];
+                  const q = registrySearch.toLowerCase();
+                  const filtered = q
+                    ? models.filter(m => m.name.toLowerCase().includes(q) || m.id.toLowerCase().includes(q) || m.provider.toLowerCase().includes(q))
+                    : models;
+                  if (filtered.length === 0 && q) return null;
+                  const isExpanded = expandedCategories[key];
+
+                  return (
+                    <div key={key} className="mb-4 last:mb-0">
+                      <button
+                        onClick={() => setExpandedCategories(prev => ({ ...prev, [key]: !prev[key] }))}
+                        className="w-full flex items-center gap-2 py-2 text-left group"
+                      >
+                        {isExpanded ? <ChevronDown className="w-4 h-4 text-gray-500" /> : <ChevronRight className="w-4 h-4 text-gray-500" />}
+                        <Icon className={`w-4 h-4 ${color}`} />
+                        <span className="text-sm font-medium text-gray-200">{label}</span>
+                        <span className="text-xs text-gray-500 ml-1">({filtered.length})</span>
+                      </button>
+
+                      {isExpanded && (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2 mt-2 max-h-[400px] overflow-y-auto pr-1">
+                          {filtered.map(m => (
+                            <div key={m.id} className={`${bgColor} border ${borderColor} rounded-lg px-3 py-2.5`}>
+                              <div className="text-white text-xs font-semibold truncate" title={m.name}>{m.name}</div>
+                              <div className="text-gray-500 text-[10px] font-mono truncate mt-0.5" title={m.id}>{m.id}</div>
+                              <div className="flex items-center justify-between mt-1.5">
+                                <span className="text-gray-400 text-[10px]">{m.provider}</span>
+                                {m.cost && <span className={`text-[9px] font-mono ${color} opacity-70 truncate max-w-[55%]`} title={m.cost}>{m.cost}</span>}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+
+                <p className="text-gray-500 text-xs mt-3 border-t border-gray-700 pt-3">
+                  Full model catalog from Abacus AI <code className="text-gray-400">/v1/models</code> API. Costs are approximate — actual billing depends on usage tiers, resolution, and plan. Last synced: April 2026.
+                </p>
+              </div>
+            )}
 
           </div>
         ) : null}

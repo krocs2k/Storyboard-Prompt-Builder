@@ -127,7 +127,9 @@ export async function POST(request: NextRequest) {
             role: 'system',
             content: `You are an expert at creating highly detailed, production-ready image generation prompts for film and television production. Your prompts must follow the EXACT Constructed Prompt structure provided below - this ensures visual consistency across the entire production.
 
-CRITICAL: Every prompt you generate MUST follow the exact template structure provided. Fill in the [BRACKETED] sections with specific content while keeping all visual specifications exactly as provided.`
+CRITICAL: Every prompt you generate MUST follow the exact template structure provided. Fill in the [BRACKETED] sections with specific content while keeping all visual specifications exactly as provided.
+
+CONTENT SAFETY REQUIREMENT: All character descriptions MUST depict adults (18+ years old). If the screenplay features younger characters, age them up to young adults in all visual prompts. Never use words like "child", "children", "kid", "kids", "boy", "girl", "teen", "teenager", "toddler", "infant", "baby", "minor", "youth", "juvenile", "young boy", "young girl", or any other terms implying a person under 18. Instead, describe them as young adults with appropriate mature features. This is required for content safety compliance with image generation APIs.`
           },
           {
             role: 'user',

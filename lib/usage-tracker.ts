@@ -50,7 +50,7 @@ export function trackUsage(options: TrackOptions): void {
 }
 
 /**
- * Gemini API cost rates (per call or per image).
+ * Gemini API cost rates (per call or per image) — direct Gemini usage.
  */
 export const GEMINI_COST_RATES: Record<string, { label: string; costPerUnit: number; unit: string }> = {
   'gemini-3-flash-preview': {
@@ -76,71 +76,57 @@ export const GEMINI_COST_RATES: Record<string, { label: string; costPerUnit: num
 };
 
 /**
- * Abacus AI API cost rates (approximate per-image estimates).
- * Model IDs use exact Abacus API names (underscores, not hyphens).
- * Actual costs depend on your Abacus.AI plan — these are estimates.
+ * Abacus AI API cost rates — auto-generated from the centralized model registry.
+ * Rates sourced from /v1/models API endpoint (credits ≈ USD).
+ * Image/video models use per-unit rate; text models use per-call estimate.
  */
-export const ABACUS_COST_RATES: Record<string, { label: string; costPerUnit: number; unit: string }> = {
-  'gemini-3-flash-preview': {
-    label: 'Gemini 3 Flash (via Abacus)',
-    costPerUnit: 0.0065,
-    unit: 'call',
-  },
-  'gpt-5.1': {
-    label: 'GPT-5.1 Image Gen',
-    costPerUnit: 0.04,
-    unit: 'image',
-  },
-  'flux2_pro': {
-    label: 'Flux 2 Pro',
-    costPerUnit: 0.05,
-    unit: 'image',
-  },
-  'flux_pro_ultra': {
-    label: 'Flux Pro Ultra',
-    costPerUnit: 0.06,
-    unit: 'image',
-  },
-  'seedream': {
-    label: 'Seedream',
-    costPerUnit: 0.03,
-    unit: 'image',
-  },
-  'ideogram': {
-    label: 'Ideogram',
-    costPerUnit: 0.04,
-    unit: 'image',
-  },
-  'recraft': {
-    label: 'Recraft',
-    costPerUnit: 0.04,
-    unit: 'image',
-  },
-  'dalle': {
-    label: 'DALL-E',
-    costPerUnit: 0.04,
-    unit: 'image',
-  },
-  'nano_banana_pro': {
-    label: 'Nano Banana Pro',
-    costPerUnit: 0.03,
-    unit: 'image',
-  },
-  'nano_banana2': {
-    label: 'Nano Banana 2',
-    costPerUnit: 0.03,
-    unit: 'image',
-  },
-  'imagen': {
-    label: 'Imagen (via Abacus)',
-    costPerUnit: 0.04,
-    unit: 'image',
-  },
-};
+import {
+  IMAGE_GENERATION_MODELS,
+  TEXT_GENERATION_MODELS,
+  VIDEO_GENERATION_MODELS,
+  AUDIO_GENERATION_MODELS,
+} from '@/lib/data/abacus-models';
+
+function buildAbacusCostRates(): Record<string, { label: string; costPerUnit: number; unit: string }> {
+  const rates: Record<string, { label: string; costPerUnit: number; unit: string }> = {};
+
+  // Image generation models — rate = credits per image
+  for (const m of IMAGE_GENERATION_MODELS) {
+    if (m.rate) {
+      rates[m.id] = { label: m.name, costPerUnit: m.rate, unit: 'image' };
+    }
+  }
+
+  // Video generation models — rate = credits per video
+  for (const m of VIDEO_GENERATION_MODELS) {
+    if (m.rate) {
+      rates[m.id] = { label: m.name, costPerUnit: m.rate, unit: 'video' };
+    }
+  }
+
+  // Text generation models — estimate per-call cost assuming ~2K tokens in + 1K tokens out
+  for (const m of TEXT_GENERATION_MODELS) {
+    if (m.inputTokenRate && m.outputTokenRate) {
+      const perCall = (m.inputTokenRate * 2000) + (m.outputTokenRate * 1000);
+      rates[m.id] = { label: m.name, costPerUnit: Math.round(perCall * 100000) / 100000, unit: 'call' };
+    }
+  }
+
+  // Audio generation models
+  for (const m of AUDIO_GENERATION_MODELS) {
+    if (m.inputTokenRate && m.outputTokenRate) {
+      const perCall = (m.inputTokenRate * 2000) + (m.outputTokenRate * 1000);
+      rates[m.id] = { label: m.name, costPerUnit: Math.round(perCall * 100000) / 100000, unit: 'call' };
+    }
+  }
+
+  return rates;
+}
+
+export const ABACUS_COST_RATES = buildAbacusCostRates();
 
 /**
  * Unified cost rates map combining both providers.
- * Provider-prefixed keys for disambiguation when same model name exists in both.
  */
 export const ALL_COST_RATES: Record<string, Record<string, { label: string; costPerUnit: number; unit: string }>> = {
   gemini: GEMINI_COST_RATES,

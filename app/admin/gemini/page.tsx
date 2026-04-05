@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { Loader2, ArrowLeft, Key, Eye, EyeOff, Save, Trash2, CheckCircle, AlertCircle, ImageIcon, Zap, Sparkles, ToggleLeft, ToggleRight, Server } from 'lucide-react';
 import Link from 'next/link';
+import { IMAGE_GENERATION_MODELS, TEXT_GENERATION_MODELS } from '@/lib/data/abacus-models';
 
 type Provider = 'gemini' | 'abacus';
 
@@ -45,6 +46,11 @@ export default function ApiConfigPage() {
   const [savingLlmModels, setSavingLlmModels] = useState(false);
 
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  // Search filters for model selection
+  const [imageModelSearch, setImageModelSearch] = useState('');
+  const [llmIdeasSearch, setLlmIdeasSearch] = useState('');
+  const [llmScreenplaySearch, setLlmScreenplaySearch] = useState('');
 
   useEffect(() => { setMounted(true); }, []);
 
@@ -162,30 +168,25 @@ export default function ApiConfigPage() {
 
   if (status !== 'authenticated' || session?.user?.role !== 'admin') return null;
 
-  const ABACUS_IMAGE_MODELS = [
-    { id: 'gpt-5.1', label: 'GPT-5.1', desc: 'High quality, versatile image generation', cost: '~$0.04/image' },
-    { id: 'flux2_pro', label: 'Flux 2 Pro', desc: 'Fast, high-fidelity image generation', cost: '~$0.05/image' },
-    { id: 'flux_pro_ultra', label: 'Flux Pro Ultra', desc: 'Premium quality Flux generation', cost: '~$0.06/image' },
-    { id: 'seedream', label: 'Seedream', desc: 'Creative and artistic image generation', cost: '~$0.03/image' },
-    { id: 'ideogram', label: 'Ideogram', desc: 'Excellent text rendering in images', cost: '~$0.04/image' },
-    { id: 'recraft', label: 'Recraft', desc: 'Design-oriented image generation', cost: '~$0.04/image' },
-    { id: 'dalle', label: 'DALL-E', desc: 'OpenAI image generation model', cost: '~$0.04/image' },
-    { id: 'nano_banana_pro', label: 'Nano Banana Pro', desc: 'Fast multimodal image generation', cost: '~$0.03/image' },
-    { id: 'nano_banana2', label: 'Nano Banana 2', desc: 'Multimodal with text rendering', cost: '~$0.03/image' },
-    { id: 'imagen', label: 'Imagen', desc: 'Google Imagen via Abacus', cost: '~$0.04/image' },
-  ];
+  const ABACUS_IMAGE_MODELS = IMAGE_GENERATION_MODELS.map(m => ({
+    id: m.id,
+    label: m.name,
+    desc: m.description || '',
+    provider: m.provider,
+    cost: m.cost || '',
+  }));
 
   const ABACUS_LLM_MODELS = [
-    { id: '', label: 'Default', desc: 'Uses gemini-3-flash-preview (or LLM_MODEL env var)' },
-    { id: 'gemini-3-flash-preview', label: 'Gemini 3 Flash', desc: 'Fast, cost-efficient for most tasks' },
-    { id: 'gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro', desc: 'Higher quality reasoning and writing' },
-    { id: 'gpt-5.1', label: 'GPT-5.1', desc: 'OpenAI flagship model' },
-    { id: 'gpt-5-mini', label: 'GPT-5 Mini', desc: 'Fast and affordable OpenAI model' },
-    { id: 'claude-sonnet-4-20250514', label: 'Claude Sonnet 4', desc: 'Anthropic balanced model' },
-    { id: 'claude-opus-4-20250514', label: 'Claude Opus 4', desc: 'Anthropic premium model' },
-    { id: 'meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8', label: 'Llama 4 Maverick', desc: 'Meta open-weight model' },
-    { id: 'deepseek/deepseek-v3.1', label: 'DeepSeek V3.1', desc: 'Strong reasoning at low cost' },
-    { id: 'Qwen/Qwen3-235B-A22B-Instruct-2507', label: 'Qwen3 235B', desc: 'Alibaba large language model' },
+    { id: '', label: 'Default', desc: 'Uses gemini-3-flash-preview (or LLM_MODEL env var)', provider: 'System', cost: '' },
+    ...TEXT_GENERATION_MODELS
+      .filter(m => m.id !== 'route-llm') // exclude router, it's not a direct model
+      .map(m => ({
+        id: m.id,
+        label: m.name,
+        desc: m.description || '',
+        provider: m.provider,
+        cost: m.cost || '',
+      })),
   ];
 
   return (
@@ -485,9 +486,20 @@ export default function ApiConfigPage() {
                   <ImageIcon className="w-5 h-5 text-purple-400" />
                   Abacus Image Model
                 </h2>
-                <p className="text-gray-400 text-sm mb-4">Choose which model Abacus.AI uses for image generation.</p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
-                  {ABACUS_IMAGE_MODELS.map(m => (
+                <p className="text-gray-400 text-sm mb-4">Choose which model Abacus.AI uses for image generation ({ABACUS_IMAGE_MODELS.length} models available).</p>
+                <input
+                  type="text"
+                  placeholder="Search image models..."
+                  value={imageModelSearch}
+                  onChange={e => setImageModelSearch(e.target.value)}
+                  className="w-full mb-3 px-3 py-2 bg-gray-900/50 border border-gray-600 rounded-lg text-white text-sm placeholder-gray-500 focus:border-emerald-500 focus:outline-none"
+                />
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-4 max-h-[400px] overflow-y-auto pr-1">
+                  {ABACUS_IMAGE_MODELS.filter(m => {
+                    if (!imageModelSearch) return true;
+                    const q = imageModelSearch.toLowerCase();
+                    return m.label.toLowerCase().includes(q) || m.id.toLowerCase().includes(q) || m.provider.toLowerCase().includes(q) || m.desc.toLowerCase().includes(q);
+                  }).map(m => (
                     <button
                       key={m.id}
                       onClick={() => setAbacusImageModel(m.id)}
@@ -499,7 +511,8 @@ export default function ApiConfigPage() {
                     >
                       <span className="text-white font-semibold text-sm block mb-0.5">{m.label}</span>
                       <p className="text-gray-400 text-xs">{m.desc}</p>
-                      <p className="text-gray-500 text-xs mt-1">{m.cost}</p>
+                      <p className="text-gray-500 text-xs mt-0.5">{m.provider}</p>
+                      {m.cost && <p className="text-emerald-400/70 text-[10px] mt-0.5 font-mono">{m.cost}</p>}
                       {abacusImageModel === m.id && <CheckCircle className="absolute top-2 right-2 w-4 h-4 text-emerald-400" />}
                     </button>
                   ))}
@@ -539,7 +552,7 @@ export default function ApiConfigPage() {
                   <Sparkles className="w-5 h-5 text-amber-400" />
                   LLM Models
                 </h2>
-                <p className="text-gray-400 text-sm mb-5">Choose which LLM to use for story idea generation and screenplay writing. Leave on &quot;Default&quot; to use the standard model for both.</p>
+                <p className="text-gray-400 text-sm mb-5">Choose which LLM to use for story idea generation and screenplay writing ({ABACUS_LLM_MODELS.length} models available). Leave on &quot;Default&quot; to use the standard model for both.</p>
 
                 {/* Story Ideas & Concepts */}
                 <div className="mb-6">
@@ -548,8 +561,19 @@ export default function ApiConfigPage() {
                     Story Ideas &amp; Concepts
                   </h3>
                   <p className="text-gray-500 text-xs mb-3">Used for generating story ideas and developing concepts from your subjects.</p>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
-                    {ABACUS_LLM_MODELS.map(m => (
+                  <input
+                    type="text"
+                    placeholder="Search LLM models..."
+                    value={llmIdeasSearch}
+                    onChange={e => setLlmIdeasSearch(e.target.value)}
+                    className="w-full mb-2 px-3 py-1.5 bg-gray-900/50 border border-gray-600 rounded-lg text-white text-sm placeholder-gray-500 focus:border-amber-500 focus:outline-none"
+                  />
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 max-h-[300px] overflow-y-auto pr-1">
+                    {ABACUS_LLM_MODELS.filter(m => {
+                      if (!llmIdeasSearch) return true;
+                      const q = llmIdeasSearch.toLowerCase();
+                      return m.label.toLowerCase().includes(q) || m.id.toLowerCase().includes(q) || m.provider.toLowerCase().includes(q) || m.desc.toLowerCase().includes(q);
+                    }).map(m => (
                       <button
                         key={`ideas-${m.id}`}
                         onClick={() => setAbacusIdeasModel(m.id)}
@@ -561,6 +585,8 @@ export default function ApiConfigPage() {
                       >
                         <span className="text-white font-semibold text-xs block mb-0.5">{m.label}</span>
                         <p className="text-gray-400 text-[10px] leading-tight">{m.desc}</p>
+                        <p className="text-gray-500 text-[10px] mt-0.5">{m.provider}</p>
+                        {m.cost && <p className="text-amber-400/60 text-[9px] mt-0.5 font-mono truncate" title={m.cost}>{m.cost}</p>}
                         {abacusIdeasModel === m.id && <CheckCircle className="absolute top-1.5 right-1.5 w-3.5 h-3.5 text-amber-400" />}
                       </button>
                     ))}
@@ -574,8 +600,19 @@ export default function ApiConfigPage() {
                     Screenplay Generation
                   </h3>
                   <p className="text-gray-500 text-xs mb-3">Used for writing the full screenplay from your concept or transcript.</p>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
-                    {ABACUS_LLM_MODELS.map(m => (
+                  <input
+                    type="text"
+                    placeholder="Search LLM models..."
+                    value={llmScreenplaySearch}
+                    onChange={e => setLlmScreenplaySearch(e.target.value)}
+                    className="w-full mb-2 px-3 py-1.5 bg-gray-900/50 border border-gray-600 rounded-lg text-white text-sm placeholder-gray-500 focus:border-purple-500 focus:outline-none"
+                  />
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 max-h-[300px] overflow-y-auto pr-1">
+                    {ABACUS_LLM_MODELS.filter(m => {
+                      if (!llmScreenplaySearch) return true;
+                      const q = llmScreenplaySearch.toLowerCase();
+                      return m.label.toLowerCase().includes(q) || m.id.toLowerCase().includes(q) || m.provider.toLowerCase().includes(q) || m.desc.toLowerCase().includes(q);
+                    }).map(m => (
                       <button
                         key={`screenplay-${m.id}`}
                         onClick={() => setAbacusScreenplayModel(m.id)}
@@ -587,6 +624,8 @@ export default function ApiConfigPage() {
                       >
                         <span className="text-white font-semibold text-xs block mb-0.5">{m.label}</span>
                         <p className="text-gray-400 text-[10px] leading-tight">{m.desc}</p>
+                        <p className="text-gray-500 text-[10px] mt-0.5">{m.provider}</p>
+                        {m.cost && <p className="text-purple-400/60 text-[9px] mt-0.5 font-mono truncate" title={m.cost}>{m.cost}</p>}
                         {abacusScreenplayModel === m.id && <CheckCircle className="absolute top-1.5 right-1.5 w-3.5 h-3.5 text-purple-400" />}
                       </button>
                     ))}

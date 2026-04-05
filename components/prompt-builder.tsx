@@ -9,7 +9,7 @@ import {
   Trash2, Film, Aperture, Image as ImageIcon, Save, History,
   FolderOpen, Plus, Download, Loader2, Clapperboard, Upload,
   LayoutGrid, Users, MapPin, ChevronDown, X, FolderPlus, Edit3, Grid3X3, Mic, RefreshCw,
-  LogOut, Settings, User, Star, AtSign, Maximize2, ZoomIn, ChevronLeft, ChevronRight
+  LogOut, Settings, User, Star, AtSign, Maximize2, ZoomIn, ChevronLeft, ChevronRight, Heart
 } from 'lucide-react';
 import { SectionCard } from './section-card';
 import { SelectionButton } from './selection-button';
@@ -580,6 +580,11 @@ export function PromptBuilder() {
   const getBlockImages = useCallback((blockNumber: number): GalleryImageItem[] => {
     const imgKey = `storyboard-${blockNumber}`;
     return galleryImages.filter(img => img.imageKey === imgKey);
+  }, [galleryImages]);
+
+  // Get the favorite gallery image for a given imageKey (e.g. 'char-0', 'env-1')
+  const getFavoriteImage = useCallback((imageKey: string): GalleryImageItem | undefined => {
+    return galleryImages.find(img => img.imageKey === imageKey && img.isFavorite);
   }, [galleryImages]);
 
   // Get image src for gallery item
@@ -1901,6 +1906,24 @@ export function PromptBuilder() {
                             </div>
                             );
                           })()}
+
+                          {/* Favorite image from gallery */}
+                          {(() => {
+                            const favImg = getFavoriteImage(imgKey);
+                            if (!favImg || generatedImages.has(imgKey)) return null;
+                            return (
+                              <div className="mt-3 relative rounded-lg overflow-hidden border border-rose-500/30 bg-slate-950">
+                                <img
+                                  src={`/api/images?path=${encodeURIComponent(favImg.imagePath)}`}
+                                  alt={`Favorite for ${cp.name}`}
+                                  className="w-full max-h-[300px] object-contain"
+                                />
+                                <div className="absolute bottom-2 left-2 px-2 py-0.5 bg-rose-500/90 text-white text-[10px] font-bold rounded flex items-center gap-1">
+                                  <Heart size={10} className="fill-white" /> FAVORITE
+                                </div>
+                              </div>
+                            );
+                          })()}
                         </div>
                       );
                     })}
@@ -1999,6 +2022,24 @@ export function PromptBuilder() {
                                 </div>
                               )}
                             </div>
+                            );
+                          })()}
+
+                          {/* Favorite image from gallery */}
+                          {(() => {
+                            const favImg = getFavoriteImage(imgKey);
+                            if (!favImg || generatedImages.has(imgKey)) return null;
+                            return (
+                              <div className="mt-3 relative rounded-lg overflow-hidden border border-rose-500/30 bg-slate-950">
+                                <img
+                                  src={`/api/images?path=${encodeURIComponent(favImg.imagePath)}`}
+                                  alt={`Favorite for ${ep.name}`}
+                                  className="w-full max-h-[300px] object-contain"
+                                />
+                                <div className="absolute bottom-2 left-2 px-2 py-0.5 bg-rose-500/90 text-white text-[10px] font-bold rounded flex items-center gap-1">
+                                  <Heart size={10} className="fill-white" /> FAVORITE
+                                </div>
+                              </div>
                             );
                           })()}
                         </div>

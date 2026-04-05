@@ -3,7 +3,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import {
   Download, Trash2, Loader2, Maximize2, X, ZoomIn,
-  ChevronLeft, ChevronRight, ImageIcon, Sparkles
+  ChevronLeft, ChevronRight, ImageIcon, Sparkles, Heart
 } from 'lucide-react';
 import { authFetch } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -20,6 +20,7 @@ export interface GalleryImageItem {
   width: number;
   height: number;
   createdAt: string;
+  isFavorite?: boolean;
   // For unsaved (in-memory only) images
   base64?: string;
   mimeType?: string;
@@ -118,6 +119,31 @@ export default function ImageGallery({ projectId, images, onImagesChange }: Imag
     }
   }, [images, onImagesChange]);
 
+  // Toggle favorite
+  const toggleFavorite = useCallback(async (img: GalleryImageItem, index: number) => {
+    if (!img.id || img.base64) return; // Can't favorite unsaved images
+    const newVal = !img.isFavorite;
+    try {
+      const res = await authFetch('/api/gallery-images', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: img.id, isFavorite: newVal }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        // If setting as favorite, clear any other favorite with same imageKey
+        const updated = images.map((g, i) => {
+          if (i === index) return { ...g, isFavorite: newVal };
+          if (newVal && g.imageKey === img.imageKey && g.isFavorite) return { ...g, isFavorite: false };
+          return g;
+        });
+        onImagesChange(updated);
+      }
+    } catch (err) {
+      console.error('Failed to toggle favorite:', err);
+    }
+  }, [images, onImagesChange]);
+
   // Lightbox navigation
   const lightboxNav = (direction: number) => {
     if (lightboxIndex === null) return;
@@ -172,8 +198,23 @@ export default function ImageGallery({ projectId, images, onImagesChange }: Imag
                   className="w-full h-full object-cover"
                 />
 
+                {/* Favorite badge - always visible */}
+                {img.isFavorite && (
+                  <div className="absolute top-1.5 left-1.5 z-10 px-1.5 py-0.5 bg-rose-500/90 text-white text-[10px] font-bold rounded flex items-center gap-0.5">
+                    <Heart size={10} className="fill-white" /> FAVORITE
+                  </div>
+                )}
+
                 {/* Hover overlay with actions */}
                 <div className="absolute inset-0 bg-black/0 group-hover:bg-black/50 transition-colors flex items-center justify-center gap-1.5 opacity-0 group-hover:opacity-100">
+                  <button
+                    onClick={(e) => { e.stopPropagation(); toggleFavorite(img, index); }}
+                    disabled={!!img.base64}
+                    className={`p-2 rounded-lg transition-colors ${img.isFavorite ? 'bg-rose-500/90 hover:bg-rose-600' : 'bg-black/60 hover:bg-rose-500/80'} text-white disabled:opacity-40`}
+                    title={img.base64 ? 'Save project first' : img.isFavorite ? 'Remove favorite' : 'Set as favorite'}
+                  >
+                    <Heart size={16} className={img.isFavorite ? 'fill-white' : ''} />
+                  </button>
                   <button
                     onClick={(e) => { e.stopPropagation(); setLightboxIndex(index); }}
                     className="p-2 bg-black/60 rounded-lg text-white hover:bg-purple-600/80 transition-colors"
@@ -207,7 +248,7 @@ export default function ImageGallery({ projectId, images, onImagesChange }: Imag
                 </div>
 
                 {/* Unsaved indicator */}
-                {img.base64 && (
+                {img.base64 && !img.isFavorite && (
                   <div className="absolute top-1.5 left-1.5 px-1.5 py-0.5 bg-amber-500/80 text-white text-[10px] font-medium rounded">
                     Unsaved
                   </div>
@@ -252,6 +293,15 @@ export default function ImageGallery({ projectId, images, onImagesChange }: Imag
                     {img.width > 0 && <p className="text-slate-400 text-xs">{img.width} × {img.height}px</p>}
                   </div>
                   <div className="flex items-center gap-2 ml-3">
+                    <button
+                      onClick={() => toggleFavorite(img, lightboxIndex)}
+                      disabled={!!img.base64}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-colors ${img.isFavorite ? 'bg-rose-500 hover:bg-rose-600 text-white' : 'bg-slate-700 hover:bg-rose-500/80 text-white'} disabled:bg-slate-700 disabled:text-slate-500`}
+                      title={img.isFavorite ? 'Remove favorite' : 'Set as favorite'}
+                    >
+                      <Heart size={14} className={img.isFavorite ? 'fill-white' : ''} />
+                      {img.isFavorite ? 'Favorited' : 'Favorite'}
+                    </button>
                     <button
                       onClick={() => upscaleImage(img, lightboxIndex)}
                       disabled={upscalingId === img.id || !!img.base64}

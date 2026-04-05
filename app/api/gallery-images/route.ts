@@ -83,6 +83,49 @@ export async function POST(req: NextRequest) {
 }
 
 /**
+ * PATCH - Toggle favorite on a gallery image
+ * Ensures only ONE image per imageKey-prefix per project can be favorite.
+ * Body: { id, isFavorite }
+ * The imageKey prefix groups images: 'char-0', 'char-1', 'env-0', etc.
+ */
+export async function PATCH(req: NextRequest) {
+  const session = await getServerSession(authOptions);
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  try {
+    const { id, isFavorite } = await req.json();
+    if (!id || typeof isFavorite !== 'boolean') {
+      return NextResponse.json({ error: 'id and isFavorite required' }, { status: 400 });
+    }
+
+    const image = await prisma.galleryImage.findUnique({ where: { id } });
+    if (!image) return NextResponse.json({ error: 'Image not found' }, { status: 404 });
+
+    // Extract prefix group (e.g. 'char-0' from 'char-0')
+    const keyPrefix = image.imageKey;
+
+    if (isFavorite) {
+      // Clear any existing favorite for this imageKey in this project
+      await prisma.galleryImage.updateMany({
+        where: { projectId: image.projectId, imageKey: keyPrefix, isFavorite: true },
+        data: { isFavorite: false },
+      });
+    }
+
+    // Set the new favorite
+    const updated = await prisma.galleryImage.update({
+      where: { id },
+      data: { isFavorite },
+    });
+
+    return NextResponse.json({ success: true, image: updated });
+  } catch (err) {
+    console.error('Failed to update favorite:', err);
+    return NextResponse.json({ error: 'Failed to update favorite' }, { status: 500 });
+  }
+}
+
+/**
  * DELETE - Delete gallery image(s)
  * Body: { id } or { projectId, deleteAll: true }
  */

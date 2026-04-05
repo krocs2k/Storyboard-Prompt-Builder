@@ -5,6 +5,12 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import { GEMINI_COST_RATES, ABACUS_COST_RATES, getCostRate, ALL_COST_RATES } from '@/lib/usage-tracker';
+import {
+  TEXT_GENERATION_MODELS,
+  IMAGE_GENERATION_MODELS,
+  VIDEO_GENERATION_MODELS,
+  AUDIO_GENERATION_MODELS,
+} from '@/lib/data/abacus-models';
 
 /**
  * GET - Return usage statistics for the reporting dashboard.
@@ -166,6 +172,22 @@ export async function GET() {
       }
     }
 
+    // ── Model registry summary by category ──
+    const modelRegistry = {
+      text_generation: TEXT_GENERATION_MODELS.map(m => ({
+        id: m.id, name: m.name, provider: m.provider, cost: m.cost || null,
+      })),
+      image_generation: IMAGE_GENERATION_MODELS.map(m => ({
+        id: m.id, name: m.name, provider: m.provider, cost: m.cost || null,
+      })),
+      video_generation: VIDEO_GENERATION_MODELS.map(m => ({
+        id: m.id, name: m.name, provider: m.provider, cost: m.cost || null,
+      })),
+      audio_generation: AUDIO_GENERATION_MODELS.map(m => ({
+        id: m.id, name: m.name, provider: m.provider, cost: m.cost || null,
+      })),
+    };
+
     return NextResponse.json({
       months,
       currentMonth,
@@ -180,6 +202,7 @@ export async function GET() {
         users: userCount,
       },
       costRates: ALL_COST_RATES,
+      modelRegistry,
     });
   } catch (err) {
     console.error('Reports API error:', err);
