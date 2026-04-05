@@ -81,9 +81,11 @@ export default function EmailConfigPage() {
   };
 
   const isFormValid = form.host.trim() && form.user.trim() && form.pass.trim();
+  // Test/send can work with saved config (no new password needed) or with full form
+  const canTestOrSend = isFormValid || configured;
 
   const handleTest = async () => {
-    if (!isFormValid) return;
+    if (!canTestOrSend) return;
     setTesting(true);
     setTestResult(null);
     try {
@@ -101,7 +103,7 @@ export default function EmailConfigPage() {
   };
 
   const handleSendTest = async () => {
-    if (!isFormValid || !testEmail.trim()) return;
+    if (!canTestOrSend || !testEmail.trim()) return;
     setSendingTest(true);
     setSendResult(null);
     try {
@@ -323,7 +325,7 @@ export default function EmailConfigPage() {
             <div className="flex flex-wrap gap-3 pt-2">
               <button
                 onClick={handleTest}
-                disabled={testing || !isFormValid}
+                disabled={testing || !canTestOrSend}
                 className="flex items-center gap-2 px-4 py-2 bg-gray-700 hover:bg-gray-600 disabled:bg-gray-800 disabled:text-gray-600 text-white rounded-lg transition-colors text-sm"
               >
                 {testing ? <Loader2 size={16} className="animate-spin" /> : <Zap size={16} />}
@@ -377,7 +379,7 @@ export default function EmailConfigPage() {
             />
             <button
               onClick={handleSendTest}
-              disabled={sendingTest || !isFormValid || !testEmail.trim()}
+              disabled={sendingTest || !canTestOrSend || !testEmail.trim()}
               className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-gray-800 disabled:text-gray-600 text-white rounded-lg transition-colors text-sm whitespace-nowrap"
             >
               {sendingTest ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}

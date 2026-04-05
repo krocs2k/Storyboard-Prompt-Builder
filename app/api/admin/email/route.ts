@@ -46,29 +46,54 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { action } = body;
 
+    // Helper: merge form values with saved DB config (for when password is omitted)
+    const resolveSmtpConfig = async (body: any) => {
+      let { host, port, user, pass } = body;
+      const from = body.from;
+      // If password not provided, try to use saved config
+      if (!pass) {
+        const rows = await prisma.systemConfig.findMany({
+          where: { key: { in: [...SMTP_KEYS] } },
+        });
+        const saved = Object.fromEntries(rows.map(r => [r.key, r.value]));
+        if (!host) host = saved['SMTP_HOST'];
+        if (!port) port = saved['SMTP_PORT'];
+        if (!user) user = saved['SMTP_USER'];
+        if (!pass) pass = saved['SMTP_PASS'];
+        if (!from && !body.from) body.from = saved['SMTP_FROM'];
+      }
+      if (!host || !user || !pass) return null;
+      return {
+        host,
+        port: parseInt(port || '587'),
+        user,
+        pass,
+        from: from || body.from || user,
+        secure: parseInt(port || '587') === 465,
+      };
+    };
+
     // ---------- Test connection ----------
     if (action === 'test') {
-      const { host, port, user, pass } = body;
-      if (!host || !user || !pass) {
-        return NextResponse.json({ error: 'Host, user, and password are required' }, { status: 400 });
+      const cfg = await resolveSmtpConfig(body);
+      if (!cfg) {
+        return NextResponse.json({ error: 'Host, user, and password are required (or save a configuration first)' }, { status: 400 });
       }
-      const result = await testSmtpConnection({
-        host, port: parseInt(port || '587'), user, pass,
-        from: body.from || user, secure: parseInt(port || '587') === 465,
-      });
+      const result = await testSmtpConnection(cfg);
       return NextResponse.json(result);
     }
 
     // ---------- Send test email ----------
     if (action === 'send_test') {
-      const { host, port, user, pass, from, recipient } = body;
-      if (!host || !user || !pass || !recipient) {
-        return NextResponse.json({ error: 'All fields and recipient are required' }, { status: 400 });
+      const { recipient } = body;
+      if (!recipient) {
+        return NextResponse.json({ error: 'Recipient email is required' }, { status: 400 });
       }
-      const result = await sendTestEmail(
-        { host, port: parseInt(port || '587'), user, pass, from: from || user, secure: parseInt(port || '587') === 465 },
-        recipient,
-      );
+      const cfg = await resolveSmtpConfig(body);
+      if (!cfg) {
+        return NextResponse.json({ error: 'SMTP credentials are required (or save a configuration first)' }, { status: 400 });
+      }
+      const result = await sendTestEmail(cfg, recipient);
       return NextResponse.json(result);
     }
 
