@@ -109,7 +109,7 @@ COPY --from=builder --chown=nextjs:nodejs /build/prisma ./prisma
 COPY --from=builder --chown=nextjs:nodejs /build/scripts ./scripts
 COPY --from=builder --chown=nextjs:nodejs /build/server.js ./server.js
 
-RUN mkdir -p /srv/app/data/images && chown -R nextjs:nodejs /srv/app
+RUN mkdir -p /srv/app/data/images /srv/app/data/category-images && chown -R nextjs:nodejs /srv/app
 
 ENV PATH="/srv/app/node_modules/.bin:$PATH"
 

@@ -41,7 +41,8 @@ export default withAuth(
           '/api/signup',
           '/api/invite/accept',
           '/api/admin/users/signup-setting',
-          '/api/health'
+          '/api/health',
+          '/api/category-images'
         ];
         const isPublicApi = publicApiRoutes.some(route => pathname.startsWith(route));
         

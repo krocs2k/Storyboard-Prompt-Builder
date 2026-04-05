@@ -51,16 +51,27 @@ export async function POST(req: Request) {
   const quality = parseInt(url.searchParams.get('quality') || '80', 10);
   const dryRun = url.searchParams.get('dryRun') === 'true';
 
-  const imagesDir = path.join(process.cwd(), 'public', 'images');
+  const DATA_DIR = process.env.DATA_DIR || path.join(process.cwd(), 'data');
+  const categoryImagesDir = path.join(DATA_DIR, 'category-images');
+  const publicImagesDir = path.join(process.cwd(), 'public', 'images');
 
-  if (!fs.existsSync(imagesDir)) {
-    return NextResponse.json({ error: 'No images directory found' }, { status: 404 });
-  }
+  // Collect from both directories and deduplicate
+  const allFilePaths = [
+    ...collectImageFiles(categoryImagesDir),
+    ...collectImageFiles(publicImagesDir),
+  ];
 
-  // Recursively collect all image files from all subdirectories
-  const filePaths = collectImageFiles(imagesDir);
+  const seen = new Set<string>();
+  const uniqueFilePaths = allFilePaths.filter(fp => {
+    const rel = fp.includes('category-images') 
+      ? path.relative(categoryImagesDir, fp) 
+      : path.relative(publicImagesDir, fp);
+    if (seen.has(rel)) return false;
+    seen.add(rel);
+    return true;
+  });
 
-  if (filePaths.length === 0) {
+  if (uniqueFilePaths.length === 0) {
     return NextResponse.json({ error: 'No image files found' }, { status: 404 });
   }
 
@@ -69,10 +80,10 @@ export async function POST(req: Request) {
   let alreadyOptimized = 0;
   const filesToProcess: Array<{ fullPath: string; relName: string; size: number; width: number; height: number }> = [];
 
-  for (const fullPath of filePaths) {
+  for (const fullPath of uniqueFilePaths) {
     const stat = fs.statSync(fullPath);
     totalOriginalSize += stat.size;
-    const relName = path.relative(imagesDir, fullPath);
+    const relName = path.basename(fullPath);
 
     try {
       const meta = await sharp(fullPath).metadata();
@@ -94,7 +105,7 @@ export async function POST(req: Request) {
   if (dryRun) {
     return NextResponse.json({
       dryRun: true,
-      totalFiles: filePaths.length,
+      totalFiles: uniqueFilePaths.length,
       alreadyOptimized,
       toProcess: filesToProcess.length,
       currentSizeMB: Math.round((totalOriginalSize / (1024 * 1024)) * 10) / 10,
@@ -145,7 +156,7 @@ export async function POST(req: Request) {
 
   // Calculate new total size
   let newTotalSize = 0;
-  for (const fp of filePaths) {
+  for (const fp of uniqueFilePaths) {
     if (fs.existsSync(fp)) {
       newTotalSize += fs.statSync(fp).size;
     }
@@ -153,7 +164,7 @@ export async function POST(req: Request) {
 
   return NextResponse.json({
     success: true,
-    totalFiles: filePaths.length,
+    totalFiles: uniqueFilePaths.length,
     alreadyOptimized,
     processed,
     failed,

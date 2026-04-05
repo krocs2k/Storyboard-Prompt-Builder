@@ -96,17 +96,33 @@ export async function loadStyleReferenceImage(
     const imagePath = await getResolvedMovieStyleImage(styleId);
     if (!imagePath) return null;
 
-    // Handle local file paths (e.g., /images/movie-styles/xxx.jpg or /images/movie-styles/xxx.jpg?v=123)
+    // Handle local file paths (e.g., /images/movie-styles/xxx.jpg or /api/category-images/movie-styles/xxx.jpg?v=123)
     if (imagePath.startsWith('/')) {
       // Strip query params (cache-busting) before filesystem access
       const cleanPath = imagePath.split('?')[0];
-      const fullPath = path.join(process.cwd(), 'public', cleanPath);
-      if (!fs.existsSync(fullPath)) {
-        console.warn(`Style reference image not found: ${fullPath}`);
+      // Normalize: /api/category-images/xxx → /images/xxx for filesystem lookup
+      const relPath = cleanPath.startsWith('/api/category-images/')
+        ? cleanPath.slice('/api/category-images/'.length)
+        : cleanPath.startsWith('/images/')
+          ? cleanPath.slice('/images/'.length)
+          : cleanPath;
+
+      const DATA_DIR = process.env.DATA_DIR || path.join(process.cwd(), 'data');
+      // Try persistent volume first, then public/images fallback
+      const candidates = [
+        path.join(DATA_DIR, 'category-images', relPath),
+        path.join(process.cwd(), 'public', 'images', relPath),
+      ];
+      let resolvedPath: string | null = null;
+      for (const candidate of candidates) {
+        if (fs.existsSync(candidate)) { resolvedPath = candidate; break; }
+      }
+      if (!resolvedPath) {
+        console.warn(`Style reference image not found in data or public: ${relPath}`);
         return null;
       }
-      const buffer = fs.readFileSync(fullPath);
-      const ext = path.extname(cleanPath).toLowerCase();
+      const buffer = fs.readFileSync(resolvedPath);
+      const ext = path.extname(relPath).toLowerCase();
       const mimeType = ext === '.png' ? 'image/png' : ext === '.webp' ? 'image/webp' : 'image/jpeg';
       return { base64: buffer.toString('base64'), mimeType };
     }

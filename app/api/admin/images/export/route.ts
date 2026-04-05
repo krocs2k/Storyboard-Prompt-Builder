@@ -18,9 +18,15 @@ export async function GET() {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const imagesRoot = path.join(process.cwd(), 'public', 'images');
+  const DATA_DIR = process.env.DATA_DIR || path.join(process.cwd(), 'data');
+  const categoryImagesDir = path.join(DATA_DIR, 'category-images');
+  const publicImagesDir = path.join(process.cwd(), 'public', 'images');
 
-  if (!fs.existsSync(imagesRoot)) {
+  // Use data/category-images/ as primary, fall back to public/images/
+  const imagesRoot = fs.existsSync(categoryImagesDir) ? categoryImagesDir
+    : fs.existsSync(publicImagesDir) ? publicImagesDir : null;
+
+  if (!imagesRoot) {
     return NextResponse.json({ error: 'No images directory found' }, { status: 404 });
   }
 

@@ -35,26 +35,35 @@ interface CategoryAssocResult {
   noMatch: number;
 }
 
+const DATA_DIR_ASSOC = process.env.DATA_DIR || path.join(process.cwd(), 'data');
+
 function computeAssociationsForCategory(
   items: Array<{ id: string; name: string; image?: string; description?: string }>,
   overrides: Record<string, CategoryOverride>,
   imageDir: string,
   categoryKey: string,
 ): { alreadyCorrect: number; toAssociate: AssocMatch[]; noMatch: number } {
-  const dirPath = path.join(process.cwd(), 'public', 'images', imageDir);
-  if (!fs.existsSync(dirPath)) {
-    return { alreadyCorrect: 0, toAssociate: [], noMatch: items.length };
-  }
-
-  const files = fs.readdirSync(dirPath).filter(f => {
-    const ext = path.extname(f).toLowerCase();
-    return ['.jpg', '.jpeg', '.png', '.webp', '.gif', '.avif'].includes(ext);
-  });
+  // Check both data/category-images/ and public/images/ for files
+  const dataDirPath = path.join(DATA_DIR_ASSOC, 'category-images', imageDir);
+  const publicDirPath = path.join(process.cwd(), 'public', 'images', imageDir);
 
   const fileMap = new Map<string, string>();
-  for (const f of files) {
-    const base = path.basename(f, path.extname(f));
-    fileMap.set(base, `/images/${imageDir}/${f}`);
+
+  // Collect from both directories (data takes priority)
+  for (const dirPath of [publicDirPath, dataDirPath]) {
+    if (!fs.existsSync(dirPath)) continue;
+    const files = fs.readdirSync(dirPath).filter(f => {
+      const ext = path.extname(f).toLowerCase();
+      return ['.jpg', '.jpeg', '.png', '.webp', '.gif', '.avif'].includes(ext);
+    });
+    for (const f of files) {
+      const base = path.basename(f, path.extname(f));
+      fileMap.set(base, `/api/category-images/${imageDir}/${f}`);
+    }
+  }
+
+  if (fileMap.size === 0) {
+    return { alreadyCorrect: 0, toAssociate: [], noMatch: items.length };
   }
 
   const toAssociate: AssocMatch[] = [];
@@ -62,14 +71,25 @@ function computeAssociationsForCategory(
   let noMatch = 0;
   const claimedFiles = new Set<string>();
 
+  // Helper to check if an image file exists on disk
+  function imageFileExists(imgPath: string): boolean {
+    const clean = imgPath.split('?')[0];
+    let rel = clean;
+    if (rel.startsWith('/api/category-images/')) rel = rel.slice('/api/category-images/'.length);
+    else if (rel.startsWith('/images/')) rel = rel.slice('/images/'.length);
+    return (
+      fs.existsSync(path.join(DATA_DIR_ASSOC, 'category-images', rel)) ||
+      fs.existsSync(path.join(process.cwd(), 'public', 'images', rel))
+    );
+  }
+
   // Pass 1: items already using the correct image dir
   for (const item of items) {
     const effectiveImage = overrides[item.id]?.image || item.image;
-    if (effectiveImage?.includes(`/images/${imageDir}/`)) {
-      const fullPath = path.join(process.cwd(), 'public', effectiveImage);
-      if (fs.existsSync(fullPath)) {
+    if (effectiveImage?.includes(`/${imageDir}/`)) {
+      if (imageFileExists(effectiveImage)) {
         alreadyCorrect++;
-        const base = path.basename(effectiveImage, path.extname(effectiveImage));
+        const base = path.basename(effectiveImage.split('?')[0], path.extname(effectiveImage.split('?')[0]));
         claimedFiles.add(base);
         continue;
       }
@@ -116,9 +136,8 @@ function computeAssociationsForCategory(
 
     if (!matched) {
       // Check if existing image file exists on disk
-      if (effectiveImage?.startsWith('/images/')) {
-        const fullPath = path.join(process.cwd(), 'public', effectiveImage);
-        if (fs.existsSync(fullPath)) {
+      if (effectiveImage && (effectiveImage.startsWith('/images/') || effectiveImage.startsWith('/api/category-images/'))) {
+        if (imageFileExists(effectiveImage)) {
           alreadyCorrect++;
           continue;
         }
@@ -163,8 +182,14 @@ export async function GET(request: NextRequest) {
         const img = overrides[item.id]?.image || item.image;
         if (img) {
           if (img.startsWith('http')) { correct++; continue; }
-          const fp = path.join(process.cwd(), 'public', img);
-          if (fs.existsSync(fp)) { correct++; continue; }
+          // Check both data/category-images and public/images
+          let rel = img.split('?')[0];
+          if (rel.startsWith('/api/category-images/')) rel = rel.slice('/api/category-images/'.length);
+          else if (rel.startsWith('/images/')) rel = rel.slice('/images/'.length);
+          if (
+            fs.existsSync(path.join(DATA_DIR_ASSOC, 'category-images', rel)) ||
+            fs.existsSync(path.join(process.cwd(), 'public', 'images', rel))
+          ) { correct++; continue; }
         }
       }
       results.push({

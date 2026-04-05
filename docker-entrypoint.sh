@@ -55,6 +55,19 @@ elif [ -f scripts/seed.js ]; then
   node scripts/seed.js || true
 fi
 
+# Seed category images into persistent volume on first run
+# (public/images/ is baked into the Docker image but the volume is persistent)
+CATEGORY_IMAGES_DIR="${DATA_DIR:-/srv/app/data}/category-images"
+if [ -d "public/images" ] && [ ! -f "$CATEGORY_IMAGES_DIR/.seeded" ]; then
+  echo "Seeding category images into persistent volume..."
+  mkdir -p "$CATEGORY_IMAGES_DIR"
+  cp -rn public/images/* "$CATEGORY_IMAGES_DIR/" 2>/dev/null || true
+  touch "$CATEGORY_IMAGES_DIR/.seeded"
+  echo "OK: Category images seeded"
+else
+  echo "OK: Category images already seeded (or no source images)"
+fi
+
 echo ""
 echo "Starting Next.js..."
 exec node server.js

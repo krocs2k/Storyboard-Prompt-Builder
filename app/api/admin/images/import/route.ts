@@ -42,7 +42,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'files[] and paths[] count mismatch' }, { status: 400 });
     }
 
-    const imagesRoot = path.join(process.cwd(), 'public', 'images');
+    const DATA_DIR = process.env.DATA_DIR || path.join(process.cwd(), 'data');
+    const imagesRoot = path.join(DATA_DIR, 'category-images');
 
     // On "init" batch, clear target subdirectories
     if (action === 'init' && subdirsCsv) {

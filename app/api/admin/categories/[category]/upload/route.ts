@@ -11,6 +11,9 @@ import sharp from 'sharp';
 const MAX_SIZE = 10 * 1024 * 1024; // 10MB
 const TARGET_DIMENSION = 1024;
 
+const DATA_DIR = process.env.DATA_DIR || path.join(process.cwd(), 'data');
+const CATEGORY_IMAGES_DIR = path.join(DATA_DIR, 'category-images');
+
 interface Params {
   params: { category: string };
 }
@@ -32,9 +35,9 @@ export async function POST(request: NextRequest, { params }: Params) {
     return NextResponse.json({ error: 'Unknown category' }, { status: 404 });
   }
 
-  // Determine target directory
+  // Determine target directory — save to persistent data volume
   const subdir = config.imageDir || 'data';
-  const targetDir = path.join(process.cwd(), 'public', 'images', subdir);
+  const targetDir = path.join(CATEGORY_IMAGES_DIR, subdir);
   if (!fs.existsSync(targetDir)) {
     fs.mkdirSync(targetDir, { recursive: true });
   }
@@ -76,7 +79,7 @@ export async function POST(request: NextRequest, { params }: Params) {
       fs.writeFileSync(filePath, buffer);
     }
 
-    return NextResponse.json({ path: `/images/${subdir}/${filename}?v=${Date.now()}` });
+    return NextResponse.json({ path: `/api/category-images/${subdir}/${filename}?v=${Date.now()}` });
   } else {
     // JSON URL download
     const { url, itemId } = await request.json();
@@ -109,7 +112,7 @@ export async function POST(request: NextRequest, { params }: Params) {
         fs.writeFileSync(filePath, buffer);
       }
 
-      return NextResponse.json({ path: `/images/${subdir}/${filename}?v=${Date.now()}` });
+      return NextResponse.json({ path: `/api/category-images/${subdir}/${filename}?v=${Date.now()}` });
     } catch (err: any) {
       return NextResponse.json({ error: err.message || 'Download failed' }, { status: 500 });
     }

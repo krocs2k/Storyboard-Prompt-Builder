@@ -7,7 +7,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
 
-const STYLES_DIR = path.join(process.cwd(), 'public', 'images', 'movie-styles');
+const DATA_DIR = process.env.DATA_DIR || path.join(process.cwd(), 'data');
+const STYLES_DIR = path.join(DATA_DIR, 'category-images', 'movie-styles');
 
 function ensureDir() {
   if (!fs.existsSync(STYLES_DIR)) {
@@ -59,7 +60,7 @@ export async function POST(req: NextRequest) {
       const buffer = Buffer.from(await file.arrayBuffer());
       fs.writeFileSync(filePath, buffer);
 
-      const localPath = `/images/movie-styles/${filename}?v=${Date.now()}`;
+      const localPath = `/api/category-images/movie-styles/${filename}?v=${Date.now()}`;
       return NextResponse.json({ success: true, path: localPath });
     } else {
       // Handle URL download
@@ -70,7 +71,7 @@ export async function POST(req: NextRequest) {
       }
 
       // If it's already a local path, just return it
-      if (url.startsWith('/images/')) {
+      if (url.startsWith('/api/category-images/') || url.startsWith('/images/')) {
         return NextResponse.json({ success: true, path: url });
       }
 
@@ -99,7 +100,7 @@ export async function POST(req: NextRequest) {
       const buffer = Buffer.from(arrayBuffer);
       fs.writeFileSync(filePath, buffer);
 
-      const localPath = `/images/movie-styles/${filename}?v=${Date.now()}`;
+      const localPath = `/api/category-images/movie-styles/${filename}?v=${Date.now()}`;
       return NextResponse.json({ success: true, path: localPath });
     }
   } catch (err) {
