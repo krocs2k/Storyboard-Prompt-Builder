@@ -9,7 +9,7 @@ import {
   ExternalLink
 } from 'lucide-react';
 import Link from 'next/link';
-import Image from 'next/image';
+
 
 interface CategoryItemData {
   id: string;
@@ -464,12 +464,12 @@ export default function CategoryAdminPage() {
 
                     {editImage && (
                       <div className="relative w-full aspect-video bg-gray-900 rounded-lg overflow-hidden mb-3">
-                        <Image
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
                           src={editImage}
                           alt={item.name}
-                          fill
-                          className="object-cover"
-                          onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                          className="absolute inset-0 w-full h-full object-cover"
+                          onError={(e) => { (e.target as HTMLImageElement).src = ''; (e.target as HTMLImageElement).style.display = 'none'; }}
                         />
                       </div>
                     )}
@@ -506,12 +506,20 @@ export default function CategoryAdminPage() {
                   <>
                     <div className="relative aspect-video bg-gray-900">
                       {item.image ? (
-                        <Image
+                        /* eslint-disable-next-line @next/next/no-img-element */
+                        <img
                           src={item.image}
                           alt={item.name}
-                          fill
-                          className="object-cover"
-                          onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                          loading="lazy"
+                          className="absolute inset-0 w-full h-full object-cover"
+                          onError={(e) => {
+                            const img = e.target as HTMLImageElement;
+                            const retries = Number(img.dataset.retries || '0');
+                            if (retries < 2) {
+                              img.dataset.retries = String(retries + 1);
+                              setTimeout(() => { img.src = item.image + (item.image!.includes('?') ? '&' : '?') + '_r=' + retries; }, 800 * (retries + 1));
+                            }
+                          }}
                         />
                       ) : (
                         <div className="flex items-center justify-center h-full">

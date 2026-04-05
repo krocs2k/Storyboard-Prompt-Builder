@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Search, Check, Camera, Film, Palette, Sun, Aperture, ImageIcon } from 'lucide-react';
-import Image from 'next/image';
+
 
 interface Option {
   id: string;
@@ -134,12 +134,21 @@ export function SelectionModal({
                     {/* Image or Placeholder */}
                     <div className="aspect-square relative bg-gradient-to-br from-slate-800 to-slate-900">
                       {option?.image ? (
-                        <Image
+                        /* eslint-disable-next-line @next/next/no-img-element */
+                        <img
                           src={option?.image ?? ''}
                           alt={option?.name ?? ''}
-                          fill
-                          className="object-cover"
-                          sizes="(max-width: 768px) 50vw, 20vw"
+                          loading="lazy"
+                          className="absolute inset-0 w-full h-full object-cover"
+                          onError={(e) => {
+                            const img = e.target as HTMLImageElement;
+                            const retries = Number(img.dataset.retries || '0');
+                            if (retries < 2) {
+                              img.dataset.retries = String(retries + 1);
+                              const sep = (option?.image ?? '').includes('?') ? '&' : '?';
+                              setTimeout(() => { img.src = (option?.image ?? '') + sep + '_r=' + retries; }, 800 * (retries + 1));
+                            }
+                          }}
                         />
                       ) : (
                         <div className="absolute inset-0 flex flex-col items-center justify-center p-4">
