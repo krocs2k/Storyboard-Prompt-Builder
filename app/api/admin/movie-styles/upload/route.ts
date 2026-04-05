@@ -59,7 +59,7 @@ export async function POST(req: NextRequest) {
       const buffer = Buffer.from(await file.arrayBuffer());
       fs.writeFileSync(filePath, buffer);
 
-      const localPath = `/images/movie-styles/${filename}`;
+      const localPath = `/images/movie-styles/${filename}?v=${Date.now()}`;
       return NextResponse.json({ success: true, path: localPath });
     } else {
       // Handle URL download
@@ -99,7 +99,7 @@ export async function POST(req: NextRequest) {
       const buffer = Buffer.from(arrayBuffer);
       fs.writeFileSync(filePath, buffer);
 
-      const localPath = `/images/movie-styles/${filename}`;
+      const localPath = `/images/movie-styles/${filename}?v=${Date.now()}`;
       return NextResponse.json({ success: true, path: localPath });
     }
   } catch (err) {

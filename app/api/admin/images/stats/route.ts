@@ -41,7 +41,8 @@ function countCategoryImages(items: Array<{ id: string; name: string; image?: st
     if (!item.image) continue;
     withImage++;
     if (item.image.startsWith('/images/')) {
-      const filePath = path.join(imagesRoot, '..', item.image);
+      const cleanImage = item.image.split('?')[0];
+      const filePath = path.join(imagesRoot, '..', cleanImage);
       if (fs.existsSync(filePath)) {
         localFound++;
       } else {

@@ -96,15 +96,17 @@ export async function loadStyleReferenceImage(
     const imagePath = await getResolvedMovieStyleImage(styleId);
     if (!imagePath) return null;
 
-    // Handle local file paths (e.g., /images/movie-styles/xxx.jpg)
+    // Handle local file paths (e.g., /images/movie-styles/xxx.jpg or /images/movie-styles/xxx.jpg?v=123)
     if (imagePath.startsWith('/')) {
-      const fullPath = path.join(process.cwd(), 'public', imagePath);
+      // Strip query params (cache-busting) before filesystem access
+      const cleanPath = imagePath.split('?')[0];
+      const fullPath = path.join(process.cwd(), 'public', cleanPath);
       if (!fs.existsSync(fullPath)) {
         console.warn(`Style reference image not found: ${fullPath}`);
         return null;
       }
       const buffer = fs.readFileSync(fullPath);
-      const ext = path.extname(imagePath).toLowerCase();
+      const ext = path.extname(cleanPath).toLowerCase();
       const mimeType = ext === '.png' ? 'image/png' : ext === '.webp' ? 'image/webp' : 'image/jpeg';
       return { base64: buffer.toString('base64'), mimeType };
     }

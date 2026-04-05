@@ -194,15 +194,15 @@ export async function PUT(req: NextRequest) {
 
     const overrides = await getOverrides();
 
-    const override: MovieStyleOverride = {};
-    if (image !== undefined && image !== defaultStyle.image) {
+    const override: MovieStyleOverride = overrides[id] || {};
+    if (image !== undefined) {
       override.image = image;
     }
     if (description !== undefined && description !== defaultStyle.description) {
       override.description = description;
     }
 
-    if (Object.keys(override).length > 0) {
+    if (override.image || override.description) {
       overrides[id] = override;
     } else {
       delete overrides[id];

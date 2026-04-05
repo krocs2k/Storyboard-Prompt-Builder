@@ -76,7 +76,7 @@ export async function POST(request: NextRequest, { params }: Params) {
       fs.writeFileSync(filePath, buffer);
     }
 
-    return NextResponse.json({ path: `/images/${subdir}/${filename}` });
+    return NextResponse.json({ path: `/images/${subdir}/${filename}?v=${Date.now()}` });
   } else {
     // JSON URL download
     const { url, itemId } = await request.json();
@@ -109,7 +109,7 @@ export async function POST(request: NextRequest, { params }: Params) {
         fs.writeFileSync(filePath, buffer);
       }
 
-      return NextResponse.json({ path: `/images/${subdir}/${filename}` });
+      return NextResponse.json({ path: `/images/${subdir}/${filename}?v=${Date.now()}` });
     } catch (err: any) {
       return NextResponse.json({ error: err.message || 'Download failed' }, { status: 500 });
     }
