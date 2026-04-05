@@ -84,7 +84,7 @@ Respond in JSON format:
 
 Respond with raw JSON only. Do not include code blocks, markdown, or any other formatting.`;
 
-    const llm = await getLLMConfig();
+    const llm = await getLLMConfig('ideas');
     const response = await fetch(llm.baseUrl, {
       method: 'POST',
       headers: {

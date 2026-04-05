@@ -39,6 +39,11 @@ export default function ApiConfigPage() {
   const [abacusImageModel, setAbacusImageModel] = useState('gpt-5.1');
   const [savingAbacusModel, setSavingAbacusModel] = useState(false);
 
+  // LLM model selection for Abacus
+  const [abacusIdeasModel, setAbacusIdeasModel] = useState('');
+  const [abacusScreenplayModel, setAbacusScreenplayModel] = useState('');
+  const [savingLlmModels, setSavingLlmModels] = useState(false);
+
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   useEffect(() => { setMounted(true); }, []);
@@ -63,6 +68,8 @@ export default function ApiConfigPage() {
       setHasAbacusEnvKey(data.hasAbacusEnvKey);
       if (data.imagenModel) setImagenModel(data.imagenModel);
       if (data.abacusImageModel) setAbacusImageModel(data.abacusImageModel);
+      if (data.abacusIdeasModel !== undefined) setAbacusIdeasModel(data.abacusIdeasModel);
+      if (data.abacusScreenplayModel !== undefined) setAbacusScreenplayModel(data.abacusScreenplayModel);
     } catch (err) {
       console.error('Failed to fetch config:', err);
     } finally {
@@ -166,6 +173,19 @@ export default function ApiConfigPage() {
     { id: 'nano_banana_pro', label: 'Nano Banana Pro', desc: 'Fast multimodal image generation', cost: '~$0.03/image' },
     { id: 'nano_banana2', label: 'Nano Banana 2', desc: 'Multimodal with text rendering', cost: '~$0.03/image' },
     { id: 'imagen', label: 'Imagen', desc: 'Google Imagen via Abacus', cost: '~$0.04/image' },
+  ];
+
+  const ABACUS_LLM_MODELS = [
+    { id: '', label: 'Default', desc: 'Uses gemini-3-flash-preview (or LLM_MODEL env var)' },
+    { id: 'gemini-3-flash-preview', label: 'Gemini 3 Flash', desc: 'Fast, cost-efficient for most tasks' },
+    { id: 'gemini-3-pro-preview', label: 'Gemini 3 Pro', desc: 'Higher quality reasoning and writing' },
+    { id: 'gpt-5.1', label: 'GPT-5.1', desc: 'OpenAI flagship model' },
+    { id: 'gpt-5.1-mini', label: 'GPT-5.1 Mini', desc: 'Fast and affordable OpenAI model' },
+    { id: 'claude-sonnet-4', label: 'Claude Sonnet 4', desc: 'Anthropic balanced model' },
+    { id: 'claude-opus-4', label: 'Claude Opus 4', desc: 'Anthropic premium model' },
+    { id: 'llama4-maverick', label: 'Llama 4 Maverick', desc: 'Meta open-weight model' },
+    { id: 'deepseek-v3', label: 'DeepSeek V3', desc: 'Strong reasoning at low cost' },
+    { id: 'qwen3-235b-a22b', label: 'Qwen3 235B', desc: 'Alibaba large language model' },
   ];
 
   return (
@@ -508,6 +528,100 @@ export default function ApiConfigPage() {
                 >
                   {savingAbacusModel ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                   Save Model
+                </button>
+              </div>
+            )}
+
+            {/* ── Abacus LLM Models ── */}
+            {provider === 'abacus' && (
+              <div className="bg-gray-800 border border-emerald-500/30 shadow-lg rounded-xl p-6">
+                <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                  <Sparkles className="w-5 h-5 text-amber-400" />
+                  LLM Models
+                </h2>
+                <p className="text-gray-400 text-sm mb-5">Choose which LLM to use for story idea generation and screenplay writing. Leave on &quot;Default&quot; to use the standard model for both.</p>
+
+                {/* Story Ideas & Concepts */}
+                <div className="mb-6">
+                  <h3 className="text-sm font-semibold text-gray-300 mb-2 flex items-center gap-2">
+                    <Zap className="w-4 h-4 text-amber-400" />
+                    Story Ideas &amp; Concepts
+                  </h3>
+                  <p className="text-gray-500 text-xs mb-3">Used for generating story ideas and developing concepts from your subjects.</p>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+                    {ABACUS_LLM_MODELS.map(m => (
+                      <button
+                        key={`ideas-${m.id}`}
+                        onClick={() => setAbacusIdeasModel(m.id)}
+                        className={`relative p-2.5 rounded-lg border-2 transition-all text-left ${
+                          abacusIdeasModel === m.id
+                            ? 'border-amber-500 bg-amber-500/10'
+                            : 'border-gray-600 bg-gray-900/50 hover:border-gray-500'
+                        }`}
+                      >
+                        <span className="text-white font-semibold text-xs block mb-0.5">{m.label}</span>
+                        <p className="text-gray-400 text-[10px] leading-tight">{m.desc}</p>
+                        {abacusIdeasModel === m.id && <CheckCircle className="absolute top-1.5 right-1.5 w-3.5 h-3.5 text-amber-400" />}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Screenplay Generation */}
+                <div className="mb-5">
+                  <h3 className="text-sm font-semibold text-gray-300 mb-2 flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-purple-400" />
+                    Screenplay Generation
+                  </h3>
+                  <p className="text-gray-500 text-xs mb-3">Used for writing the full screenplay from your concept or transcript.</p>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+                    {ABACUS_LLM_MODELS.map(m => (
+                      <button
+                        key={`screenplay-${m.id}`}
+                        onClick={() => setAbacusScreenplayModel(m.id)}
+                        className={`relative p-2.5 rounded-lg border-2 transition-all text-left ${
+                          abacusScreenplayModel === m.id
+                            ? 'border-purple-500 bg-purple-500/10'
+                            : 'border-gray-600 bg-gray-900/50 hover:border-gray-500'
+                        }`}
+                      >
+                        <span className="text-white font-semibold text-xs block mb-0.5">{m.label}</span>
+                        <p className="text-gray-400 text-[10px] leading-tight">{m.desc}</p>
+                        {abacusScreenplayModel === m.id && <CheckCircle className="absolute top-1.5 right-1.5 w-3.5 h-3.5 text-purple-400" />}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <button
+                  onClick={async () => {
+                    setSavingLlmModels(true);
+                    setMessage(null);
+                    try {
+                      const res = await fetch('/api/admin/gemini', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ abacusIdeasModel, abacusScreenplayModel })
+                      });
+                      const data = await res.json();
+                      if (data.success) {
+                        const parts = [];
+                        const ideasLabel = ABACUS_LLM_MODELS.find(m => m.id === abacusIdeasModel)?.label || 'Default';
+                        const screenplayLabel = ABACUS_LLM_MODELS.find(m => m.id === abacusScreenplayModel)?.label || 'Default';
+                        parts.push(`Ideas: ${ideasLabel}`);
+                        parts.push(`Screenplay: ${screenplayLabel}`);
+                        setMessage({ type: 'success', text: `LLM models updated — ${parts.join(', ')}` });
+                      } else {
+                        setMessage({ type: 'error', text: data.error || 'Failed to save' });
+                      }
+                    } catch { setMessage({ type: 'error', text: 'Failed to save LLM models' }); }
+                    finally { setSavingLlmModels(false); }
+                  }}
+                  disabled={savingLlmModels}
+                  className="flex items-center gap-2 px-5 py-2.5 bg-amber-600 hover:bg-amber-500 disabled:bg-gray-700 disabled:text-gray-500 text-white rounded-lg transition-colors font-medium text-sm"
+                >
+                  {savingLlmModels ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                  Save LLM Models
                 </button>
               </div>
             )}

@@ -111,7 +111,13 @@ export async function GET(req: NextRequest) {
   // Sort alphabetically by name
   styles.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
 
-  return NextResponse.json({ styles, settings, isAdmin });
+  // Rewrite /images/... paths to /api/category-images/... for Docker/production compatibility
+  const rewrittenStyles = styles.map(s => ({
+    ...s,
+    image: rewriteImagePath(s.image),
+  }));
+
+  return NextResponse.json({ styles: rewrittenStyles, settings, isAdmin });
 }
 
 /**
@@ -332,4 +338,14 @@ export async function DELETE(req: NextRequest) {
     console.error('Failed to delete movie style:', err);
     return NextResponse.json({ error: 'Failed to delete' }, { status: 500 });
   }
+}
+
+/** Rewrite static /images/... paths to go through the dynamic API route */
+function rewriteImagePath(img?: string): string | undefined {
+  if (!img) return img;
+  if (img.startsWith('/api/category-images/')) return img;
+  if (img.startsWith('/images/')) {
+    return '/api/category-images/' + img.slice('/images/'.length);
+  }
+  return img;
 }

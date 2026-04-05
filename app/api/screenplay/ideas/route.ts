@@ -68,7 +68,7 @@ export async function POST(request: NextRequest) {
 - Platform-appropriate formats (TV spots, social media ads, brand films, product launches)`
       : '';
 
-    const llm = await getLLMConfig();
+    const llm = await getLLMConfig('ideas');
     const response = await fetch(llm.baseUrl, {
       method: 'POST',
       headers: {

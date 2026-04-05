@@ -121,7 +121,7 @@ export default function MovieStylesAdmin() {
 
   const downloadUrlToLocal = async (url: string, styleId: string): Promise<string> => {
     // If already a local path, return as-is
-    if (url.startsWith('/images/')) return url;
+    if (url.startsWith('/images/') || url.startsWith('/api/category-images/')) return url;
     
     setUploading(true);
     setUploadError(null);
@@ -188,7 +188,7 @@ export default function MovieStylesAdmin() {
     try {
       // If external URL, download first
       let finalImage = editImage;
-      if (editImage && !editImage.startsWith('/images/') && editImage.startsWith('http')) {
+      if (editImage && !editImage.startsWith('/images/') && !editImage.startsWith('/api/category-images/') && editImage.startsWith('http')) {
         try {
           finalImage = await downloadUrlToLocal(editImage, editingId);
         } catch (err: any) {
@@ -448,7 +448,7 @@ export default function MovieStylesAdmin() {
                 type="text"
                 value={addImage}
                 onChange={(e) => setAddImage(e.target.value)}
-                placeholder="https://example.com/image.jpg or /images/..."
+                placeholder="URL or local path (/images/... or /api/category-images/...)"
                 className="w-full px-3 py-2 bg-gray-900 border border-gray-600 rounded-lg text-white text-sm focus:outline-none focus:border-emerald-500/50"
               />
             </div>
@@ -618,7 +618,7 @@ export default function MovieStylesAdmin() {
                             type="text"
                             value={editImage}
                             onChange={(e) => setEditImage(e.target.value)}
-                            placeholder="https://example.com/image.jpg or /images/..."
+                            placeholder="URL or local path (/images/... or /api/category-images/...)"
                             className="flex-1 px-3 py-2 bg-gray-900 border border-gray-600 rounded-lg text-white text-sm focus:outline-none focus:border-amber-500/50"
                           />
                           {editImage && editImage.startsWith('http') && (
@@ -633,7 +633,7 @@ export default function MovieStylesAdmin() {
                             </button>
                           )}
                         </div>
-                        {editImage.startsWith('/images/') && (
+                        {(editImage.startsWith('/images/') || editImage.startsWith('/api/category-images/')) && (
                           <p className="text-xs text-emerald-400 mt-1 flex items-center gap-1">
                             <Check className="w-3 h-3" /> Stored locally
                           </p>
@@ -679,7 +679,7 @@ export default function MovieStylesAdmin() {
                             </div>
                           )}
                         </div>
-                        {editImage.startsWith('/images/') && (
+                        {(editImage.startsWith('/images/') || editImage.startsWith('/api/category-images/')) && (
                           <p className="text-xs text-emerald-400 mt-1 flex items-center gap-1">
                             <Check className="w-3 h-3" /> Stored locally: {editImage}
                           </p>

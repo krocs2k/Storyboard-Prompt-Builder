@@ -15,13 +15,17 @@ import { prisma } from '@/lib/db';
 
 export type ApiProvider = 'gemini' | 'abacus';
 
+export type LLMPurpose = 'default' | 'ideas' | 'screenplay';
+
 // Cache DB-fetched config to avoid hitting DB on every call
 let cachedConfig: {
   provider: ApiProvider;
   geminiKey: string | null;
   abacusKey: string | null;
+  abacusIdeasModel: string | null;
+  abacusScreenplayModel: string | null;
   fetchedAt: number;
-} = { provider: 'gemini', geminiKey: null, abacusKey: null, fetchedAt: 0 };
+} = { provider: 'gemini', geminiKey: null, abacusKey: null, abacusIdeasModel: null, abacusScreenplayModel: null, fetchedAt: 0 };
 const DB_KEY_CACHE_TTL = 60_000; // 60 seconds
 
 /** Immediately bust the in-memory provider config cache so next call re-reads from DB */
@@ -37,7 +41,7 @@ async function loadProviderConfig(): Promise<typeof cachedConfig> {
 
   try {
     const configs = await prisma.systemConfig.findMany({
-      where: { key: { in: ['API_PROVIDER', 'GEMINI_API_KEY', 'ABACUS_API_KEY'] } }
+      where: { key: { in: ['API_PROVIDER', 'GEMINI_API_KEY', 'ABACUS_API_KEY', 'ABACUS_LLM_IDEAS_MODEL', 'ABACUS_LLM_SCREENPLAY_MODEL'] } }
     });
     const configMap = Object.fromEntries(configs.map(c => [c.key, c.value]));
 
@@ -45,6 +49,8 @@ async function loadProviderConfig(): Promise<typeof cachedConfig> {
       provider: (configMap['API_PROVIDER'] as ApiProvider) || 'gemini',
       geminiKey: configMap['GEMINI_API_KEY'] || process.env.GEMINI_API_KEY || null,
       abacusKey: configMap['ABACUS_API_KEY'] || process.env.ABACUSAI_API_KEY || null,
+      abacusIdeasModel: configMap['ABACUS_LLM_IDEAS_MODEL'] || null,
+      abacusScreenplayModel: configMap['ABACUS_LLM_SCREENPLAY_MODEL'] || null,
       fetchedAt: now,
     };
   } catch (e) {
@@ -54,6 +60,8 @@ async function loadProviderConfig(): Promise<typeof cachedConfig> {
       provider: 'gemini',
       geminiKey: process.env.GEMINI_API_KEY || null,
       abacusKey: process.env.ABACUSAI_API_KEY || null,
+      abacusIdeasModel: null,
+      abacusScreenplayModel: null,
       fetchedAt: now,
     };
   }
@@ -68,7 +76,7 @@ export interface LLMConfig {
   provider: ApiProvider;
 }
 
-export async function getLLMConfig(): Promise<LLMConfig> {
+export async function getLLMConfig(purpose: LLMPurpose = 'default'): Promise<LLMConfig> {
   // Priority 1: Custom provider override (LLM_API_KEY + LLM_API_BASE_URL)
   if (process.env.LLM_API_KEY) {
     return {
@@ -81,12 +89,22 @@ export async function getLLMConfig(): Promise<LLMConfig> {
 
   // Priority 2: DB-stored provider preference
   const config = await loadProviderConfig();
+  const defaultModel = process.env.LLM_MODEL || 'gemini-3-flash-preview';
+
+  // Resolve model based on purpose (only for Abacus provider)
+  function resolveModel(): string {
+    if (config.provider === 'abacus') {
+      if (purpose === 'ideas' && config.abacusIdeasModel) return config.abacusIdeasModel;
+      if (purpose === 'screenplay' && config.abacusScreenplayModel) return config.abacusScreenplayModel;
+    }
+    return defaultModel;
+  }
 
   if (config.provider === 'abacus' && config.abacusKey) {
     return {
       apiKey: config.abacusKey,
       baseUrl: 'https://apps.abacus.ai/v1/chat/completions',
-      model: process.env.LLM_MODEL || 'gemini-3-flash-preview',
+      model: resolveModel(),
       provider: 'abacus',
     };
   }
@@ -95,7 +113,7 @@ export async function getLLMConfig(): Promise<LLMConfig> {
     return {
       apiKey: config.geminiKey,
       baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',
-      model: process.env.LLM_MODEL || 'gemini-3-flash-preview',
+      model: defaultModel,
       provider: 'gemini',
     };
   }
@@ -105,7 +123,7 @@ export async function getLLMConfig(): Promise<LLMConfig> {
     return {
       apiKey: config.abacusKey,
       baseUrl: 'https://apps.abacus.ai/v1/chat/completions',
-      model: process.env.LLM_MODEL || 'gemini-3-flash-preview',
+      model: resolveModel(),
       provider: 'abacus',
     };
   }

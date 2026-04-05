@@ -163,7 +163,7 @@ export default function CategoryAdminPage() {
     try {
       // If external URL, download first
       let finalImage = editImage;
-      if (editImage && !editImage.startsWith('/images/') && editImage.startsWith('http')) {
+      if (editImage && !editImage.startsWith('/images/') && !editImage.startsWith('/api/category-images/') && editImage.startsWith('http')) {
         try {
           const dlRes = await fetch(`/api/admin/categories/${category}/upload`, {
             method: 'POST',
@@ -395,7 +395,7 @@ export default function CategoryAdminPage() {
                             type="text"
                             value={editImage}
                             onChange={(e) => setEditImage(e.target.value)}
-                            placeholder="https://... or /images/..."
+                            placeholder="URL or local path (/images/... or /api/category-images/...)"
                             className="flex-1 px-3 py-2 bg-gray-900 border border-gray-600 rounded-lg text-white text-sm focus:outline-none focus:border-amber-500/50"
                           />
                           {editImage && editImage.startsWith('http') && (
@@ -409,7 +409,7 @@ export default function CategoryAdminPage() {
                             </button>
                           )}
                         </div>
-                        {editImage.startsWith('/images/') && (
+                        {(editImage.startsWith('/images/') || editImage.startsWith('/api/category-images/')) && (
                           <p className="text-xs text-emerald-400 mt-1 flex items-center gap-1">
                             <Check className="w-3 h-3" /> Stored locally
                           </p>

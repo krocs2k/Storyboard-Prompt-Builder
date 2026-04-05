@@ -8,6 +8,8 @@ const CONFIG_KEY = 'GEMINI_API_KEY';
 const ABACUS_KEY = 'ABACUS_API_KEY';
 const IMAGEN_MODEL_KEY = 'IMAGEN_MODEL';
 const ABACUS_IMAGE_MODEL_KEY = 'ABACUS_IMAGE_MODEL';
+const ABACUS_LLM_IDEAS_MODEL_KEY = 'ABACUS_LLM_IDEAS_MODEL';
+const ABACUS_LLM_SCREENPLAY_MODEL_KEY = 'ABACUS_LLM_SCREENPLAY_MODEL';
 const PROVIDER_KEY = 'API_PROVIDER';
 
 export async function GET() {
@@ -18,7 +20,7 @@ export async function GET() {
     }
 
     const configs = await prisma.systemConfig.findMany({
-      where: { key: { in: [CONFIG_KEY, ABACUS_KEY, IMAGEN_MODEL_KEY, ABACUS_IMAGE_MODEL_KEY, PROVIDER_KEY] } }
+      where: { key: { in: [CONFIG_KEY, ABACUS_KEY, IMAGEN_MODEL_KEY, ABACUS_IMAGE_MODEL_KEY, ABACUS_LLM_IDEAS_MODEL_KEY, ABACUS_LLM_SCREENPLAY_MODEL_KEY, PROVIDER_KEY] } }
     });
     const configMap = Object.fromEntries(configs.map(c => [c.key, c.value]));
 
@@ -44,6 +46,8 @@ export async function GET() {
     const provider = configMap[PROVIDER_KEY] || 'gemini';
     const imagenModel = configMap[IMAGEN_MODEL_KEY] || 'imagen-4.0-generate-001';
     const abacusImageModel = configMap[ABACUS_IMAGE_MODEL_KEY] || 'gpt-5.1';
+    const abacusIdeasModel = configMap[ABACUS_LLM_IDEAS_MODEL_KEY] || '';
+    const abacusScreenplayModel = configMap[ABACUS_LLM_SCREENPLAY_MODEL_KEY] || '';
 
     return NextResponse.json({
       // Legacy fields for backward compat
@@ -60,6 +64,8 @@ export async function GET() {
       maskedAbacusKey,
       hasAbacusEnvKey,
       abacusImageModel,
+      abacusIdeasModel,
+      abacusScreenplayModel,
     });
   } catch (error) {
     console.error('Failed to get API config:', error);
@@ -75,7 +81,7 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { apiKey, abacusApiKey, imagenModel, abacusImageModel, provider } = body;
+    const { apiKey, abacusApiKey, imagenModel, abacusImageModel, abacusIdeasModel, abacusScreenplayModel, provider } = body;
 
     // Handle provider selection
     if (provider !== undefined) {
@@ -137,6 +143,33 @@ export async function POST(request: Request) {
         update: { value: abacusImageModel },
         create: { key: ABACUS_IMAGE_MODEL_KEY, value: abacusImageModel }
       });
+    }
+
+    // Handle Abacus LLM model for story ideas/concepts
+    if (abacusIdeasModel !== undefined) {
+      if (abacusIdeasModel === '') {
+        // Empty string means reset to default
+        await prisma.systemConfig.deleteMany({ where: { key: ABACUS_LLM_IDEAS_MODEL_KEY } });
+      } else {
+        await prisma.systemConfig.upsert({
+          where: { key: ABACUS_LLM_IDEAS_MODEL_KEY },
+          update: { value: abacusIdeasModel },
+          create: { key: ABACUS_LLM_IDEAS_MODEL_KEY, value: abacusIdeasModel },
+        });
+      }
+    }
+
+    // Handle Abacus LLM model for screenplay generation
+    if (abacusScreenplayModel !== undefined) {
+      if (abacusScreenplayModel === '') {
+        await prisma.systemConfig.deleteMany({ where: { key: ABACUS_LLM_SCREENPLAY_MODEL_KEY } });
+      } else {
+        await prisma.systemConfig.upsert({
+          where: { key: ABACUS_LLM_SCREENPLAY_MODEL_KEY },
+          update: { value: abacusScreenplayModel },
+          create: { key: ABACUS_LLM_SCREENPLAY_MODEL_KEY, value: abacusScreenplayModel },
+        });
+      }
     }
 
     // Bust all in-memory caches so the new values are picked up immediately

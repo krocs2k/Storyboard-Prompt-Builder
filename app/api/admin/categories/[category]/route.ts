@@ -36,11 +36,17 @@ export async function GET(request: NextRequest, { params }: Params) {
   const overrides = await getCategoryOverrides(category);
   const merged = mergeWithOverrides(items, overrides);
 
+  // Rewrite /images/... paths to /api/category-images/... for Docker/production compatibility
+  const rewritten = merged.map(item => ({
+    ...item,
+    image: rewriteImagePath(item.image),
+  }));
+
   return NextResponse.json({
     category,
     label: config.label,
     section: config.section,
-    items: merged,
+    items: rewritten,
     overrideCount: Object.keys(overrides).length,
   });
 }
@@ -120,4 +126,14 @@ export async function DELETE(request: NextRequest, { params }: Params) {
   }
 
   return NextResponse.json({ success: true });
+}
+
+/** Rewrite static /images/... paths to go through the dynamic API route */
+function rewriteImagePath(img?: string): string | undefined {
+  if (!img) return img;
+  if (img.startsWith('/api/category-images/')) return img;
+  if (img.startsWith('/images/')) {
+    return '/api/category-images/' + img.slice('/images/'.length);
+  }
+  return img;
 }

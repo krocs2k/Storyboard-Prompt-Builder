@@ -290,7 +290,7 @@ For EACH location:
       );
     }
 
-    const llm = await getLLMConfig();
+    const llm = await getLLMConfig('screenplay');
     const response = await fetch(llm.baseUrl, {
       method: 'POST',
       headers: {
