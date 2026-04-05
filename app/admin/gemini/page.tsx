@@ -178,14 +178,14 @@ export default function ApiConfigPage() {
   const ABACUS_LLM_MODELS = [
     { id: '', label: 'Default', desc: 'Uses gemini-3-flash-preview (or LLM_MODEL env var)' },
     { id: 'gemini-3-flash-preview', label: 'Gemini 3 Flash', desc: 'Fast, cost-efficient for most tasks' },
-    { id: 'gemini-3-pro-preview', label: 'Gemini 3 Pro', desc: 'Higher quality reasoning and writing' },
+    { id: 'gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro', desc: 'Higher quality reasoning and writing' },
     { id: 'gpt-5.1', label: 'GPT-5.1', desc: 'OpenAI flagship model' },
-    { id: 'gpt-5.1-mini', label: 'GPT-5.1 Mini', desc: 'Fast and affordable OpenAI model' },
-    { id: 'claude-sonnet-4', label: 'Claude Sonnet 4', desc: 'Anthropic balanced model' },
-    { id: 'claude-opus-4', label: 'Claude Opus 4', desc: 'Anthropic premium model' },
-    { id: 'llama4-maverick', label: 'Llama 4 Maverick', desc: 'Meta open-weight model' },
-    { id: 'deepseek-v3', label: 'DeepSeek V3', desc: 'Strong reasoning at low cost' },
-    { id: 'qwen3-235b-a22b', label: 'Qwen3 235B', desc: 'Alibaba large language model' },
+    { id: 'gpt-5-mini', label: 'GPT-5 Mini', desc: 'Fast and affordable OpenAI model' },
+    { id: 'claude-sonnet-4-20250514', label: 'Claude Sonnet 4', desc: 'Anthropic balanced model' },
+    { id: 'claude-opus-4-20250514', label: 'Claude Opus 4', desc: 'Anthropic premium model' },
+    { id: 'meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8', label: 'Llama 4 Maverick', desc: 'Meta open-weight model' },
+    { id: 'deepseek/deepseek-v3.1', label: 'DeepSeek V3.1', desc: 'Strong reasoning at low cost' },
+    { id: 'Qwen/Qwen3-235B-A22B-Instruct-2507', label: 'Qwen3 235B', desc: 'Alibaba large language model' },
   ];
 
   return (

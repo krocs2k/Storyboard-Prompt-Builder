@@ -112,7 +112,9 @@ Respond with raw JSON only. Do not include code blocks, markdown, or any other f
     });
 
     if (!response.ok) {
-      throw new Error(`LLM API error: ${response.status}`);
+      const errBody = await response.text().catch(() => '');
+      console.error(`LLM API error ${response.status}:`, errBody);
+      throw new Error(`LLM API error: ${response.status} - ${errBody.slice(0, 200)}`);
     }
 
     const data = await response.json();

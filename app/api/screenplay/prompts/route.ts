@@ -247,7 +247,7 @@ Respond with raw JSON only.`
     });
 
     if (!response.ok) {
-      throw new Error(`LLM API error: ${response.status}`);
+      const errBody = await response.text().catch(() => ""); console.error(`LLM API error ${response.status}:`, errBody); throw new Error(`LLM API error: ${response.status} - ${errBody.slice(0, 200)}`);
     }
 
     trackUsage({ eventType: 'prompt_generate', apiModel: llm.model, apiType: 'llm', provider: llm.provider });

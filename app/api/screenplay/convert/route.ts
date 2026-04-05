@@ -226,7 +226,7 @@ For EACH location in the screenplay:
     });
 
     if (!response.ok) {
-      throw new Error(`LLM API error: ${response.status}`);
+      const errBody = await response.text().catch(() => ""); console.error(`LLM API error ${response.status}:`, errBody); throw new Error(`LLM API error: ${response.status} - ${errBody.slice(0, 200)}`);
     }
 
     trackUsage({ userId: session.user.id, eventType: 'screenplay_convert', apiModel: llm.model, apiType: 'llm', provider: llm.provider });
