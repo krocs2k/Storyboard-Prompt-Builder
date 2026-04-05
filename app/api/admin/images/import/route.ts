@@ -3,6 +3,9 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
+import { prisma } from '@/lib/db';
+import { invalidateAllCategoryCaches } from '@/lib/category-overrides';
+import { invalidateMovieStyleCache } from '@/lib/movie-style-ref';
 import * as fs from 'fs';
 import * as path from 'path';
 import sharp from 'sharp';
@@ -21,6 +24,7 @@ const THUMB_QUALITY = 80;
  *   - paths[]        : matching relative paths (e.g. "data/lens-types/image.jpg")
  *   - action         : "init" (first batch — clears target dirs) or "append" (subsequent)
  *   - subdirs        : comma-separated list of subdirs to clear on "init" (e.g. "data,movie-styles")
+ *   - overrides      : (optional, init batch only) JSON string of overrides.json from export ZIP
  */
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -45,21 +49,47 @@ export async function POST(req: NextRequest) {
     const DATA_DIR = process.env.DATA_DIR || path.join(process.cwd(), 'data');
     const imagesRoot = path.join(DATA_DIR, 'category-images');
 
-    // On "init" batch, clear target subdirectories
-    if (action === 'init' && subdirsCsv) {
-      const subdirs = subdirsCsv.split(',').map(s => s.trim()).filter(Boolean);
-      for (const subdir of subdirs) {
-        // Prevent path traversal
-        if (subdir.includes('..') || subdir.startsWith('/')) continue;
-        const subdirPath = path.join(imagesRoot, subdir);
-        if (fs.existsSync(subdirPath)) {
-          const existing = fs.readdirSync(subdirPath);
-          for (const f of existing) {
-            const fullPath = path.join(subdirPath, f);
-            try {
-              if (fs.statSync(fullPath).isFile()) fs.unlinkSync(fullPath);
-            } catch { /* skip */ }
+    // On "init" batch, clear target subdirectories and apply DB overrides
+    let overridesApplied = 0;
+    if (action === 'init') {
+      // Clear target subdirectories
+      if (subdirsCsv) {
+        const subdirs = subdirsCsv.split(',').map(s => s.trim()).filter(Boolean);
+        for (const subdir of subdirs) {
+          // Prevent path traversal
+          if (subdir.includes('..') || subdir.startsWith('/')) continue;
+          const subdirPath = path.join(imagesRoot, subdir);
+          if (fs.existsSync(subdirPath)) {
+            const existing = fs.readdirSync(subdirPath);
+            for (const f of existing) {
+              const fullPath = path.join(subdirPath, f);
+              try {
+                if (fs.statSync(fullPath).isFile()) fs.unlinkSync(fullPath);
+              } catch { /* skip */ }
+            }
           }
+        }
+      }
+
+      // Apply overrides from export ZIP (syncs the "image database")
+      const overridesJson = formData.get('overrides') as string | null;
+      if (overridesJson) {
+        try {
+          const overridesData: Record<string, any> = JSON.parse(overridesJson);
+          for (const [key, value] of Object.entries(overridesData)) {
+            const valueStr = typeof value === 'string' ? value : JSON.stringify(value);
+            await prisma.systemConfig.upsert({
+              where: { key },
+              create: { key, value: valueStr },
+              update: { value: valueStr },
+            });
+            overridesApplied++;
+          }
+          // Invalidate all caches so the app picks up new overrides immediately
+          invalidateAllCategoryCaches();
+          try { invalidateMovieStyleCache(); } catch { /* ok */ }
+        } catch (e) {
+          console.error('Failed to apply overrides:', e);
         }
       }
     }
@@ -120,7 +150,7 @@ export async function POST(req: NextRequest) {
       imported++;
     }
 
-    return NextResponse.json({ success: true, imported, resized });
+    return NextResponse.json({ success: true, imported, resized, overridesApplied });
   } catch (err) {
     console.error('Image import batch failed:', err);
     return NextResponse.json(

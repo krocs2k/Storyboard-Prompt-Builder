@@ -1,11 +1,17 @@
 import nodemailer from 'nodemailer';
 import { prisma } from '@/lib/db';
+import { brandedEmailTemplate, emailButton, emailParagraph, emailFallbackLink, emailNote } from '@/lib/email-template';
 
 /**
  * Email utility that supports:
  * 1. Abacus.AI notification API (when ABACUSAI_API_KEY is set)
  * 2. SMTP via Nodemailer — config from DB (Admin panel) or env vars
  * 3. Console logging fallback (when neither is configured)
+ *
+ * All outgoing emails use the branded Storyshot Creator template with:
+ * - Gold/slate color scheme matching the app
+ * - Dynamic logo from /icon-192x192.png (updates when admin uploads new logo)
+ * - Subject lines prefixed with "Storyshot Creator - "
  */
 
 // ---------- SMTP config cache (reads DB once per 60s) ----------
@@ -89,9 +95,9 @@ async function sendViaAbacus(to: string, subject: string, html: string): Promise
   }
 }
 
-async function sendViaSMTP(to: string, subject: string, html: string, smtpCfg?: SmtpConfig): Promise<boolean> {
+async function sendViaSMTP(to: string, subject: string, html: string, smtpCfg?: SmtpConfig): Promise<{ success: boolean; error?: string }> {
   const cfg = smtpCfg || await getSmtpConfig();
-  if (!cfg) return false;
+  if (!cfg) return { success: false, error: 'No SMTP configuration found' };
 
   try {
     const transporter = nodemailer.createTransport({
@@ -102,10 +108,16 @@ async function sendViaSMTP(to: string, subject: string, html: string, smtpCfg?: 
     });
 
     await transporter.sendMail({ from: cfg.from, to, subject, html });
-    return true;
-  } catch (error) {
+    return { success: true };
+  } catch (error: unknown) {
+    const errMsg = error instanceof Error ? error.message : 'Unknown SMTP error';
+    // Extract the human-readable part from SMTP response errors
+    const smtpResponse = (error as { response?: string })?.response;
+    const displayError = smtpResponse
+      ? smtpResponse.replace(/^\d+[-\s]*/gm, '').trim()
+      : errMsg;
     console.error('SMTP email failed:', error);
-    return false;
+    return { success: false, error: displayError };
   }
 }
 
@@ -130,14 +142,16 @@ export async function testSmtpConnection(cfg: SmtpConfig): Promise<{ success: bo
 /** Send a test email via SMTP (used by admin panel) */
 export async function sendTestEmail(cfg: SmtpConfig, recipientEmail: string): Promise<{ success: boolean; error?: string }> {
   try {
-    const html = `
-      <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto; background: #1a1a2e; padding: 30px; border-radius: 12px;">
-        <h2 style="color: #e94560; margin-top: 0;">✅ SMTP Test Successful</h2>
-        <p style="color: #cccccc;">Your mail server is correctly configured for <strong style="color: #ffffff;">Storyshot Creator</strong>.</p>
-        <p style="color: #888888; font-size: 12px; margin-top: 20px;">This is an automated test email. No action required.</p>
-      </div>`;
-    const ok = await sendViaSMTP(recipientEmail, 'Storyshot Creator — SMTP Test', html, cfg);
-    return ok ? { success: true } : { success: false, error: 'Failed to send test email' };
+    const html = brandedEmailTemplate({
+      title: '✅ SMTP Test Successful',
+      bodyHtml: [
+        emailParagraph('Your mail server is correctly configured for <strong style="color: #ffffff;">Storyshot Creator</strong>.'),
+        emailParagraph('This is an automated test email. No action is required.', { color: '#64748b', size: '12px' }),
+      ].join(''),
+      footerText: 'This test was triggered from the Admin &gt; Email panel.',
+    });
+    const result = await sendViaSMTP(recipientEmail, 'Storyshot Creator - SMTP Test', html, cfg);
+    return result;
   } catch (error: unknown) {
     return { success: false, error: error instanceof Error ? error.message : 'Send failed' };
   }
@@ -152,7 +166,8 @@ async function sendEmail(to: string, subject: string, html: string): Promise<boo
   // Priority 2: SMTP (DB config or env vars)
   const smtpCfg = await getSmtpConfig();
   if (smtpCfg) {
-    return sendViaSMTP(to, subject, html, smtpCfg);
+    const result = await sendViaSMTP(to, subject, html, smtpCfg);
+    return result.success;
   }
 
   // Fallback: log to console
@@ -165,40 +180,18 @@ async function sendEmail(to: string, subject: string, html: string): Promise<boo
 export async function sendInviteEmail(email: string, token: string): Promise<boolean> {
   const acceptUrl = `${process.env.NEXTAUTH_URL}/invite/accept?token=${token}`;
 
-  const htmlBody = `
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #1a1a2e; padding: 40px; border-radius: 12px;">
-      <div style="text-align: center; margin-bottom: 30px;">
-        <h1 style="color: #ffffff; margin: 0; font-size: 28px;">🎬 Storyshot Creator</h1>
-      </div>
-      
-      <div style="background: #16213e; padding: 30px; border-radius: 8px; border: 1px solid #0f3460;">
-        <h2 style="color: #e94560; margin-top: 0;">You're Invited!</h2>
-        <p style="color: #ffffff; font-size: 16px; line-height: 1.6;">
-          Hi there,
-        </p>
-        <p style="color: #cccccc; font-size: 14px; line-height: 1.6;">
-          You've been invited to join <strong style="color: #ffffff;">Storyshot Creator</strong>. Click the button below to set up your account and get started.
-        </p>
-        
-        <div style="text-align: center; margin: 30px 0;">
-          <a href="${acceptUrl}" style="background: linear-gradient(135deg, #e94560 0%, #ff6b6b 100%); color: white; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: bold; display: inline-block;">
-            Accept Invitation
-          </a>
-        </div>
-        
-        <p style="color: #888888; font-size: 12px;">
-          If the button doesn't work, copy and paste this link into your browser:
-        </p>
-        <p style="color: #e94560; font-size: 12px; word-break: break-all;">
-          ${acceptUrl}
-        </p>
-      </div>
-      
-      <p style="color: #666666; font-size: 11px; text-align: center; margin-top: 20px;">
-        This invitation expires in 48 hours and can only be used once. If you didn't expect this invitation, please ignore this email.
-      </p>
-    </div>
-  `;
+  const htmlBody = brandedEmailTemplate({
+    title: "You're Invited! 🎬",
+    bodyHtml: [
+      emailParagraph('Hi there,', { color: '#ffffff', size: '16px' }),
+      emailParagraph('You\'ve been invited to join <strong style="color: #ffffff;">Storyshot Creator</strong> — the cinematic storyboard prompt builder. Click the button below to set up your account and get started.'),
+      emailButton('Accept Invitation', acceptUrl),
+      emailFallbackLink(acceptUrl),
+    ].join(''),
+    footerText: 'This invitation expires in 48 hours and can only be used once. If you didn\'t expect this invitation, please ignore this email.',
+  });
+
+  const subject = 'Storyshot Creator - You\'re Invited';
 
   // Use invitation-specific notification ID if available
   if (process.env.ABACUSAI_API_KEY && process.env.WEB_APP_ID) {
@@ -210,7 +203,7 @@ export async function sendInviteEmail(email: string, token: string): Promise<boo
           deployment_token: process.env.ABACUSAI_API_KEY,
           app_id: process.env.WEB_APP_ID,
           notification_id: process.env.NOTIF_ID_USER_INVITATION || process.env.NOTIF_ID_EMAIL_VERIFICATION,
-          subject: "You're invited to Storyshot Creator",
+          subject,
           body: htmlBody,
           is_html: true,
           recipient_email: email,
@@ -226,50 +219,23 @@ export async function sendInviteEmail(email: string, token: string): Promise<boo
     }
   }
 
-  return sendEmail(email, "You're invited to Storyshot Creator", htmlBody);
+  return sendEmail(email, subject, htmlBody);
 }
 
 export async function sendVerificationEmail(email: string, token: string, name?: string | null) {
   const verifyUrl = `${process.env.NEXTAUTH_URL}/verify-email?token=${token}`;
 
-  const htmlBody = `
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #1a1a2e; padding: 40px; border-radius: 12px;">
-      <div style="text-align: center; margin-bottom: 30px;">
-        <h1 style="color: #ffffff; margin: 0; font-size: 28px;">🎬 Storyshot Creator</h1>
-      </div>
-      
-      <div style="background: #16213e; padding: 30px; border-radius: 8px; border: 1px solid #0f3460;">
-        <h2 style="color: #e94560; margin-top: 0;">Verify Your Email</h2>
-        <p style="color: #ffffff; font-size: 16px; line-height: 1.6;">
-          Hi${name ? ` ${name}` : ''},
-        </p>
-        <p style="color: #cccccc; font-size: 14px; line-height: 1.6;">
-          Thank you for registering! Please click the button below to verify your email address.
-        </p>
-        
-        <div style="text-align: center; margin: 30px 0;">
-          <a href="${verifyUrl}" style="background: linear-gradient(135deg, #e94560 0%, #ff6b6b 100%); color: white; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: bold; display: inline-block;">
-            Verify Email Address
-          </a>
-        </div>
-        
-        <p style="color: #888888; font-size: 12px;">
-          If the button doesn't work, copy and paste this link into your browser:
-        </p>
-        <p style="color: #e94560; font-size: 12px; word-break: break-all;">
-          ${verifyUrl}
-        </p>
-        
-        <p style="color: #888888; font-size: 12px; margin-top: 30px;">
-          <strong>Note:</strong> After verification, your account will need to be approved by an administrator before you can log in.
-        </p>
-      </div>
-      
-      <p style="color: #666666; font-size: 11px; text-align: center; margin-top: 20px;">
-        This link expires in 24 hours. If you didn't create an account, please ignore this email.
-      </p>
-    </div>
-  `;
+  const htmlBody = brandedEmailTemplate({
+    title: 'Verify Your Email',
+    bodyHtml: [
+      emailParagraph(`Hi${name ? ` ${name}` : ''},`, { color: '#ffffff', size: '16px' }),
+      emailParagraph('Thank you for registering with <strong style="color: #ffffff;">Storyshot Creator</strong>! Please click the button below to verify your email address.'),
+      emailButton('Verify Email Address', verifyUrl),
+      emailFallbackLink(verifyUrl),
+      emailNote('After verification, your account will need to be approved by an administrator before you can log in.'),
+    ].join(''),
+    footerText: 'This link expires in 24 hours. If you didn\'t create an account, please ignore this email.',
+  });
 
-  return sendEmail(email, 'Verify your email - Storyshot Creator', htmlBody);
+  return sendEmail(email, 'Storyshot Creator - Verify Your Email', htmlBody);
 }

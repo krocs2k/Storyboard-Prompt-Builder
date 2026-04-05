@@ -3,6 +3,7 @@ import { Inter } from 'next/font/google';
 import './globals.css';
 import { Providers } from '@/components/providers';
 import { ServiceWorkerRegistration } from '@/components/sw-register';
+import { PWAInstallPromptWrapper } from '@/components/pwa-install-wrapper';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -60,6 +61,7 @@ export default function RootLayout({
       </head>
       <body className={`${inter.className} antialiased`}>
         <ServiceWorkerRegistration />
+        <PWAInstallPromptWrapper />
         <Providers>{children}</Providers>
       </body>
     </html>

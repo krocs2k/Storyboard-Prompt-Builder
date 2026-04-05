@@ -80,7 +80,8 @@ export default function EmailConfigPage() {
     setSaveMessage(null);
   };
 
-  const isFormValid = form.host.trim() && form.user.trim() && form.pass.trim();
+  // Save requires host + user + (new password OR existing saved config)
+  const isFormValid = form.host.trim() && form.user.trim() && (form.pass.trim() || configured);
   // Test/send can work with saved config (no new password needed) or with full form
   const canTestOrSend = isFormValid || configured;
 

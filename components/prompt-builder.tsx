@@ -22,6 +22,7 @@ import ImageGridCutter from './image-grid-cutter';
 import StoryboardViewer from './storyboard-viewer';
 import ImageGallery, { GalleryImageItem } from './image-gallery';
 import ShotImageGallery from './shot-image-gallery';
+import { PWAInstallButton } from './pwa-install-prompt';
 import {
   imageTypes, shotTypes, lightingSources, cameraBodies, focalLengths,
   lensTypes, filmStocks, aspectRatios, photographerStyles, movieStyles as defaultMovieStyles, filterEffects,
@@ -1301,6 +1302,7 @@ export function PromptBuilder() {
                   </button>
                 </div>
               )}
+              <PWAInstallButton />
               {session?.user && (
                 <div className="relative">
                   <button

@@ -99,9 +99,21 @@ export async function POST(req: NextRequest) {
 
     // ---------- Save config ----------
     if (action === 'save') {
-      const { host, port, user, pass, from } = body;
-      if (!host || !user || !pass) {
-        return NextResponse.json({ error: 'Host, user, and password are required' }, { status: 400 });
+      const { host, port, user, from } = body;
+      let { pass } = body;
+
+      if (!host || !user) {
+        return NextResponse.json({ error: 'Host and user are required' }, { status: 400 });
+      }
+
+      // If no password provided, try to use the saved one
+      if (!pass) {
+        const savedPass = await prisma.systemConfig.findUnique({ where: { key: 'SMTP_PASS' } });
+        if (savedPass?.value) {
+          pass = savedPass.value;
+        } else {
+          return NextResponse.json({ error: 'Password is required' }, { status: 400 });
+        }
       }
 
       // Test before saving

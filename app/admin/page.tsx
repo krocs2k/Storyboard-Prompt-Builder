@@ -3,7 +3,7 @@
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { Loader2, Users, Settings, Shield, Github, Database, Key, Image as ImageIcon, BarChart3, Film, Mail } from 'lucide-react';
+import { Loader2, Users, Settings, Shield, Github, Database, Key, Image as ImageIcon, BarChart3, Film, Mail, Smartphone } from 'lucide-react';
 import Link from 'next/link';
 
 export default function AdminDashboard() {
@@ -222,6 +222,22 @@ export default function AdminDashboard() {
               </div>
             </div>
             <p className="text-gray-400 text-sm">Track activity, API usage &amp; cost estimates</p>
+          </Link>
+
+          <Link
+            href="/admin/logo"
+            className="bg-gray-800 border border-gray-700 shadow-lg rounded-xl p-6 hover:border-pink-500/50 transition-all group"
+          >
+            <div className="flex items-center gap-4 mb-4">
+              <div className="w-12 h-12 rounded-lg bg-pink-500/20 flex items-center justify-center group-hover:bg-pink-500/30 transition-colors">
+                <Smartphone className="w-6 h-6 text-pink-400" />
+              </div>
+              <div>
+                <h2 className="text-xl font-semibold text-white">Logo &amp; PWA</h2>
+                <p className="text-gray-400 text-sm">App branding</p>
+              </div>
+            </div>
+            <p className="text-gray-400 text-sm">Upload logo, generate icons &amp; splash screens</p>
           </Link>
 
           <div className="bg-gray-800 border border-gray-700 shadow-lg rounded-xl p-6">

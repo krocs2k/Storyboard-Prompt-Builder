@@ -95,6 +95,11 @@ export default function ImagesAdminPage() {
   const [associatePreview, setAssociatePreview] = useState<AssociateResult | null>(null);
   const [associateLoading, setAssociateLoading] = useState(false);
 
+  // Reset state
+  const [resetting, setResetting] = useState(false);
+  const [resetPreview, setResetPreview] = useState<{ totalEntries: number; entries: Array<{ key: string; itemCount: number }> } | null>(null);
+  const [resetConfirm, setResetConfirm] = useState(false);
+
   useEffect(() => { setMounted(true); }, []);
 
   useEffect(() => {
@@ -154,6 +159,14 @@ export default function ImagesAdminPage() {
       const zip = await JSZip.loadAsync(file);
       const imageExtensions = ['png', 'jpg', 'jpeg', 'webp', 'gif', 'tiff', 'avif'];
 
+      // Extract overrides.json if present (image database snapshot from dev)
+      let overridesJson: string | null = null;
+      const overridesFile = zip.file('overrides.json');
+      if (overridesFile) {
+        overridesJson = await overridesFile.async('string');
+        setImportProgress('Found overrides.json — will sync image database...');
+      }
+
       // Collect all image files from the ZIP
       const entries: Array<{ relativePath: string; zipEntry: JSZip.JSZipObject }> = [];
       const subdirSet = new Set<string>();
@@ -184,13 +197,18 @@ export default function ImagesAdminPage() {
       const BATCH_SIZE = 10;
       let totalImported = 0;
       let totalResized = 0;
+      let totalOverrides = 0;
 
       for (let i = 0; i < entries.length; i += BATCH_SIZE) {
         const batch = entries.slice(i, i + BATCH_SIZE);
         const formData = new FormData();
 
         formData.append('action', i === 0 ? 'init' : 'append');
-        if (i === 0) formData.append('subdirs', Array.from(subdirSet).join(','));
+        if (i === 0) {
+          formData.append('subdirs', Array.from(subdirSet).join(','));
+          // Send overrides with the init batch
+          if (overridesJson) formData.append('overrides', overridesJson);
+        }
 
         for (const entry of batch) {
           const blob = await entry.zipEntry.async('blob');
@@ -208,9 +226,12 @@ export default function ImagesAdminPage() {
         if (!res.ok) throw new Error(data.error || `Batch ${batchNum} failed`);
         totalImported += data.imported || 0;
         totalResized += data.resized || 0;
+        if (data.overridesApplied) totalOverrides = data.overridesApplied;
       }
 
-      showMsg('success', `Imported ${totalImported} images (${totalResized} auto-resized)`);
+      const parts = [`Imported ${totalImported} images (${totalResized} auto-resized)`];
+      if (totalOverrides > 0) parts.push(`synced ${totalOverrides} database overrides`);
+      showMsg('success', parts.join(', '));
       fetchStats();
     } catch (err: any) {
       showMsg('error', err.message || 'Import failed');
@@ -276,6 +297,35 @@ export default function ImagesAdminPage() {
       showMsg('error', 'Association failed');
     } finally {
       setAssociating(false);
+    }
+  };
+
+  const handleResetPreview = async () => {
+    try {
+      const res = await fetch('/api/admin/images/reset');
+      const data = await res.json();
+      setResetPreview(data);
+      setResetConfirm(false);
+    } catch {
+      showMsg('error', 'Failed to preview reset');
+    }
+  };
+
+  const handleReset = async () => {
+    if (!resetConfirm) return;
+    setResetting(true);
+    try {
+      const res = await fetch('/api/admin/images/reset?confirm=true', { method: 'DELETE' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      showMsg('success', data.message || 'Image database reset');
+      setResetPreview(null);
+      setResetConfirm(false);
+      fetchStats();
+    } catch (err: any) {
+      showMsg('error', err.message || 'Reset failed');
+    } finally {
+      setResetting(false);
     }
   };
 
@@ -517,7 +567,7 @@ export default function ImagesAdminPage() {
             </div>
 
             {/* Import / Export / Resize */}
-            <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="mt-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               {/* Export */}
               <div className="bg-gray-800 border border-gray-700 rounded-xl p-6">
                 <h3 className="text-white font-semibold mb-2 flex items-center gap-2">
@@ -525,7 +575,7 @@ export default function ImagesAdminPage() {
                   Export Images
                 </h3>
                 <p className="text-gray-500 text-xs mb-4">
-                  Download all images as a ZIP archive for backup or transfer.
+                  Download all images + database overrides as a ZIP for backup or transfer.
                 </p>
                 <button
                   onClick={handleExport}
@@ -544,7 +594,7 @@ export default function ImagesAdminPage() {
                   Import Images
                 </h3>
                 <p className="text-gray-500 text-xs mb-4">
-                  Upload a ZIP of images. Matching directory structure preserved.
+                  Upload an export ZIP. Syncs both image files and database overrides.
                 </p>
                 <input
                   ref={fileInputRef}
@@ -615,6 +665,57 @@ export default function ImagesAdminPage() {
                   >
                     {resizing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Shrink className="w-3.5 h-3.5" />}
                     Resize
+                  </button>
+                </div>
+              </div>
+
+              {/* Reset Image Database */}
+              <div className="bg-gray-800 border border-red-900/50 rounded-xl p-6">
+                <h3 className="text-white font-semibold mb-2 flex items-center gap-2">
+                  <Trash2 className="w-4 h-4 text-red-400" />
+                  Reset Image DB
+                </h3>
+                <p className="text-gray-500 text-xs mb-4">
+                  Clear all image overrides from the database. Use before a fresh import to ensure production matches dev.
+                </p>
+                {resetPreview && (
+                  <div className="mb-3 p-3 bg-gray-900 rounded-lg text-xs">
+                    <div className="flex justify-between text-gray-400 mb-1">
+                      <span>Override entries</span>
+                      <span className="text-red-400">{resetPreview.totalEntries}</span>
+                    </div>
+                    {resetPreview.entries.map(e => (
+                      <div key={e.key} className="flex justify-between text-gray-500">
+                        <span className="truncate mr-2">{e.key.replace('_overrides', '')}</span>
+                        <span>{e.itemCount} items</span>
+                      </div>
+                    ))}
+                    <label className="flex items-center gap-2 mt-3 text-red-300 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={resetConfirm}
+                        onChange={e => setResetConfirm(e.target.checked)}
+                        className="rounded border-red-700"
+                      />
+                      I understand this will clear all overrides
+                    </label>
+                  </div>
+                )}
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleResetPreview}
+                    className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 bg-gray-700 hover:bg-gray-600 text-gray-200 rounded-lg text-sm transition-colors"
+                  >
+                    <Zap className="w-3.5 h-3.5" />
+                    Preview
+                  </button>
+                  <button
+                    onClick={handleReset}
+                    disabled={resetting || !resetConfirm}
+                    className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 bg-red-700 hover:bg-red-600 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+                  >
+                    {resetting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                    Reset
                   </button>
                 </div>
               </div>

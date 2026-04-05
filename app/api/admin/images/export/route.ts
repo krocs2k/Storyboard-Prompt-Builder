@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
+import { prisma } from '@/lib/db';
 import * as fs from 'fs';
 import * as path from 'path';
 import archiver from 'archiver';
@@ -107,6 +108,26 @@ export async function GET() {
     }
   }
 
+  // Export ALL category overrides from SystemConfig (the "image database")
+  // These are the DB entries that map item IDs to image paths
+  const overrideKeys = [
+    // Generic category overrides
+    ...Object.keys(categories).map(cat => `${cat}_overrides`),
+    // Movie-style specific keys
+    'movie_style_overrides', 'movie_style_settings', 'movie_style_custom', 'movie_style_hidden',
+  ];
+  const overridesData: Record<string, any> = {};
+  try {
+    const configs = await prisma.systemConfig.findMany({
+      where: { key: { in: overrideKeys } },
+    });
+    for (const c of configs) {
+      try { overridesData[c.key] = JSON.parse(c.value); } catch { overridesData[c.key] = c.value; }
+    }
+  } catch (e) {
+    console.error('Failed to export overrides:', e);
+  }
+
   // Create ZIP archive
   const archive = archiver('zip', { zlib: { level: 6 } });
   const chunks: Buffer[] = [];
@@ -118,6 +139,9 @@ export async function GET() {
 
     // Add manifest
     archive.append(JSON.stringify(manifest, null, 2), { name: 'manifest.json' });
+
+    // Add overrides database snapshot
+    archive.append(JSON.stringify(overridesData, null, 2), { name: 'overrides.json' });
 
     // Add ALL image files, preserving subdirectory structure
     for (const { fullPath, zipPath } of allImageFiles) {
