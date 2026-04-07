@@ -26,7 +26,7 @@ function getShotSelectionPrefix(value?: string): string {
   switch (value) {
     case 'single': return 'Create a single shot of a cinematic film still ';
     case '4-shot': return 'Create a multi-shot of 4 cinematic film stills ';
-    default: return 'Create a multi-shot of 9 cinematic film stills ';
+    default: return 'Create a single shot of a cinematic film still ';
   }
 }
 

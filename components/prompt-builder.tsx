@@ -115,7 +115,7 @@ export function PromptBuilder() {
   const [selections, setSelections] = useState<Selections>({
     imageType: null,
     shotType: null,
-    shotSelection: '9-shot',
+    shotSelection: 'single',
     subjectAction: '',
     environment: '',
     lighting: null,
@@ -193,7 +193,7 @@ export function PromptBuilder() {
     setSelections({
       imageType: null,
       shotType: null,
-      shotSelection: '9-shot',
+      shotSelection: 'single',
       subjectAction: '',
       environment: '',
       lighting: null,
@@ -742,7 +742,7 @@ export function PromptBuilder() {
 
   // Section-specific reset functions
   const resetSection1 = useCallback(() => {
-    setSelections((prev) => ({ ...(prev ?? {}), imageType: null, shotSelection: '9-shot' as ShotSelectionValue }));
+    setSelections((prev) => ({ ...(prev ?? {}), imageType: null, shotSelection: 'single' as ShotSelectionValue }));
   }, []);
   const resetSection2 = useCallback(() => {
     setSelections((prev) => ({ ...(prev ?? {}), subjectAction: '', shotType: null, environment: '' }));
@@ -761,7 +761,7 @@ export function PromptBuilder() {
     setSelections({
       imageType: null,
       shotType: null,
-      shotSelection: '9-shot',
+      shotSelection: 'single',
       subjectAction: '',
       environment: '',
       lighting: null,
@@ -800,7 +800,7 @@ export function PromptBuilder() {
   const buildPromptFromSelections = useCallback(() => {
     const parts: string[] = [];
     
-    parts.push(getShotSelectionPrefix(selections?.shotSelection ?? '9-shot') + 'that tell a short story');
+    parts.push(getShotSelectionPrefix(selections?.shotSelection ?? 'single') + 'that tell a short story');
     
     // Image type
     if (selections?.imageType) {
@@ -885,7 +885,7 @@ export function PromptBuilder() {
     atmosphere: string,
   ): string => {
     const parts: string[] = [];
-    parts.push(getShotSelectionPrefix(selections?.shotSelection ?? '9-shot') + 'that tell a short story');
+    parts.push(getShotSelectionPrefix(selections?.shotSelection ?? 'single') + 'that tell a short story');
     if (selections?.imageType) {
       parts.push(`, a ${selections.imageType.name} image of a`);
     }
@@ -1399,7 +1399,7 @@ export function PromptBuilder() {
                 <label className="text-xs font-medium text-slate-400 tracking-wide uppercase">Shot Selection</label>
                 <div className="relative">
                   <select
-                    value={selections?.shotSelection ?? '9-shot'}
+                    value={selections?.shotSelection ?? 'single'}
                     onChange={(e) => setSelections(prev => ({ ...prev, shotSelection: e.target.value as ShotSelectionValue }))}
                     className="w-full appearance-none bg-slate-800/60 border border-slate-600/50 rounded-lg px-3 py-2.5 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500/50 cursor-pointer transition-colors hover:bg-slate-800/80"
                   >
@@ -1410,7 +1410,7 @@ export function PromptBuilder() {
                   <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
                 </div>
                 <p className="text-[10px] text-slate-500 mt-0.5">
-                  {SHOT_SELECTION_OPTIONS.find(o => o.value === (selections?.shotSelection ?? '9-shot'))?.prefix.trim()}
+                  {SHOT_SELECTION_OPTIONS.find(o => o.value === (selections?.shotSelection ?? 'single'))?.prefix.trim()}
                 </p>
               </div>
             </SectionCard>
