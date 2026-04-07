@@ -137,25 +137,36 @@ export async function POST(request: NextRequest) {
             height: extractHeight
           });
           
-          // Resize to match target aspect ratio (cover mode - crops to fill)
+          // Step 1: Crop to target aspect ratio and materialize to buffer
           const outputWidth = extractWidth;
           const outputHeight = Math.round(extractWidth / targetAspectRatio);
           
-          segment = segment.resize({
+          const croppedBuffer = await segment.resize({
             width: outputWidth,
             height: outputHeight,
             fit: 'cover',
             position: 'center'
+          }).toBuffer();
+          
+          // Step 2: Upscale 4x on a fresh Sharp instance (lanczos3 = highest quality kernel)
+          const upscaledWidth = outputWidth * 4;
+          const upscaledHeight = outputHeight * 4;
+          const upscaled = sharp(croppedBuffer).resize({
+            width: upscaledWidth,
+            height: upscaledHeight,
+            kernel: 'lanczos3',
+            fit: 'fill',
+            fastShrinkOnLoad: false
           });
           
-          // Convert to requested format
+          // Convert to requested format at maximum quality
           let outputBuffer: Buffer;
           const ext = outputFormat === 'png' ? 'png' : 'jpg';
           
           if (outputFormat === 'png') {
-            outputBuffer = await segment.png({ quality: 100 }).toBuffer();
+            outputBuffer = await upscaled.png({ compressionLevel: 0, effort: 10 }).toBuffer();
           } else {
-            outputBuffer = await segment.jpeg({ quality: 95 }).toBuffer();
+            outputBuffer = await upscaled.jpeg({ quality: 100, chromaSubsampling: '4:4:4', trellisQuantisation: true, overshootDeringing: true, optimizeCoding: true }).toBuffer();
           }
           
           const filename = `image_${String(fileIdx + 1).padStart(2, '0')}_detected_${String(i + 1).padStart(2, '0')}.${ext}`;
@@ -185,20 +196,33 @@ export async function POST(request: NextRequest) {
             const outputWidth = extractWidth;
             const outputHeight = Math.round(extractWidth / targetAspectRatio);
             
-            segment = segment.resize({
+            // Step 1: Crop to target aspect ratio and materialize to buffer
+            const croppedBuffer = await segment.resize({
               width: outputWidth,
               height: outputHeight,
               fit: 'cover',
               position: 'center'
+            }).toBuffer();
+            
+            // Step 2: Upscale 4x on a fresh Sharp instance (lanczos3 = highest quality kernel)
+            const upscaledWidth = outputWidth * 4;
+            const upscaledHeight = outputHeight * 4;
+            const upscaled = sharp(croppedBuffer).resize({
+              width: upscaledWidth,
+              height: upscaledHeight,
+              kernel: 'lanczos3',
+              fit: 'fill',
+              fastShrinkOnLoad: false
             });
             
+            // Convert to requested format at maximum quality
             let outputBuffer: Buffer;
             const ext = outputFormat === 'png' ? 'png' : 'jpg';
             
             if (outputFormat === 'png') {
-              outputBuffer = await segment.png({ quality: 100 }).toBuffer();
+              outputBuffer = await upscaled.png({ compressionLevel: 0, effort: 10 }).toBuffer();
             } else {
-              outputBuffer = await segment.jpeg({ quality: 95 }).toBuffer();
+              outputBuffer = await upscaled.jpeg({ quality: 100, chromaSubsampling: '4:4:4', trellisQuantisation: true, overshootDeringing: true, optimizeCoding: true }).toBuffer();
             }
             
             const filename = `image_${String(fileIdx + 1).padStart(2, '0')}_row${String(row + 1).padStart(2, '0')}_col${String(col + 1).padStart(2, '0')}.${ext}`;
