@@ -10,6 +10,7 @@ interface SelectionItem {
 interface Selections {
   imageType?: SelectionItem | null;
   shotType?: SelectionItem | null;
+  shotSelection?: 'single' | '4-shot' | '9-shot';
   lighting?: SelectionItem | null;
   camera?: SelectionItem | null;
   focalLength?: SelectionItem | null;
@@ -21,6 +22,14 @@ interface Selections {
   aspectRatio?: string;
 }
 
+function getShotSelectionPrefix(value?: string): string {
+  switch (value) {
+    case 'single': return 'Create a single shot of a cinematic film still ';
+    case '4-shot': return 'Create a multi-shot of 4 cinematic film stills ';
+    default: return 'Create a multi-shot of 9 cinematic film stills ';
+  }
+}
+
 // Build a single prompt following the exact Constructed Prompt structure from Section 6
 function buildConstructedPrompt(
   selections: Selections | null,
@@ -30,7 +39,7 @@ function buildConstructedPrompt(
 ): string {
   const parts: string[] = [];
   
-  parts.push('Create a multi-shot of 9 cinematic film stills that tell a short story');
+  parts.push(getShotSelectionPrefix(selections?.shotSelection) + 'that tell a short story');
   
   if (selections?.imageType) {
     parts.push(`, a ${selections.imageType.name} image of a`);

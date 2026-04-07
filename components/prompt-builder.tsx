@@ -37,9 +37,22 @@ import {
 
 type ModalType = 'imageType' | 'shotType' | 'lighting' | 'camera' | 'focalLength' | 'lensType' | 'filmStock' | 'photographer' | 'movie' | 'filter' | null;
 
+type ShotSelectionValue = 'single' | '4-shot' | '9-shot';
+
+const SHOT_SELECTION_OPTIONS: { value: ShotSelectionValue; label: string; prefix: string }[] = [
+  { value: 'single', label: 'Single Shot', prefix: 'Create a single shot of a cinematic film still ' },
+  { value: '4-shot', label: '4 Shot Scene', prefix: 'Create a multi-shot of 4 cinematic film stills ' },
+  { value: '9-shot', label: '9 Shot Scene', prefix: 'Create a multi-shot of 9 cinematic film stills ' },
+];
+
+function getShotSelectionPrefix(value: ShotSelectionValue): string {
+  return SHOT_SELECTION_OPTIONS.find(o => o.value === value)?.prefix ?? SHOT_SELECTION_OPTIONS[2].prefix;
+}
+
 interface Selections {
   imageType: ImageType | null;
   shotType: { id: string; name: string } | null;
+  shotSelection: ShotSelectionValue;
   subjectAction: string;
   environment: string;
   lighting: LightingSource | null;
@@ -102,6 +115,7 @@ export function PromptBuilder() {
   const [selections, setSelections] = useState<Selections>({
     imageType: null,
     shotType: null,
+    shotSelection: '9-shot',
     subjectAction: '',
     environment: '',
     lighting: null,
@@ -179,6 +193,7 @@ export function PromptBuilder() {
     setSelections({
       imageType: null,
       shotType: null,
+      shotSelection: '9-shot',
       subjectAction: '',
       environment: '',
       lighting: null,
@@ -727,7 +742,7 @@ export function PromptBuilder() {
 
   // Section-specific reset functions
   const resetSection1 = useCallback(() => {
-    setSelections((prev) => ({ ...(prev ?? {}), imageType: null }));
+    setSelections((prev) => ({ ...(prev ?? {}), imageType: null, shotSelection: '9-shot' as ShotSelectionValue }));
   }, []);
   const resetSection2 = useCallback(() => {
     setSelections((prev) => ({ ...(prev ?? {}), subjectAction: '', shotType: null, environment: '' }));
@@ -746,6 +761,7 @@ export function PromptBuilder() {
     setSelections({
       imageType: null,
       shotType: null,
+      shotSelection: '9-shot',
       subjectAction: '',
       environment: '',
       lighting: null,
@@ -784,7 +800,7 @@ export function PromptBuilder() {
   const buildPromptFromSelections = useCallback(() => {
     const parts: string[] = [];
     
-    parts.push('Create a multi-shot of 9 cinematic film stills that tell a short story');
+    parts.push(getShotSelectionPrefix(selections?.shotSelection ?? '9-shot') + 'that tell a short story');
     
     // Image type
     if (selections?.imageType) {
@@ -869,7 +885,7 @@ export function PromptBuilder() {
     atmosphere: string,
   ): string => {
     const parts: string[] = [];
-    parts.push('Create a multi-shot of 9 cinematic film stills that tell a short story');
+    parts.push(getShotSelectionPrefix(selections?.shotSelection ?? '9-shot') + 'that tell a short story');
     if (selections?.imageType) {
       parts.push(`, a ${selections.imageType.name} image of a`);
     }
@@ -1379,6 +1395,24 @@ export function PromptBuilder() {
                 onClick={() => setActiveModal('imageType')}
                 onClear={() => clearSelection('imageType')}
               />
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-slate-400 tracking-wide uppercase">Shot Selection</label>
+                <div className="relative">
+                  <select
+                    value={selections?.shotSelection ?? '9-shot'}
+                    onChange={(e) => setSelections(prev => ({ ...prev, shotSelection: e.target.value as ShotSelectionValue }))}
+                    className="w-full appearance-none bg-slate-800/60 border border-slate-600/50 rounded-lg px-3 py-2.5 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500/50 cursor-pointer transition-colors hover:bg-slate-800/80"
+                  >
+                    {SHOT_SELECTION_OPTIONS.map(opt => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+                  <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                </div>
+                <p className="text-[10px] text-slate-500 mt-0.5">
+                  {SHOT_SELECTION_OPTIONS.find(o => o.value === (selections?.shotSelection ?? '9-shot'))?.prefix.trim()}
+                </p>
+              </div>
             </SectionCard>
 
             {/* Section 2: Subject and Framing */}
