@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getLLMConfig } from '@/lib/llm';
 import { storyGenres } from '@/lib/data/story-genres';
 import { trackUsage } from '@/lib/usage-tracker';
+import { withSonnetSoul } from '@/lib/sonnet-soul-protocol';
 
 interface PersonaInfo {
   role: string;
@@ -57,7 +58,7 @@ export async function POST(request: NextRequest) {
     const personas = genreData?.personas;
     const isPromoAd = genre === 'promo' || genre === 'advertisement';
 
-    const systemPrompt = buildPersonaSystemPrompt(personas);
+    const systemPrompt = withSonnetSoul('ideas', buildPersonaSystemPrompt(personas));
 
     const genreSpecificGuidance = isPromoAd
       ? `\n\nIMPORTANT: These are ${genreName} concepts — each idea should be a specific product, brand, service, or campaign concept that would make an outstanding promotional/advertising video. Think about:

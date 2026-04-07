@@ -5,6 +5,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import mammoth from 'mammoth';
 import { trackUsage } from '@/lib/usage-tracker';
+import { withSonnetSoul } from '@/lib/sonnet-soul-protocol';
 
 const CULTURAL_DIVERSITY_DIRECTIVE = `
 CULTURAL DIVERSITY MANDATE:
@@ -217,7 +218,7 @@ For EACH location in the screenplay:
       body: JSON.stringify({
         model: llm.model,
         messages: [
-          { role: 'system', content: SCREENWRITER_SYSTEM_PROMPT },
+          { role: 'system', content: withSonnetSoul('convert', SCREENWRITER_SYSTEM_PROMPT) },
           { role: 'user', content: userPrompt }
         ],
         stream: true,

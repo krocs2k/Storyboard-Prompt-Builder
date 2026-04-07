@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { getLLMConfig } from '@/lib/llm';
 import { storyGenres } from '@/lib/data/story-genres';
 import { trackUsage } from '@/lib/usage-tracker';
+import { withSonnetSoul } from '@/lib/sonnet-soul-protocol';
 
 // YouTube transcript format - transforms testimonials/interviews into documentary-style screenplays
 const CULTURAL_DIVERSITY_DIRECTIVE = `
@@ -300,7 +301,7 @@ For EACH location:
       body: JSON.stringify({
         model: llm.model,
         messages: [
-          { role: 'system', content: systemPrompt },
+          { role: 'system', content: withSonnetSoul('screenplay', systemPrompt) },
           { role: 'user', content: userPrompt }
         ],
         stream: true,

@@ -3,6 +3,7 @@ import mammoth from 'mammoth';
 import WordExtractor from 'word-extractor';
 import { getLLMConfig } from '@/lib/llm';
 import { trackUsage } from '@/lib/usage-tracker';
+import { withSonnetSoul } from '@/lib/sonnet-soul-protocol';
 
 export async function POST(request: NextRequest) {
   try {
@@ -82,7 +83,7 @@ export async function POST(request: NextRequest) {
         messages: [
           {
             role: 'system',
-            content: `You are a cinematography expert analyzing screenplays to recommend visual styles. Analyze the screenplay and recommend settings for each category.
+            content: withSonnetSoul('analysis', `You are a cinematography expert analyzing screenplays to recommend visual styles. Analyze the screenplay and recommend settings for each category.
 
 Categories to analyze:
 1. IMAGE TYPE - Choose the most appropriate visual style (Photorealistic, Anime cel-shading style, etc.)
@@ -94,7 +95,7 @@ Categories to analyze:
 Also extract:
 - All CHARACTER names with brief descriptions
 - All ENVIRONMENT/LOCATION descriptions
-- Estimated runtime based on page count (1 page ≈ 1 minute)`
+- Estimated runtime based on page count (1 page ≈ 1 minute)`)
           },
           {
             role: 'user',
@@ -178,7 +179,7 @@ Respond with raw JSON only.`
         messages: [
           {
             role: 'system',
-            content: `You are an expert dialogue director extracting voice-over scripts from screenplays. Extract ALL dialogue lines and provide clear, concise delivery direction for voice actors.
+            content: withSonnetSoul('analysis', `You are an expert dialogue director extracting voice-over scripts from screenplays. Extract ALL dialogue lines and provide clear, concise delivery direction for voice actors.
 
 For each line of dialogue, provide:
 1. CHARACTER - The character's name exactly as written
@@ -193,7 +194,7 @@ Examples of good delivery directions:
 - "Cold, detached, matter-of-fact"
 - "Warm, reassuring, like comforting a child"
 - "Sarcastic, with bitter undertone"
-- "Trembling voice, fighting back tears"`
+- "Trembling voice, fighting back tears"`)
           },
           {
             role: 'user',

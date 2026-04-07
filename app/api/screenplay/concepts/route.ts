@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getLLMConfig } from '@/lib/llm';
 import { storyGenres } from '@/lib/data/story-genres';
 import { trackUsage } from '@/lib/usage-tracker';
+import { withSonnetSoul } from '@/lib/sonnet-soul-protocol';
 
 export async function POST(request: NextRequest) {
   try {
@@ -94,7 +95,7 @@ Respond with raw JSON only. Do not include code blocks, markdown, or any other f
       body: JSON.stringify({
         model: llm.model,
         messages: [
-          { role: 'system', content: systemPrompt },
+          { role: 'system', content: withSonnetSoul('concepts', systemPrompt) },
           { role: 'user', content: userPrompt }
         ],
         response_format: { type: 'json_object' },

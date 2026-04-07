@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { getLLMConfig } from '@/lib/llm';
 import { trackUsage } from '@/lib/usage-tracker';
+import { withSonnetSoul } from '@/lib/sonnet-soul-protocol';
 
 interface SelectionItem {
   name: string;
@@ -149,9 +150,9 @@ export async function POST(request: NextRequest) {
         messages: [
           {
             role: 'system',
-            content: `You are an expert storyboard artist and cinematographer. Your task is to break down screenplays into detailed storyboard blocks, each representing approximately 30 seconds of screen time.
+            content: withSonnetSoul('storyboard', `You are an expert storyboard artist and cinematographer. Your task is to break down screenplays into detailed storyboard blocks, each representing approximately 30 seconds of screen time.
 
-CRITICAL: Each storyboard block prompt MUST follow the EXACT Constructed Prompt structure below. You will fill in the [BRACKETED] sections with specific content from each scene while keeping all other visual specifications exactly as provided.`
+CRITICAL: Each storyboard block prompt MUST follow the EXACT Constructed Prompt structure below. You will fill in the [BRACKETED] sections with specific content from each scene while keeping all other visual specifications exactly as provided.`)
           },
           {
             role: 'user',
