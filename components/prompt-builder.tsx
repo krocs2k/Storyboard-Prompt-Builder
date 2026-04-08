@@ -347,6 +347,10 @@ export function PromptBuilder() {
     }
   };
 
+  // Helper to capitalize the first letter of each word
+  const toTitleCase = (str: string) =>
+    str.replace(/\w\S*/g, (txt) => txt.charAt(0).toUpperCase() + txt.slice(1).toLowerCase());
+
   const loadProject = async (project: Project) => {
     setCurrentProject(project);
     if (project.selections) {
@@ -354,7 +358,7 @@ export function PromptBuilder() {
     }
     if (project.screenplay) {
       setScreenplay({
-        title: project.screenplay.title,
+        title: toTitleCase(project.screenplay.title),
         content: project.screenplay.content,
         runtime: project.screenplay.runtime,
         characters: project.screenplay.characters as Array<{ name: string; description: string }>,
@@ -1696,17 +1700,20 @@ export function PromptBuilder() {
             animate={{ opacity: 1, y: 0 }}
             className="mt-8 space-y-6"
           >
+            {/* Screenplay Title - First visible element */}
+            <div className="text-center">
+              <h2 className="text-3xl md:text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 via-pink-400 to-amber-400 tracking-tight">
+                {screenplay.title}
+              </h2>
+              <div className="mt-2 flex items-center justify-center gap-3 text-slate-400 text-sm">
+                <span className="flex items-center gap-1"><Clapperboard size={16} /> Screenplay</span>
+                <span className="text-slate-600">•</span>
+                <span>{screenplay.runtime} min</span>
+              </div>
+            </div>
+
             {/* Screenplay Info */}
             <div className="bg-slate-800 rounded-xl border border-purple-500/30 p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-xl font-bold text-purple-400 flex items-center gap-2">
-                  <Clapperboard size={24} />
-                  {screenplay.title}
-                </h3>
-                <span className="px-3 py-1 bg-purple-500/20 rounded-full text-purple-300 text-sm">
-                  {screenplay.runtime} min
-                </span>
-              </div>
               
               {/* Download Screenplay Button - First action available */}
               <div className="bg-slate-900/50 rounded-lg p-4 mb-6">
@@ -2336,11 +2343,12 @@ export function PromptBuilder() {
         {showScreenplayCreator && (
           <ScreenplayCreator
             onScreenplayCreated={(data) => {
-              setScreenplay(data);
+              const formattedTitle = toTitleCase(data.title || 'Untitled Screenplay');
+              setScreenplay({ ...data, title: formattedTitle });
               setShowScreenplayCreator(false);
               // Prepopulate project name with story title if no project is loaded
-              if (!currentProject && data.title) {
-                setNewProjectName(data.title);
+              if (!currentProject && formattedTitle) {
+                setNewProjectName(formattedTitle);
               }
             }}
             onClose={() => setShowScreenplayCreator(false)}
@@ -2353,7 +2361,7 @@ export function PromptBuilder() {
         {showAnalyzer && (
           <ScreenplayAnalyzer
             onAnalysisComplete={(data) => {
-              const title = data.analysis.title || 'Uploaded Screenplay';
+              const title = toTitleCase(data.analysis.title || 'Uploaded Screenplay');
               setScreenplay({
                 title,
                 content: data.screenplay,

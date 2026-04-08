@@ -50,30 +50,44 @@ export function trackUsage(options: TrackOptions): void {
 }
 
 /**
- * Gemini API cost rates (per call or per image) — direct Gemini usage.
+ * Gemini API cost rates (direct Google API usage).
+ * 
+ * Text models: estimated per-call cost using token rates from the model registry
+ * (same 2K input + 1K output assumption as Abacus rates for consistency).
+ * Image models: per-image flat rate from Google's published pricing.
+ *
+ * NOTE: gemini-3.1-flash-image-preview generates images via output tokens;
+ * the per-image rate assumes ~22K output tokens per generation.
  */
-export const GEMINI_COST_RATES: Record<string, { label: string; costPerUnit: number; unit: string }> = {
-  'gemini-3-flash-preview': {
-    label: 'Gemini 3 Flash',
-    costPerUnit: 0.0065,
-    unit: 'call',
-  },
-  'imagen-4.0-generate-001': {
-    label: 'Imagen 4 Standard',
-    costPerUnit: 0.04,
-    unit: 'image',
-  },
-  'imagen-4.0-fast-generate-001': {
-    label: 'Imagen 4 Fast',
-    costPerUnit: 0.02,
-    unit: 'image',
-  },
-  'gemini-3.1-flash-image-preview': {
-    label: 'Nano Banana 2',
-    costPerUnit: 0.067,
-    unit: 'image',
-  },
-};
+function buildGeminiCostRates(): Record<string, { label: string; costPerUnit: number; unit: string }> {
+  // ── Text model IDs that may be tracked under provider='gemini' ──
+  const geminiTextModels: Record<string, { label: string; inputTokenRate: number; outputTokenRate: number }> = {
+    'gemini-3-flash-preview':          { label: 'Gemini 3 Flash',           inputTokenRate: 0.0000005,  outputTokenRate: 0.000003 },
+    'gemini-3.1-pro-preview':          { label: 'Gemini 3.1 Pro',           inputTokenRate: 0.000002,   outputTokenRate: 0.000012 },
+    'gemini-3.1-flash-lite-preview':   { label: 'Gemini 3.1 Flash Lite',    inputTokenRate: 0.00000025, outputTokenRate: 0.0000015 },
+    'gemini-2.5-pro':                  { label: 'Gemini 2.5 Pro',           inputTokenRate: 0.00000125, outputTokenRate: 0.00001 },
+    'gemini-2.5-flash':                { label: 'Gemini 2.5 Flash',         inputTokenRate: 0.0000003,  outputTokenRate: 0.0000025 },
+  };
+
+  const rates: Record<string, { label: string; costPerUnit: number; unit: string }> = {};
+
+  // Per-call estimates for text models (2K input + 1K output assumption)
+  for (const [id, m] of Object.entries(geminiTextModels)) {
+    const perCall = (m.inputTokenRate * 2000) + (m.outputTokenRate * 1000);
+    rates[id] = { label: m.label, costPerUnit: Math.round(perCall * 100000) / 100000, unit: 'call' };
+  }
+
+  // ── Imagen flat per-image rates (direct Google API) ──
+  rates['imagen-4.0-generate-001']      = { label: 'Imagen 4 Standard', costPerUnit: 0.04,  unit: 'image' };
+  rates['imagen-4.0-fast-generate-001'] = { label: 'Imagen 4 Fast',     costPerUnit: 0.02,  unit: 'image' };
+
+  // Gemini-based image generation — ~22K output tokens per image at flash output rate
+  rates['gemini-3.1-flash-image-preview'] = { label: 'Nano Banana 2', costPerUnit: 0.066, unit: 'image' };
+
+  return rates;
+}
+
+export const GEMINI_COST_RATES = buildGeminiCostRates();
 
 /**
  * Abacus AI API cost rates — auto-generated from the centralized model registry.

@@ -3,7 +3,7 @@
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { Loader2, Users, Settings, Shield, Github, Database, Key, Image as ImageIcon, BarChart3, Film, Mail, Smartphone } from 'lucide-react';
+import { Loader2, Users, Settings, Shield, Github, Database, Key, Image as ImageIcon, BarChart3, Film, Mail, Smartphone, RefreshCw } from 'lucide-react';
 import Link from 'next/link';
 
 export default function AdminDashboard() {
@@ -206,6 +206,22 @@ export default function AdminDashboard() {
               </div>
             </div>
             <p className="text-gray-400 text-sm">Export &amp; import selection dropdown images</p>
+          </Link>
+
+          <Link
+            href="/admin/model-sync"
+            className="bg-gray-800 border border-gray-700 shadow-lg rounded-xl p-6 hover:border-teal-500/50 transition-all group"
+          >
+            <div className="flex items-center gap-4 mb-4">
+              <div className="w-12 h-12 rounded-lg bg-teal-500/20 flex items-center justify-center group-hover:bg-teal-500/30 transition-colors">
+                <RefreshCw className="w-6 h-6 text-teal-400" />
+              </div>
+              <div>
+                <h2 className="text-xl font-semibold text-white">Model Sync</h2>
+                <p className="text-gray-400 text-sm">Registry validation</p>
+              </div>
+            </div>
+            <p className="text-gray-400 text-sm">Compare local models against live Abacus API</p>
           </Link>
 
           <Link
