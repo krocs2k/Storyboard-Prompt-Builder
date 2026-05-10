@@ -103,6 +103,8 @@ model Project {
   storyboard       Storyboard?
   storyboardImages StoryboardImage[]
   galleryImages    GalleryImage[]
+  directorVideos   DirectorVideo[]
+  poolImages       PoolImage[]
   selections       Json?
   recommendations  Json?
   createdAt        DateTime          @default(now())
@@ -199,6 +201,58 @@ model UsageEvent {
   @@index([createdAt])
   @@index([apiModel])
   @@index([provider])
+}
+
+model DirectorVideo {
+  id           String   @id @default(cuid())
+  projectId    String
+  project      Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  prompt       String   @db.Text
+  videoUrl     String?  @db.Text   // URL of the rendered video
+  thumbnailUrl String?  @db.Text   // thumbnail screenshot
+  status       String   @default("pending") // pending, generating, ready, failed
+  duration     Float    @default(0) // duration in seconds
+  inPoint      Float    @default(0) // trim start in seconds
+  outPoint     Float    @default(0) // trim end in seconds (0 = full duration)
+  sortOrder    Int      @default(0) // drag-and-drop ordering
+  enabled      Boolean  @default(true) // enabled/disabled in sequence
+  deleted      Boolean  @default(false) // soft-delete flag
+  deletedAt    DateTime? // when moved to trash
+  modelId      String?  // video model used
+  startFrameUrl String? @db.Text // start frame image URL
+  endFrameUrl   String? @db.Text // end frame image URL
+  errorMessage  String? @db.Text
+  metadata      Json?   // extra info
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([projectId])
+  @@index([deleted, deletedAt])
+}
+
+model PoolImage {
+  id            String   @id @default(cuid())
+  projectId     String
+  project       Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  label         String   @default("")
+  imagePath     String   @db.Text   // path or URL to image
+  fileName      String   @default("")
+  aspectRatio   String   @default("16:9")
+  width         Int      @default(0)
+  height        Int      @default(0)
+  isMultiImage  Boolean  @default(false)
+  gridSize      Int      @default(0) // 0 = none, 4 = 2x2, 9 = 3x3
+  source        String   @default("upload") // upload | storyboard | gallery
+  sourceId      String?  // id of the original StoryboardImage or GalleryImage
+  sortOrder     Int      @default(0)
+  hidden        Boolean  @default(false)
+  deleted       Boolean  @default(false)
+  deletedAt     DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([projectId])
+  @@index([deleted, deletedAt])
 }
 
 model GitHubConfig {

@@ -35,15 +35,25 @@ export async function GET(request: NextRequest) {
     const where: Record<string, unknown> = { userId: session.user.id };
     if (folderId) where.folderId = folderId;
 
+    const includeImages = searchParams.get('includeImages') === 'true';
+
     const projects = await prisma.project.findMany({
       where,
       include: {
         folder: true,
         screenplay: true,
         storyboard: true,
+        ...(includeImages && {
+          storyboardImages: { select: { id: true, imagePath: true, blockNumber: true, prompt: true } },
+          galleryImages: { select: { id: true, imagePath: true, label: true, imageKey: true } },
+        }),
       },
       orderBy: { updatedAt: 'desc' },
     });
+
+    if (includeImages) {
+      return NextResponse.json({ projects });
+    }
 
     return NextResponse.json(projects);
   } catch (error) {

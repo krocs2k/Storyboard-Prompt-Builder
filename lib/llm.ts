@@ -1,68 +1,107 @@
 /**
- * LLM API Utility
- * Provides a configurable OpenAI-compatible API client.
+ * LLM API Utility — Hybrid Multi-Provider Routing
  * 
- * Supports two providers:
- * 1. Gemini (default) — uses Google's OpenAI-compatible endpoint
- * 2. Abacus AI — uses https://apps.abacus.ai/v1/chat/completions
+ * Supports three providers:
+ * 1. Gemini — Google's OpenAI-compatible endpoint
+ * 2. OpenAI — api.openai.com
+ * 3. Abacus AI — apps.abacus.ai RouteLLM
  * 
- * The active provider is stored in SystemConfig as 'API_PROVIDER' ('gemini' | 'abacus').
- * API keys are stored in SystemConfig as 'GEMINI_API_KEY' or 'ABACUS_API_KEY'.
- * Override with LLM_API_KEY + LLM_API_BASE_URL for custom providers.
+ * Per-function provider+model stored in SystemConfig:
+ *   FN_LLM_IDEAS_PROVIDER / FN_LLM_IDEAS_MODEL
+ *   FN_LLM_SCREENPLAY_PROVIDER / FN_LLM_SCREENPLAY_MODEL
+ * 
+ * Falls back to legacy API_PROVIDER config, then to first available key.
  */
 
 import { prisma } from '@/lib/db';
+import { FUNCTION_CONFIG_KEYS, ALL_HYBRID_CONFIG_KEYS, type ApiProviderType } from '@/lib/data/provider-models';
 
-export type ApiProvider = 'gemini' | 'abacus';
+export type ApiProvider = 'gemini' | 'openai' | 'abacus';
 
 export type LLMPurpose = 'default' | 'ideas' | 'screenplay';
 
+// Provider base URLs
+const PROVIDER_URLS: Record<ApiProvider, string> = {
+  gemini: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',
+  openai: 'https://api.openai.com/v1/chat/completions',
+  abacus: 'https://apps.abacus.ai/v1/chat/completions',
+};
+
+// Default models per provider
+const DEFAULT_MODELS: Record<ApiProvider, string> = {
+  gemini: 'gemini-3-flash-preview',
+  openai: 'gpt-4o-mini',
+  abacus: 'gemini-3-flash-preview',
+};
+
 // Cache DB-fetched config to avoid hitting DB on every call
 let cachedConfig: {
-  provider: ApiProvider;
+  // API keys
   geminiKey: string | null;
+  openaiKey: string | null;
   abacusKey: string | null;
+  // Per-function config
+  fnConfig: Record<string, { provider: string; model: string }>;
+  // Legacy fields
+  legacyProvider: ApiProvider;
   abacusIdeasModel: string | null;
   abacusScreenplayModel: string | null;
   fetchedAt: number;
-} = { provider: 'gemini', geminiKey: null, abacusKey: null, abacusIdeasModel: null, abacusScreenplayModel: null, fetchedAt: 0 };
-const DB_KEY_CACHE_TTL = 60_000; // 60 seconds
+} = {
+  geminiKey: null, openaiKey: null, abacusKey: null,
+  fnConfig: {}, legacyProvider: 'gemini',
+  abacusIdeasModel: null, abacusScreenplayModel: null,
+  fetchedAt: 0,
+};
+const DB_KEY_CACHE_TTL = 60_000;
 
-/** Immediately bust the in-memory provider config cache so next call re-reads from DB */
+/** Immediately bust the in-memory provider config cache */
 export function invalidateLlmCache() {
   cachedConfig.fetchedAt = 0;
 }
 
 async function loadProviderConfig(): Promise<typeof cachedConfig> {
   const now = Date.now();
-  if (now - cachedConfig.fetchedAt < DB_KEY_CACHE_TTL && (cachedConfig.geminiKey || cachedConfig.abacusKey)) {
+  if (now - cachedConfig.fetchedAt < DB_KEY_CACHE_TTL && (cachedConfig.geminiKey || cachedConfig.openaiKey || cachedConfig.abacusKey)) {
     return cachedConfig;
   }
 
   try {
     const configs = await prisma.systemConfig.findMany({
-      where: { key: { in: ['API_PROVIDER', 'GEMINI_API_KEY', 'ABACUS_API_KEY', 'ABACUS_LLM_IDEAS_MODEL', 'ABACUS_LLM_SCREENPLAY_MODEL'] } }
+      where: { key: { in: ALL_HYBRID_CONFIG_KEYS } }
     });
-    const configMap = Object.fromEntries(configs.map(c => [c.key, c.value]));
+    const cm = Object.fromEntries(configs.map(c => [c.key, c.value]));
+
+    // Build per-function config
+    const fnConfig: Record<string, { provider: string; model: string }> = {};
+    for (const [fn, keys] of Object.entries(FUNCTION_CONFIG_KEYS)) {
+      fnConfig[fn] = {
+        provider: cm[keys.providerKey] || '',
+        model: cm[keys.modelKey] || '',
+      };
+    }
 
     cachedConfig = {
-      provider: (configMap['API_PROVIDER'] as ApiProvider) || 'gemini',
-      geminiKey: configMap['GEMINI_API_KEY'] || process.env.GEMINI_API_KEY || null,
-      abacusKey: configMap['ABACUS_API_KEY'] || process.env.ABACUSAI_API_KEY || null,
-      abacusIdeasModel: configMap['ABACUS_LLM_IDEAS_MODEL'] || null,
-      abacusScreenplayModel: configMap['ABACUS_LLM_SCREENPLAY_MODEL'] || null,
+      geminiKey: cm['GEMINI_API_KEY'] || process.env.GEMINI_API_KEY || null,
+      openaiKey: cm['OPENAI_API_KEY'] || process.env.OPENAI_API_KEY || null,
+      abacusKey: cm['ABACUS_API_KEY'] || process.env.ABACUSAI_API_KEY || null,
+      fnConfig,
+      legacyProvider: (cm['API_PROVIDER'] as ApiProvider) || 'gemini',
+      abacusIdeasModel: cm['ABACUS_LLM_IDEAS_MODEL'] || null,
+      abacusScreenplayModel: cm['ABACUS_LLM_SCREENPLAY_MODEL'] || null,
       fetchedAt: now,
     };
   } catch (e) {
     console.warn('Failed to load provider config from DB:', e);
-    // Fallback to env vars
     cachedConfig = {
-      provider: 'gemini',
       geminiKey: process.env.GEMINI_API_KEY || null,
+      openaiKey: process.env.OPENAI_API_KEY || null,
       abacusKey: process.env.ABACUSAI_API_KEY || null,
+      fnConfig: {},
+      legacyProvider: 'gemini',
       abacusIdeasModel: null,
       abacusScreenplayModel: null,
-      fetchedAt: now,
+      fetchedAt: Date.now(),
     };
   }
 
@@ -76,55 +115,97 @@ export interface LLMConfig {
   provider: ApiProvider;
 }
 
+/** Get the API key for a given provider, or null */
+function getKeyForProvider(config: typeof cachedConfig, prov: ApiProvider): string | null {
+  switch (prov) {
+    case 'gemini': return config.geminiKey;
+    case 'openai': return config.openaiKey;
+    case 'abacus': return config.abacusKey;
+    default: return null;
+  }
+}
+
+/** Find the first provider with an available key */
+function findFirstAvailableProvider(config: typeof cachedConfig, preferred?: ApiProvider[]): { provider: ApiProvider; key: string } | null {
+  const order = preferred || (['gemini', 'openai', 'abacus'] as ApiProvider[]);
+  for (const p of order) {
+    const k = getKeyForProvider(config, p);
+    if (k) return { provider: p, key: k };
+  }
+  return null;
+}
+
+/** Map LLMPurpose to FunctionType key */
+function purposeToFnKey(purpose: LLMPurpose): string {
+  switch (purpose) {
+    case 'ideas': return 'llm_ideas';
+    case 'screenplay': return 'llm_screenplay';
+    default: return 'llm_ideas'; // default falls back to ideas config
+  }
+}
+
 export async function getLLMConfig(purpose: LLMPurpose = 'default'): Promise<LLMConfig> {
-  // Priority 1: Custom provider override (LLM_API_KEY + LLM_API_BASE_URL)
+  // Priority 1: Custom override env vars
   if (process.env.LLM_API_KEY) {
     return {
       apiKey: process.env.LLM_API_KEY,
       baseUrl: process.env.LLM_API_BASE_URL || 'https://api.openai.com/v1/chat/completions',
       model: process.env.LLM_MODEL || 'gemini-3-flash-preview',
-      provider: 'gemini', // treat custom override as generic
-    };
-  }
-
-  // Priority 2: DB-stored provider preference
-  const config = await loadProviderConfig();
-  const defaultModel = process.env.LLM_MODEL || 'gemini-3-flash-preview';
-
-  // Resolve model based on purpose (only for Abacus provider)
-  function resolveModel(): string {
-    if (config.provider === 'abacus') {
-      if (purpose === 'ideas' && config.abacusIdeasModel) return config.abacusIdeasModel;
-      if (purpose === 'screenplay' && config.abacusScreenplayModel) return config.abacusScreenplayModel;
-    }
-    return defaultModel;
-  }
-
-  if (config.provider === 'abacus' && config.abacusKey) {
-    return {
-      apiKey: config.abacusKey,
-      baseUrl: 'https://apps.abacus.ai/v1/chat/completions',
-      model: resolveModel(),
-      provider: 'abacus',
-    };
-  }
-
-  if (config.geminiKey) {
-    return {
-      apiKey: config.geminiKey,
-      baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',
-      model: defaultModel,
       provider: 'gemini',
     };
   }
 
-  // If abacus key exists but gemini was selected (or vice versa), try the other
-  if (config.abacusKey) {
+  const config = await loadProviderConfig();
+  const fnKey = purposeToFnKey(purpose);
+  const fnCfg = config.fnConfig[fnKey];
+
+  // Priority 2: Per-function provider+model from hybrid config
+  if (fnCfg?.provider) {
+    const prov = fnCfg.provider as ApiProvider;
+    const key = getKeyForProvider(config, prov);
+    if (key) {
+      const model = fnCfg.model || DEFAULT_MODELS[prov];
+      return {
+        apiKey: key,
+        baseUrl: PROVIDER_URLS[prov],
+        model,
+        provider: prov,
+      };
+    }
+  }
+
+  // Priority 3: Legacy per-purpose models (Abacus)
+  if (config.legacyProvider === 'abacus' && config.abacusKey) {
+    let model = DEFAULT_MODELS.abacus;
+    if (purpose === 'ideas' && config.abacusIdeasModel) model = config.abacusIdeasModel;
+    if (purpose === 'screenplay' && config.abacusScreenplayModel) model = config.abacusScreenplayModel;
     return {
       apiKey: config.abacusKey,
-      baseUrl: 'https://apps.abacus.ai/v1/chat/completions',
-      model: resolveModel(),
+      baseUrl: PROVIDER_URLS.abacus,
+      model,
       provider: 'abacus',
+    };
+  }
+
+  // Priority 4: Legacy provider preference
+  const legacyKey = getKeyForProvider(config, config.legacyProvider);
+  if (legacyKey) {
+    return {
+      apiKey: legacyKey,
+      baseUrl: PROVIDER_URLS[config.legacyProvider],
+      model: DEFAULT_MODELS[config.legacyProvider],
+      provider: config.legacyProvider,
+    };
+  }
+
+  // Priority 5: First available provider
+  const available = findFirstAvailableProvider(config);
+  if (available) {
+    return {
+      apiKey: available.key,
+      baseUrl: PROVIDER_URLS[available.provider],
+      model: DEFAULT_MODELS[available.provider],
+      provider: available.provider,
     };
   }
 
@@ -170,10 +251,29 @@ export async function callLLM(options: {
  */
 export async function getActiveProvider(): Promise<ApiProvider> {
   const config = await loadProviderConfig();
-  // If preferred provider has a key, use it; otherwise use whatever has a key
-  if (config.provider === 'abacus' && config.abacusKey) return 'abacus';
-  if (config.provider === 'gemini' && config.geminiKey) return 'gemini';
-  if (config.abacusKey) return 'abacus';
-  if (config.geminiKey) return 'gemini';
-  return config.provider;
+  if (config.legacyProvider && getKeyForProvider(config, config.legacyProvider)) {
+    return config.legacyProvider;
+  }
+  const avail = findFirstAvailableProvider(config);
+  return avail?.provider || config.legacyProvider;
+}
+
+/**
+ * Get the loaded config for use by other modules (imagen, video-gen)
+ */
+export async function getProviderKeys(): Promise<{
+  geminiKey: string | null;
+  openaiKey: string | null;
+  abacusKey: string | null;
+  fnConfig: Record<string, { provider: string; model: string }>;
+  legacyProvider: ApiProvider;
+}> {
+  const config = await loadProviderConfig();
+  return {
+    geminiKey: config.geminiKey,
+    openaiKey: config.openaiKey,
+    abacusKey: config.abacusKey,
+    fnConfig: config.fnConfig,
+    legacyProvider: config.legacyProvider,
+  };
 }

@@ -68,6 +68,26 @@ function StepProgressBar({ current }: { current: number }) {
   );
 }
 
+/** Extract a title from screenplay content — only used as fallback when no known title exists */
+function extractTitleFromContent(content: string): string {
+  // Try explicit "TITLE: ..." line
+  const titleLineMatch = content.match(/^TITLE:\s*(.+)$/im);
+  if (titleLineMatch?.[1]) {
+    const candidate = titleLineMatch[1].trim();
+    // Reject scene headings and generic markers
+    if (!/^(INT\.|EXT\.|COLD OPEN|TEASER|FADE IN)/i.test(candidate)) {
+      return candidate;
+    }
+  }
+  // Try quoted title in the first few lines
+  const firstLines = content.split('\n').slice(0, 5).join('\n');
+  const quotedMatch = firstLines.match(/"([^"]{3,80})"/);
+  if (quotedMatch?.[1] && !/^(INT\.|EXT\.|COLD OPEN|TEASER)/i.test(quotedMatch[1].trim())) {
+    return quotedMatch[1].trim();
+  }
+  return '';
+}
+
 export default function ScreenplayCreator({ onScreenplayCreated, onClose }: ScreenplayCreatorProps) {
   const [mode, setMode] = useState<'select' | 'youtube' | 'concept' | 'convert'>('select');
   const [conceptStep, setConceptStep] = useState<ConceptModeStep>('genre');
@@ -323,8 +343,33 @@ export default function ScreenplayCreator({ onScreenplayCreated, onClose }: Scre
       if (currentEnv.name) environments.push(currentEnv);
     }
 
-    const titleMatch = content.match(/(?:TITLE:|"([^"]+)"|COLD OPEN|TEASER)\s*\n?([^\n]+)?/i);
-    const title = titleMatch?.[1] || titleMatch?.[2] || selectedConcept?.title || 'Untitled Screenplay';
+    // Title priority: selected concept/idea title > explicit TITLE: in content > fallback
+    // The concept title is the actual story name chosen by the user; always prefer it
+    const knownTitle = selectedConcept?.title || selectedIdea?.title;
+
+    let extractedTitle = '';
+    if (!knownTitle) {
+      // Only try to extract from content when we don't have a known title
+      // Match "TITLE: Some Title" pattern specifically (not COLD OPEN or scene headings)
+      const titleLineMatch = content.match(/^TITLE:\s*(.+)$/im);
+      if (titleLineMatch?.[1]) {
+        const candidate = titleLineMatch[1].trim();
+        // Reject scene headings (INT./EXT.) and generic markers
+        if (!/^(INT\.|EXT\.|COLD OPEN|TEASER|FADE IN)/i.test(candidate)) {
+          extractedTitle = candidate;
+        }
+      }
+      // Also try quoted title on the first few lines
+      if (!extractedTitle) {
+        const firstLines = content.split('\n').slice(0, 5).join('\n');
+        const quotedMatch = firstLines.match(/"([^"]{3,80})"/);
+        if (quotedMatch?.[1] && !/^(INT\.|EXT\.|COLD OPEN|TEASER)/i.test(quotedMatch[1].trim())) {
+          extractedTitle = quotedMatch[1].trim();
+        }
+      }
+    }
+
+    const title = knownTitle || extractedTitle || 'Untitled Screenplay';
 
     onScreenplayCreated({
       title: title.trim(),
@@ -424,8 +469,8 @@ export default function ScreenplayCreator({ onScreenplayCreated, onClose }: Scre
               } else if (parsed.status === 'completed') {
                 fullContent = parsed.screenplay;
                 setScreenplay(fullContent);
-                const titleMatch = fullContent.match(/(?:TITLE:|"([^"]+)")\s*\n?([^\n]+)?/i);
-                const title = titleMatch?.[1] || titleMatch?.[2] || convertTitle || convertFile?.name?.replace(/\.[^.]+$/, '') || 'Adapted Screenplay';
+                // Use user-provided title first, then extract from content
+                const title = convertTitle || extractTitleFromContent(fullContent) || convertFile?.name?.replace(/\.[^.]+$/, '') || 'Adapted Screenplay';
                 setScreenplayTitle(title.trim());
                 setConvertComplete(true);
                 setGenerating(false);
@@ -447,8 +492,7 @@ export default function ScreenplayCreator({ onScreenplayCreated, onClose }: Scre
 
       // If stream ended without completed event
       if (fullContent && !convertComplete) {
-        const titleMatch = fullContent.match(/(?:TITLE:|"([^"]+)")\s*\n?([^\n]+)?/i);
-        const title = titleMatch?.[1] || titleMatch?.[2] || convertTitle || convertFile?.name?.replace(/\.[^.]+$/, '') || 'Adapted Screenplay';
+        const title = convertTitle || extractTitleFromContent(fullContent) || convertFile?.name?.replace(/\.[^.]+$/, '') || 'Adapted Screenplay';
         setScreenplayTitle(title.trim());
         setConvertComplete(true);
         parseAndComplete(fullContent, 'concept');

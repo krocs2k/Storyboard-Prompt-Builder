@@ -179,9 +179,11 @@ export async function GET() {
       })),
       image_generation: IMAGE_GENERATION_MODELS.map(m => ({
         id: m.id, name: m.name, provider: m.provider, cost: m.cost || null,
+        supportsRefImage: !!m.supportsRefImage,
       })),
       video_generation: VIDEO_GENERATION_MODELS.map(m => ({
         id: m.id, name: m.name, provider: m.provider, cost: m.cost || null,
+        supportsStartFrame: !!m.supportsStartFrame, supportsEndFrame: !!m.supportsEndFrame,
       })),
       audio_generation: AUDIO_GENERATION_MODELS.map(m => ({
         id: m.id, name: m.name, provider: m.provider, cost: m.cost || null,

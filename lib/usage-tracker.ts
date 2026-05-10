@@ -15,10 +15,11 @@ export type EventType =
   | 'storyboard_generate'
   | 'prompt_generate'
   | 'image_generate'
-  | 'image_grid_detect';
+  | 'image_grid_detect'
+  | 'video_generate';
 
-export type ApiType = 'llm' | 'imagen';
-export type Provider = 'gemini' | 'abacus';
+export type ApiType = 'llm' | 'imagen' | 'video';
+export type Provider = 'gemini' | 'openai' | 'abacus';
 
 interface TrackOptions {
   userId?: string;

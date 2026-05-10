@@ -34,6 +34,12 @@ export interface AbacusModel {
   inputModalities?: string[];
   /** Output modalities supported */
   outputModalities?: string[];
+  /** Image gen: supports reference/input images for style or subject guidance */
+  supportsRefImage?: boolean;
+  /** Video gen: supports a start-frame image input */
+  supportsStartFrame?: boolean;
+  /** Video gen: supports an end-frame image input */
+  supportsEndFrame?: boolean;
 }
 
 export type ModelCategory = 
@@ -163,26 +169,26 @@ export const TEXT_GENERATION_MODELS: AbacusModel[] = [
 
 export const IMAGE_GENERATION_MODELS: AbacusModel[] = [
   // ── GPT Image ──
-  { id: 'gpt_image15', name: 'GPT Image 1.5', provider: 'OpenAI', category: 'image_generation', description: 'OpenAI image generation model', cost: 'Token-based pricing' },
-  { id: 'gpt_image_edit', name: 'GPT Image [Edit]', provider: 'OpenAI', category: 'image_generation', description: 'OpenAI image editing model', cost: 'Token-based pricing' },
+  { id: 'gpt_image15', name: 'GPT Image 1.5', provider: 'OpenAI', category: 'image_generation', description: 'OpenAI image generation model', cost: 'Token-based pricing', supportsRefImage: true },
+  { id: 'gpt_image_edit', name: 'GPT Image [Edit]', provider: 'OpenAI', category: 'image_generation', description: 'OpenAI image editing model', cost: 'Token-based pricing', supportsRefImage: true },
 
   // ── FLUX (Black Forest Labs) ──
   { id: 'flux2', name: 'FLUX.2', provider: 'Black Forest Labs', category: 'image_generation', description: 'Next-gen Flux model', cost: '~$0.0096/image', rate: 0.0096 },
   { id: 'flux2_pro', name: 'FLUX.2 [Pro]', provider: 'Black Forest Labs', category: 'image_generation', description: 'Pro-tier Flux 2 generation', cost: '~$0.03/image', rate: 0.03 },
   { id: 'flux_pro', name: 'FLUX 1.1 [Pro]', provider: 'Black Forest Labs', category: 'image_generation', description: 'High-fidelity image generation', cost: '~$0.04/image', rate: 0.04 },
   { id: 'flux_pro_ultra', name: 'FLUX 1.1 [Pro] Ultra', provider: 'Black Forest Labs', category: 'image_generation', description: 'Premium quality Flux generation', cost: '~$0.06/image', rate: 0.06 },
-  { id: 'flux_kontext', name: 'FLUX.1 Kontext', provider: 'Black Forest Labs', category: 'image_generation', description: 'Context-aware Flux generation', cost: '~$0.04–$0.08/image' },
-  { id: 'flux_kontext_edit', name: 'FLUX.1 Kontext [Edit]', provider: 'Black Forest Labs', category: 'image_generation', description: 'Context-aware Flux editing', cost: '~$0.04–$0.08/image' },
-  { id: 'flux_pro_canny', name: 'FLUX 1.1 [Pro] Canny [Edit]', provider: 'Black Forest Labs', category: 'image_generation', description: 'Edge-guided Flux editing', cost: '~$0.05/image', rate: 0.05 },
-  { id: 'flux_pro_depth', name: 'FLUX 1.1 [Pro] Depth [Edit]', provider: 'Black Forest Labs', category: 'image_generation', description: 'Depth-guided Flux editing', cost: '~$0.05/image', rate: 0.05 },
+  { id: 'flux_kontext', name: 'FLUX.1 Kontext', provider: 'Black Forest Labs', category: 'image_generation', description: 'Context-aware Flux generation', cost: '~$0.04–$0.08/image', supportsRefImage: true },
+  { id: 'flux_kontext_edit', name: 'FLUX.1 Kontext [Edit]', provider: 'Black Forest Labs', category: 'image_generation', description: 'Context-aware Flux editing', cost: '~$0.04–$0.08/image', supportsRefImage: true },
+  { id: 'flux_pro_canny', name: 'FLUX 1.1 [Pro] Canny [Edit]', provider: 'Black Forest Labs', category: 'image_generation', description: 'Edge-guided Flux editing', cost: '~$0.05/image', rate: 0.05, supportsRefImage: true },
+  { id: 'flux_pro_depth', name: 'FLUX 1.1 [Pro] Depth [Edit]', provider: 'Black Forest Labs', category: 'image_generation', description: 'Depth-guided Flux editing', cost: '~$0.05/image', rate: 0.05, supportsRefImage: true },
 
   // ── Google ──
-  { id: 'imagen', name: 'Imagen 4', provider: 'Google', category: 'image_generation', description: 'Google Imagen via Abacus', cost: '~$0.05/image', rate: 0.05 },
+  { id: 'imagen', name: 'Imagen 4', provider: 'Google', category: 'image_generation', description: 'Google Imagen via Abacus', cost: '~$0.05/image', rate: 0.05, supportsRefImage: true },
   { id: 'seedream', name: 'Seedream 4.5', provider: 'Google', category: 'image_generation', description: 'Creative and artistic generation', cost: '~$0.04/image', rate: 0.04 },
 
   // ── Ideogram ──
   { id: 'ideogram', name: 'Ideogram 3.0', provider: 'Ideogram', category: 'image_generation', description: 'Excellent text rendering in images', cost: '~$0.06/image', rate: 0.06 },
-  { id: 'ideogram_character', name: 'Ideogram Character', provider: 'Ideogram', category: 'image_generation', description: 'Character-focused generation', cost: '~$0.10–$0.20/image' },
+  { id: 'ideogram_character', name: 'Ideogram Character', provider: 'Ideogram', category: 'image_generation', description: 'Character-focused generation', cost: '~$0.10–$0.20/image', supportsRefImage: true },
 
   // ── Recraft ──
   { id: 'recraft', name: 'Recraft', provider: 'Recraft', category: 'image_generation', description: 'Design-oriented image generation', cost: '~$0.04/image', rate: 0.04 },
@@ -192,15 +198,15 @@ export const IMAGE_GENERATION_MODELS: AbacusModel[] = [
   { id: 'dalle', name: 'DALL-E', provider: 'OpenAI', category: 'image_generation', description: 'OpenAI DALL-E image generation', cost: '~$0.04–$0.12/image (varies by quality/res)' },
 
   // ── Midjourney ──
-  { id: 'midjourney', name: 'Midjourney', provider: 'Midjourney', category: 'image_generation', description: 'Artistic image generation', cost: '~$0.04–$0.14/image (varies by speed)' },
+  { id: 'midjourney', name: 'Midjourney', provider: 'Midjourney', category: 'image_generation', description: 'Artistic image generation', cost: '~$0.04–$0.14/image (varies by speed)', supportsRefImage: true },
 
   // ── Nano Banana (Google Gemini-based) ──
-  { id: 'nano_banana', name: 'Nano Banana', provider: 'Google', category: 'image_generation', description: 'Fast multimodal image generation', cost: '~$0.039/image', rate: 0.039 },
-  { id: 'nano_banana_pro', name: 'Nano Banana Pro', provider: 'Google', category: 'image_generation', description: 'Enhanced multimodal generation', cost: '~$0.15/image', rate: 0.15 },
-  { id: 'nano_banana2', name: 'Nano Banana 2', provider: 'Google', category: 'image_generation', description: 'Latest Nano Banana with text rendering', cost: '~$0.06/image', rate: 0.06 },
+  { id: 'nano_banana', name: 'Nano Banana', provider: 'Google', category: 'image_generation', description: 'Fast multimodal image generation', cost: '~$0.039/image', rate: 0.039, supportsRefImage: true },
+  { id: 'nano_banana_pro', name: 'Nano Banana Pro', provider: 'Google', category: 'image_generation', description: 'Enhanced multimodal generation', cost: '~$0.15/image', rate: 0.15, supportsRefImage: true },
+  { id: 'nano_banana2', name: 'Nano Banana 2', provider: 'Google', category: 'image_generation', description: 'Latest Nano Banana with text rendering', cost: '~$0.06/image', rate: 0.06, supportsRefImage: true },
 
   // ── Qwen ──
-  { id: 'qwen_image_edit', name: 'Qwen Image Edit', provider: 'Qwen', category: 'image_generation', description: 'Qwen image editing model', cost: '~$0.03/megapixel', rate: 0.03 },
+  { id: 'qwen_image_edit', name: 'Qwen Image Edit', provider: 'Qwen', category: 'image_generation', description: 'Qwen image editing model', cost: '~$0.03/megapixel', rate: 0.03, supportsRefImage: true },
 
   // ── Hunyuan ──
   { id: 'hunyuan_image', name: 'Hunyuan Image 3.0', provider: 'Tencent', category: 'image_generation', description: 'Hunyuan image generation', cost: '~$0.10/image', rate: 0.10 },
@@ -218,7 +224,7 @@ export const IMAGE_GENERATION_MODELS: AbacusModel[] = [
   { id: 'wan27', name: 'Wan 2.7', provider: 'Alibaba', category: 'image_generation', description: 'Wan image generation', cost: '~$0.03/image', rate: 0.03 },
 
   // ── Magnific ──
-  { id: 'magnific', name: 'Magnific Upscaler', provider: 'Magnific', category: 'image_generation', description: 'AI image upscaling', cost: '~$0.11–$1.32 (varies by resolution)' },
+  { id: 'magnific', name: 'Magnific Upscaler', provider: 'Magnific', category: 'image_generation', description: 'AI image upscaling', cost: '~$0.11–$1.32 (varies by resolution)', supportsRefImage: true },
 ];
 
 // ────────────────────────────────────────────────────────────
@@ -227,46 +233,46 @@ export const IMAGE_GENERATION_MODELS: AbacusModel[] = [
 
 export const VIDEO_GENERATION_MODELS: AbacusModel[] = [
   // ── Google ──
-  { id: 'veo31', name: 'Veo 3.1', provider: 'Google', category: 'video_generation', description: 'Latest Google video generation', cost: '~$1.20–$3.20/video' },
-  { id: 'veo31_lite', name: 'Veo 3.1 Lite', provider: 'Google', category: 'video_generation', description: 'Lightweight Veo 3.1', cost: '~$0.07/video', rate: 0.07 },
-  { id: 'veo3', name: 'Veo 3', provider: 'Google', category: 'video_generation', description: 'Veo 3 with audio support', cost: '~$2.00–$6.00/video' },
-  { id: 'veo', name: 'Veo 2', provider: 'Google', category: 'video_generation', description: 'Google Veo 2 video generation', cost: '~$2.50–$4.00/video' },
-  { id: 'seedance15_pro', name: 'Seedance 1.5 Pro', provider: 'Google', category: 'video_generation', description: 'Pro video generation', cost: '~$0.26/video', rate: 0.26 },
-  { id: 'seedance_pro', name: 'Seedance Pro', provider: 'Google', category: 'video_generation', description: 'Professional Seedance video', cost: '~$0.74/video', rate: 0.74 },
-  { id: 'seedance', name: 'Seedance', provider: 'Google', category: 'video_generation', description: 'Google video generation', cost: '~$0.18/video', rate: 0.18 },
+  { id: 'veo31', name: 'Veo 3.1', provider: 'Google', category: 'video_generation', description: 'Latest Google video generation', cost: '~$1.20–$3.20/video', supportsStartFrame: true, supportsEndFrame: true },
+  { id: 'veo31_lite', name: 'Veo 3.1 Lite', provider: 'Google', category: 'video_generation', description: 'Lightweight Veo 3.1', cost: '~$0.07/video', rate: 0.07, supportsStartFrame: true },
+  { id: 'veo3', name: 'Veo 3', provider: 'Google', category: 'video_generation', description: 'Veo 3 with audio support', cost: '~$2.00–$6.00/video', supportsStartFrame: true, supportsEndFrame: true },
+  { id: 'veo', name: 'Veo 2', provider: 'Google', category: 'video_generation', description: 'Google Veo 2 video generation', cost: '~$2.50–$4.00/video', supportsStartFrame: true },
+  { id: 'seedance15_pro', name: 'Seedance 1.5 Pro', provider: 'Google', category: 'video_generation', description: 'Pro video generation', cost: '~$0.26/video', rate: 0.26, supportsStartFrame: true, supportsEndFrame: true },
+  { id: 'seedance_pro', name: 'Seedance Pro', provider: 'Google', category: 'video_generation', description: 'Professional Seedance video', cost: '~$0.74/video', rate: 0.74, supportsStartFrame: true, supportsEndFrame: true },
+  { id: 'seedance', name: 'Seedance', provider: 'Google', category: 'video_generation', description: 'Google video generation', cost: '~$0.18/video', rate: 0.18, supportsStartFrame: true },
 
   // ── OpenAI ──
-  { id: 'sora', name: 'Sora 2', provider: 'OpenAI', category: 'video_generation', description: 'OpenAI video generation', cost: '~$0.10–$0.30/video' },
+  { id: 'sora', name: 'Sora 2', provider: 'OpenAI', category: 'video_generation', description: 'OpenAI video generation', cost: '~$0.10–$0.30/video', supportsStartFrame: true },
 
   // ── Runway ──
-  { id: 'runway', name: 'Runway', provider: 'Runway', category: 'video_generation', description: 'Runway video generation', cost: '~$0.25–$0.50/video' },
+  { id: 'runway', name: 'Runway', provider: 'Runway', category: 'video_generation', description: 'Runway video generation', cost: '~$0.25–$0.50/video', supportsStartFrame: true, supportsEndFrame: true },
 
   // ── Luma Labs ──
-  { id: 'luma_labs', name: 'Luma Labs', provider: 'Luma Labs', category: 'video_generation', description: 'Luma Labs video generation', cost: '~$0.40/video', rate: 0.40 },
+  { id: 'luma_labs', name: 'Luma Labs', provider: 'Luma Labs', category: 'video_generation', description: 'Luma Labs video generation', cost: '~$0.40/video', rate: 0.40, supportsStartFrame: true },
 
   // ── Kling AI ──
-  { id: 'kling_ai_o3', name: 'Kling AI O3', provider: 'Kuaishou', category: 'video_generation', description: 'Latest Kling reasoning video', cost: '~$0.17–$0.28/video' },
-  { id: 'kling_ai_o1', name: 'Kling AI O1', provider: 'Kuaishou', category: 'video_generation', description: 'Kling reasoning video', cost: '~$0.42–$1.12/video' },
-  { id: 'kling_ai_v3', name: 'Kling AI v3', provider: 'Kuaishou', category: 'video_generation', description: 'Kling v3 video generation', cost: '~$0.17–$0.34/video' },
-  { id: 'kling_ai_v26', name: 'Kling AI v2.6', provider: 'Kuaishou', category: 'video_generation', description: 'Kling v2.6 video', cost: '~$0.07–$0.14/video', rate: 0.07 },
-  { id: 'kling_ai_v26_motion', name: 'Kling v2.6 Motion Control', provider: 'Kuaishou', category: 'video_generation', description: 'Motion-controlled video generation', cost: '~$0.112/video', rate: 0.112 },
-  { id: 'kling_ai_v25', name: 'Kling AI v2.5', provider: 'Kuaishou', category: 'video_generation', description: 'Kling v2.5 video', cost: '~$0.21–$0.70/video' },
-  { id: 'kling_ai_v21', name: 'Kling AI v2.1', provider: 'Kuaishou', category: 'video_generation', description: 'Kling v2.1 video', cost: '~$1.40–$2.80/video' },
-  { id: 'kling_ai_v2', name: 'Kling AI v2', provider: 'Kuaishou', category: 'video_generation', description: 'Kling v2 video', cost: '~$1.40–$2.80/video' },
-  { id: 'kling_ai', name: 'Kling AI v1.6', provider: 'Kuaishou', category: 'video_generation', description: 'Kling v1.6 video', cost: '~$0.23–$0.95/video' },
+  { id: 'kling_ai_o3', name: 'Kling AI O3', provider: 'Kuaishou', category: 'video_generation', description: 'Latest Kling reasoning video', cost: '~$0.17–$0.28/video', supportsStartFrame: true, supportsEndFrame: true },
+  { id: 'kling_ai_o1', name: 'Kling AI O1', provider: 'Kuaishou', category: 'video_generation', description: 'Kling reasoning video', cost: '~$0.42–$1.12/video', supportsStartFrame: true, supportsEndFrame: true },
+  { id: 'kling_ai_v3', name: 'Kling AI v3', provider: 'Kuaishou', category: 'video_generation', description: 'Kling v3 video generation', cost: '~$0.17–$0.34/video', supportsStartFrame: true, supportsEndFrame: true },
+  { id: 'kling_ai_v26', name: 'Kling AI v2.6', provider: 'Kuaishou', category: 'video_generation', description: 'Kling v2.6 video', cost: '~$0.07–$0.14/video', rate: 0.07, supportsStartFrame: true, supportsEndFrame: true },
+  { id: 'kling_ai_v26_motion', name: 'Kling v2.6 Motion Control', provider: 'Kuaishou', category: 'video_generation', description: 'Motion-controlled video generation', cost: '~$0.112/video', rate: 0.112, supportsStartFrame: true },
+  { id: 'kling_ai_v25', name: 'Kling AI v2.5', provider: 'Kuaishou', category: 'video_generation', description: 'Kling v2.5 video', cost: '~$0.21–$0.70/video', supportsStartFrame: true, supportsEndFrame: true },
+  { id: 'kling_ai_v21', name: 'Kling AI v2.1', provider: 'Kuaishou', category: 'video_generation', description: 'Kling v2.1 video', cost: '~$1.40–$2.80/video', supportsStartFrame: true, supportsEndFrame: true },
+  { id: 'kling_ai_v2', name: 'Kling AI v2', provider: 'Kuaishou', category: 'video_generation', description: 'Kling v2 video', cost: '~$1.40–$2.80/video', supportsStartFrame: true, supportsEndFrame: true },
+  { id: 'kling_ai', name: 'Kling AI v1.6', provider: 'Kuaishou', category: 'video_generation', description: 'Kling v1.6 video', cost: '~$0.23–$0.95/video', supportsStartFrame: true, supportsEndFrame: true },
 
   // ── Hailuo / MiniMax ──
-  { id: 'minimax', name: 'Hailuo 2', provider: 'MiniMax', category: 'video_generation', description: 'MiniMax Hailuo video generation', cost: '~$0.27–$0.80/video' },
+  { id: 'minimax', name: 'Hailuo 2', provider: 'MiniMax', category: 'video_generation', description: 'MiniMax Hailuo video generation', cost: '~$0.27–$0.80/video', supportsStartFrame: true, supportsEndFrame: true },
 
   // ── Hunyuan ──
-  { id: 'hunyuan', name: 'Hunyuan Video', provider: 'Tencent', category: 'video_generation', description: 'Tencent video generation', cost: '~$0.40/video', rate: 0.40 },
+  { id: 'hunyuan', name: 'Hunyuan Video', provider: 'Tencent', category: 'video_generation', description: 'Tencent video generation', cost: '~$0.40/video', rate: 0.40, supportsStartFrame: true },
 
   // ── Wan ──
-  { id: 'wan25', name: 'Wan 2.5', provider: 'Alibaba', category: 'video_generation', description: 'Alibaba Wan 2.5 video', cost: '~$0.05–$0.15/video' },
-  { id: 'wan', name: 'Wan 2.2', provider: 'Alibaba', category: 'video_generation', description: 'Alibaba Wan 2.2 video', cost: '~$0.0125–$0.08/video', rate: 0.08 },
+  { id: 'wan25', name: 'Wan 2.5', provider: 'Alibaba', category: 'video_generation', description: 'Alibaba Wan 2.5 video', cost: '~$0.05–$0.15/video', supportsStartFrame: true },
+  { id: 'wan', name: 'Wan 2.2', provider: 'Alibaba', category: 'video_generation', description: 'Alibaba Wan 2.2 video', cost: '~$0.0125–$0.08/video', rate: 0.08, supportsStartFrame: true },
 
   // ── xAI ──
-  { id: 'grok_imagine_video', name: 'Grok Imagine Video', provider: 'xAI', category: 'video_generation', description: 'Grok video generation', cost: '~$0.05/video', rate: 0.05 },
+  { id: 'grok_imagine_video', name: 'Grok Imagine Video', provider: 'xAI', category: 'video_generation', description: 'Grok video generation', cost: '~$0.05/video', rate: 0.05, supportsStartFrame: true },
 
   // ── Topaz ──
   { id: 'topaz', name: 'Topaz Upscaler', provider: 'Topaz', category: 'video_generation', description: 'AI video upscaling', cost: '~$0.10/video', rate: 0.10 },

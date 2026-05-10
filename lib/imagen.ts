@@ -3,16 +3,21 @@ import { cached } from './redis';
 import { prisma } from '@/lib/db';
 import { trackUsage } from '@/lib/usage-tracker';
 import { type ApiProvider } from '@/lib/llm';
+import { ALL_HYBRID_CONFIG_KEYS, FUNCTION_CONFIG_KEYS } from '@/lib/data/provider-models';
 
 // Cache the DB-fetched config for 60 seconds to avoid hitting DB on every call
 let cachedDbConfig: {
   geminiKey: string | null;
+  openaiKey: string | null;
   abacusKey: string | null;
   provider: ApiProvider;
   imagenModel: string | null;
   abacusImageModel: string | null;
+  // Per-function image config
+  fnImageProvider: string;
+  fnImageModel: string;
   fetchedAt: number;
-} = { geminiKey: null, abacusKey: null, provider: 'gemini', imagenModel: null, abacusImageModel: null, fetchedAt: 0 };
+} = { geminiKey: null, openaiKey: null, abacusKey: null, provider: 'gemini', imagenModel: null, abacusImageModel: null, fnImageProvider: '', fnImageModel: '', fetchedAt: 0 };
 const DB_KEY_CACHE_TTL = 60_000;
 
 /** Immediately bust the in-memory image config cache so next call re-reads from DB */
@@ -22,32 +27,40 @@ export function invalidateImagenCache() {
 
 async function loadImageConfig() {
   const now = Date.now();
-  if (now - cachedDbConfig.fetchedAt < DB_KEY_CACHE_TTL && (cachedDbConfig.geminiKey || cachedDbConfig.abacusKey)) {
+  if (now - cachedDbConfig.fetchedAt < DB_KEY_CACHE_TTL && (cachedDbConfig.geminiKey || cachedDbConfig.openaiKey || cachedDbConfig.abacusKey)) {
     return cachedDbConfig;
   }
 
   try {
     const configs = await prisma.systemConfig.findMany({
-      where: { key: { in: ['GEMINI_API_KEY', 'ABACUS_API_KEY', 'API_PROVIDER', 'IMAGEN_MODEL', 'ABACUS_IMAGE_MODEL'] } }
+      where: { key: { in: ALL_HYBRID_CONFIG_KEYS } }
     });
     const configMap = Object.fromEntries(configs.map(c => [c.key, c.value]));
 
+    const imgKeys = FUNCTION_CONFIG_KEYS.image;
+
     cachedDbConfig = {
       geminiKey: configMap['GEMINI_API_KEY'] || process.env.GEMINI_API_KEY || null,
+      openaiKey: configMap['OPENAI_API_KEY'] || process.env.OPENAI_API_KEY || null,
       abacusKey: configMap['ABACUS_API_KEY'] || process.env.ABACUSAI_API_KEY || null,
       provider: (configMap['API_PROVIDER'] as ApiProvider) || 'gemini',
       imagenModel: configMap['IMAGEN_MODEL'] || null,
       abacusImageModel: configMap['ABACUS_IMAGE_MODEL'] || null,
+      fnImageProvider: configMap[imgKeys.providerKey] || '',
+      fnImageModel: configMap[imgKeys.modelKey] || '',
       fetchedAt: now,
     };
   } catch (e) {
     console.warn('Failed to load image config from DB:', e);
     cachedDbConfig = {
       geminiKey: process.env.GEMINI_API_KEY || null,
+      openaiKey: process.env.OPENAI_API_KEY || null,
       abacusKey: process.env.ABACUSAI_API_KEY || null,
       provider: 'gemini',
       imagenModel: null,
       abacusImageModel: null,
+      fnImageProvider: '',
+      fnImageModel: '',
       fetchedAt: now,
     };
   }
@@ -55,11 +68,10 @@ async function loadImageConfig() {
   return cachedDbConfig;
 }
 
-async function getGeminiClient(): Promise<GoogleGenAI> {
-  const config = await loadImageConfig();
-  const apiKey = config.geminiKey;
-  if (!apiKey) throw new Error('GEMINI_API_KEY is not configured. Set it in Admin > API Configuration.');
-  return new GoogleGenAI({ apiKey });
+async function getGeminiClient(apiKey?: string): Promise<GoogleGenAI> {
+  const key = apiKey || (await loadImageConfig()).geminiKey;
+  if (!key) throw new Error('GEMINI_API_KEY is not configured. Set it in Admin > API Configuration.');
+  return new GoogleGenAI({ apiKey: key });
 }
 
 // Models that use the Imagen generateImages API
@@ -476,9 +488,101 @@ function buildRefImagePreamble(refs: ReferenceImage[]): string {
   return parts.join(' ');
 }
 
+// ── OpenAI image generation ──
+
+async function generateWithOpenAI(
+  apiKey: string,
+  model: string,
+  prompt: string,
+  options: {
+    aspectRatio?: string;
+    numberOfImages?: number;
+  }
+): Promise<ImageGenerationResult[]> {
+  const count = options.numberOfImages || 1;
+  const results: ImageGenerationResult[] = [];
+
+  // Map aspect ratios to OpenAI sizes
+  const sizeMap: Record<string, string> = {
+    '1:1': '1024x1024',
+    '16:9': '1792x1024',
+    '9:16': '1024x1792',
+    '3:4': '1024x1536',
+    '4:3': '1536x1024',
+  };
+  const size = sizeMap[options.aspectRatio || '16:9'] || '1792x1024';
+
+  // Use the images/generations endpoint for DALL-E, or chat completions for gpt-image-1
+  if (model === 'gpt-image-1') {
+    // GPT Image uses the images/generations endpoint with response_format b64_json
+    const body: Record<string, unknown> = {
+      model: 'gpt-image-1',
+      prompt: sanitizePromptForSafety(prompt),
+      n: count,
+      size,
+    };
+
+    const res = await fetch('https://api.openai.com/v1/images/generations', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+      body: JSON.stringify(body),
+    });
+
+    if (!res.ok) {
+      const err = await res.text().catch(() => '');
+      throw new Error(`OpenAI image API error: ${res.status} ${err.slice(0, 300)}`);
+    }
+
+    const data = await res.json();
+    for (const item of data.data || []) {
+      if (item.b64_json) {
+        results.push({ imageBytes: item.b64_json, mimeType: 'image/png' });
+      } else if (item.url) {
+        // Download the image
+        try {
+          const imgRes = await fetch(item.url);
+          const buf = await imgRes.arrayBuffer();
+          results.push({ imageBytes: Buffer.from(buf).toString('base64'), mimeType: 'image/png' });
+        } catch { /* skip */ }
+      }
+    }
+  } else {
+    // DALL-E 3 - one image at a time
+    for (let i = 0; i < count; i++) {
+      const body: Record<string, unknown> = {
+        model: model || 'dall-e-3',
+        prompt: sanitizePromptForSafety(prompt),
+        n: 1,
+        size,
+        response_format: 'b64_json',
+      };
+
+      const res = await fetch('https://api.openai.com/v1/images/generations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+        body: JSON.stringify(body),
+      });
+
+      if (!res.ok) {
+        const err = await res.text().catch(() => '');
+        throw new Error(`OpenAI DALL-E API error: ${res.status} ${err.slice(0, 300)}`);
+      }
+
+      const data = await res.json();
+      for (const item of data.data || []) {
+        if (item.b64_json) {
+          results.push({ imageBytes: item.b64_json, mimeType: 'image/png' });
+        }
+      }
+    }
+  }
+
+  return results;
+}
+
 /**
  * Generate images using the configured provider and model.
- * Automatically routes to Gemini SDK or Abacus AI API based on admin settings.
+ * Uses per-function config (FN_IMAGE_PROVIDER/MODEL) first, then legacy config.
  */
 export async function generateImage(
   prompt: string,
@@ -499,6 +603,43 @@ export async function generateImage(
   const hasStyleRef = !!options.styleReferenceImage;
   const needsMultimodal = hasRefImages || hasStyleRef;
 
+  // Priority 1: Per-function image config
+  if (config.fnImageProvider) {
+    const prov = config.fnImageProvider as ApiProvider;
+    const key = prov === 'gemini' ? config.geminiKey : prov === 'openai' ? config.openaiKey : config.abacusKey;
+    if (key) {
+      if (prov === 'openai') {
+        usedProvider = 'openai';
+        usedModel = config.fnImageModel || 'dall-e-3';
+        results = await generateWithOpenAI(key, usedModel, prompt, options);
+      } else if (prov === 'gemini') {
+        usedProvider = 'gemini';
+        const model = config.fnImageModel || config.imagenModel || 'imagen-4.0-generate-001';
+        const ai = await getGeminiClient(key);
+        if (needsMultimodal) {
+          usedModel = GEMINI_IMAGE_MODELS[0] || 'gemini-3.1-flash-image-preview';
+          results = await generateWithGeminiMultiRef(ai, usedModel, prompt, options);
+        } else if (GEMINI_IMAGE_MODELS.includes(model)) {
+          usedModel = model;
+          results = await generateWithGemini(ai, model, prompt, options);
+        } else {
+          usedModel = model;
+          results = await generateWithImagen(ai, model, prompt, options);
+        }
+      } else {
+        // Abacus
+        usedProvider = 'abacus';
+        usedModel = config.fnImageModel || config.abacusImageModel || 'gpt-5.1';
+        results = await generateWithAbacus(key, usedModel, prompt, options);
+      }
+
+      trackUsage({ eventType: 'image_generate', apiModel: usedModel, apiType: 'imagen', provider: usedProvider, count: results.length, metadata: { aspectRatio: options.aspectRatio || '16:9', styleReference: !!options.styleReferenceImage } });
+      if (results.length === 0) throw new Error('No images generated - the prompt may have been filtered');
+      return results;
+    }
+  }
+
+  // Priority 2: Legacy routing
   // ── Abacus AI path ──
   if (config.provider === 'abacus' && config.abacusKey) {
     usedProvider = 'abacus';
@@ -512,7 +653,6 @@ export async function generateImage(
     const model = config.imagenModel || 'imagen-4.0-generate-001';
 
     if (needsMultimodal) {
-      // Use Gemini multimodal model when any reference images are present
       const geminiModel = GEMINI_IMAGE_MODELS[0] || 'gemini-3.1-flash-image-preview';
       usedModel = geminiModel;
       results = await generateWithGeminiMultiRef(ai, geminiModel, prompt, options);
@@ -524,7 +664,13 @@ export async function generateImage(
       results = await generateWithImagen(ai, model, prompt, options);
     }
   }
-  // ── Fallback to Abacus if Gemini key missing ──
+  // ── OpenAI fallback ──
+  else if (config.openaiKey) {
+    usedProvider = 'openai';
+    usedModel = 'dall-e-3';
+    results = await generateWithOpenAI(config.openaiKey, usedModel, prompt, options);
+  }
+  // ── Abacus fallback ──
   else if (config.abacusKey) {
     usedProvider = 'abacus';
     usedModel = config.abacusImageModel || 'gpt-5.1';

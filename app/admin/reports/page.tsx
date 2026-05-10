@@ -7,7 +7,7 @@ import {
   Loader2, ArrowLeft, BarChart3, TrendingUp, DollarSign,
   Film, Image as ImageIcon, Sparkles, Bot, Cpu, Activity,
   Users, FolderOpen, Clapperboard, LayoutGrid, Search,
-  Type, Video, Volume2, ChevronDown, ChevronRight
+  Type, Video, Volume2, ChevronDown, ChevronRight, ImagePlus, Play, SkipForward
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -37,8 +37,8 @@ interface ReportData {
   costRates: Record<string, Record<string, { label: string; costPerUnit: number; unit: string }>>;
   modelRegistry?: {
     text_generation: Array<{ id: string; name: string; provider: string; cost: string | null }>;
-    image_generation: Array<{ id: string; name: string; provider: string; cost: string | null }>;
-    video_generation: Array<{ id: string; name: string; provider: string; cost: string | null }>;
+    image_generation: Array<{ id: string; name: string; provider: string; cost: string | null; supportsRefImage?: boolean }>;
+    video_generation: Array<{ id: string; name: string; provider: string; cost: string | null; supportsStartFrame?: boolean; supportsEndFrame?: boolean }>;
     audio_generation: Array<{ id: string; name: string; provider: string; cost: string | null }>;
   };
 }
@@ -458,16 +458,37 @@ export default function ReportsPage() {
 
                       {isExpanded && (
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2 mt-2 max-h-[400px] overflow-y-auto pr-1">
-                          {filtered.map(m => (
+                          {filtered.map(m => {
+                            const imgModel = key === 'image_generation' ? m as (typeof m & { supportsRefImage?: boolean }) : null;
+                            const vidModel = key === 'video_generation' ? m as (typeof m & { supportsStartFrame?: boolean; supportsEndFrame?: boolean }) : null;
+                            return (
                             <div key={m.id} className={`${bgColor} border ${borderColor} rounded-lg px-3 py-2.5`}>
                               <div className="text-white text-xs font-semibold truncate" title={m.name}>{m.name}</div>
                               <div className="text-gray-500 text-[10px] font-mono truncate mt-0.5" title={m.id}>{m.id}</div>
                               <div className="flex items-center justify-between mt-1.5">
-                                <span className="text-gray-400 text-[10px]">{m.provider}</span>
-                                {m.cost && <span className={`text-[9px] font-mono ${color} opacity-70 truncate max-w-[55%]`} title={m.cost}>{m.cost}</span>}
+                                <div className="flex items-center gap-1 flex-wrap">
+                                  <span className="text-gray-400 text-[10px]">{m.provider}</span>
+                                  {imgModel?.supportsRefImage && (
+                                    <span className="inline-flex items-center gap-0.5 px-1 py-0 rounded-full bg-cyan-500/15 text-cyan-400 text-[8px] font-semibold border border-cyan-500/30" title="Supports reference image input">
+                                      <ImagePlus className="w-2 h-2" />Ref
+                                    </span>
+                                  )}
+                                  {vidModel?.supportsStartFrame && (
+                                    <span className="inline-flex items-center gap-0.5 px-1 py-0 rounded-full bg-green-500/15 text-green-400 text-[8px] font-semibold border border-green-500/30" title="Supports start frame image">
+                                      <Play className="w-2 h-2" />Start
+                                    </span>
+                                  )}
+                                  {vidModel?.supportsEndFrame && (
+                                    <span className="inline-flex items-center gap-0.5 px-1 py-0 rounded-full bg-orange-500/15 text-orange-400 text-[8px] font-semibold border border-orange-500/30" title="Supports end frame image">
+                                      <SkipForward className="w-2 h-2" />End
+                                    </span>
+                                  )}
+                                </div>
+                                {m.cost && <span className={`text-[9px] font-mono ${color} opacity-70 truncate max-w-[45%]`} title={m.cost}>{m.cost}</span>}
                               </div>
                             </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       )}
                     </div>

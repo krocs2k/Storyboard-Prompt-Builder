@@ -107,15 +107,19 @@ export async function loadStyleReferenceImage(
           ? cleanPath.slice('/images/'.length)
           : cleanPath;
 
-      const DATA_DIR = process.env.DATA_DIR || path.join(process.cwd(), 'data');
-      // Try persistent volume first, then public/images fallback
+      const cwd = process.cwd();
+      const DATA_DIR = process.env.DATA_DIR || path.join(cwd, 'data');
+      // Try multiple possible locations (dev, standalone, data volume)
       const candidates = [
         path.join(DATA_DIR, 'category-images', relPath),
-        path.join(process.cwd(), 'public', 'images', relPath),
+        path.join(cwd, 'public', 'images', relPath),
+        path.join(cwd, 'app', 'public', 'images', relPath),
+        path.resolve(__dirname, '..', 'public', 'images', relPath),
+        path.resolve(__dirname, 'public', 'images', relPath),
       ];
       let resolvedPath: string | null = null;
       for (const candidate of candidates) {
-        if (fs.existsSync(candidate)) { resolvedPath = candidate; break; }
+        try { if (fs.existsSync(candidate)) { resolvedPath = candidate; break; } } catch { /* skip */ }
       }
       if (!resolvedPath) {
         console.warn(`Style reference image not found in data or public: ${relPath}`);

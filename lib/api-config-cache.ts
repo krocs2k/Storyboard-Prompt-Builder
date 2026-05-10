@@ -13,5 +13,6 @@ export function invalidateAllApiCaches() {
   invalidateLlmCache();
   invalidateImagenCache();
   invalidateMovieStyleCache();
+  // Note: video-gen uses getProviderKeys() from llm.ts which is already invalidated above
   console.log('[cache] All API config caches invalidated');
 }

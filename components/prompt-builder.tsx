@@ -15,6 +15,7 @@ import { SectionCard } from './section-card';
 import { SelectionButton } from './selection-button';
 import { SelectionModal } from './selection-modal';
 import { TextInput } from './text-input';
+import { RefTokenInput } from './ref-token-input';
 import { DropdownSelect } from './dropdown-select';
 import ScreenplayCreator from './screenplay-creator';
 import ScreenplayAnalyzer from './screenplay-analyzer';
@@ -1302,6 +1303,13 @@ export function PromptBuilder() {
                 <Grid3X3 size={16} />
                 <span className="hidden lg:inline">Grid Cutter</span>
               </button>
+              <Link
+                href="/director"
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-purple-300 hover:text-purple-100 hover:bg-purple-500/10 rounded-lg transition-colors"
+              >
+                <Film size={16} />
+                <span className="hidden lg:inline">Director</span>
+              </Link>
               <div className="w-px h-5 bg-slate-700 mx-1 hidden sm:block" />
               <button
                 onClick={resetSession}
@@ -1421,12 +1429,13 @@ export function PromptBuilder() {
 
             {/* Section 2: Subject and Framing */}
             <SectionCard title="Subject and Framing" icon={Frame} sectionNumber={2} onReset={resetSection2}>
-              <TextInput
+              <RefTokenInput
                 label="Subject & Action"
                 value={selections?.subjectAction ?? ''}
                 onChange={(v) => updateSelection('subjectAction', v)}
-                placeholder="Describe the subject and their action..."
+                placeholder="Describe the subject and their action... (type @ to reference characters)"
                 multiline
+                tokens={availableRefTokens.filter((t) => t.role === 'character')}
               />
               {/* Reference token chips for Subject */}
               {availableRefTokens.filter(t => t.role === 'character').length > 0 && (
@@ -1464,11 +1473,12 @@ export function PromptBuilder() {
                 onClick={() => setActiveModal('shotType')}
                 onClear={() => clearSelection('shotType')}
               />
-              <TextInput
+              <RefTokenInput
                 label="Environment"
                 value={selections?.environment ?? ''}
                 onChange={(v) => updateSelection('environment', v)}
-                placeholder="Describe the setting or location..."
+                placeholder="Describe the setting or location... (type @ to reference environments)"
+                tokens={availableRefTokens.filter((t) => t.role === 'environment')}
               />
               {/* Reference token chips for Environment */}
               {availableRefTokens.filter(t => t.role === 'environment').length > 0 && (

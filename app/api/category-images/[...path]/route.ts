@@ -4,10 +4,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import * as fs from 'fs';
 import * as path from 'path';
 
-const DATA_DIR = process.env.DATA_DIR || path.join(process.cwd(), 'data');
-const CATEGORY_IMAGES_DIR = path.join(DATA_DIR, 'category-images');
-const PUBLIC_IMAGES_DIR = path.join(process.cwd(), 'public', 'images');
-
 const MIME_TYPES: Record<string, string> = {
   '.jpg': 'image/jpeg',
   '.jpeg': 'image/jpeg',
@@ -16,6 +12,51 @@ const MIME_TYPES: Record<string, string> = {
   '.gif': 'image/gif',
   '.svg': 'image/svg+xml',
 };
+
+/**
+ * Build a list of candidate directories where images might live.
+ * In development, process.cwd()/public/images works.
+ * In production standalone mode, the working directory may differ,
+ * so we check multiple paths to ensure we find the files.
+ */
+function getImageSearchPaths(): string[] {
+  const cwd = process.cwd();
+  const dataDir = process.env.DATA_DIR || path.join(cwd, 'data');
+
+  const candidates: string[] = [
+    // 1. Persistent data volume (Docker / admin uploads)
+    path.join(dataDir, 'category-images'),
+    // 2. Standard dev: cwd/public/images
+    path.join(cwd, 'public', 'images'),
+    // 3. Standalone build: cwd/app/public/images (if cwd is the standalone root)
+    path.join(cwd, 'app', 'public', 'images'),
+    // 4. Relative to this file's __dirname (compiled route location)
+    path.resolve(__dirname, '..', '..', '..', '..', 'public', 'images'),
+    path.resolve(__dirname, '..', '..', '..', 'public', 'images'),
+    // 5. Standalone: .build output location
+    path.join(cwd, '.build', 'standalone', 'app', 'public', 'images'),
+  ];
+
+  return candidates;
+}
+
+// Cache resolved base path to avoid re-scanning on every request
+let _resolvedBasePaths: string[] | null = null;
+
+function getResolvedBasePaths(): string[] {
+  if (_resolvedBasePaths) return _resolvedBasePaths;
+  const candidates = getImageSearchPaths();
+  _resolvedBasePaths = candidates.filter(p => {
+    try { return fs.existsSync(p) && fs.statSync(p).isDirectory(); } catch { return false; }
+  });
+  if (_resolvedBasePaths.length === 0) {
+    console.warn('[category-images] No image directories found. Searched:', candidates);
+    _resolvedBasePaths = candidates; // Still try them at request time
+  } else {
+    console.log('[category-images] Resolved image dirs:', _resolvedBasePaths);
+  }
+  return _resolvedBasePaths;
+}
 
 /**
  * GET /api/category-images/{subdir}/{filename}
@@ -45,16 +86,15 @@ export async function GET(
 
   const relativePath = cleanSegments.join(path.sep);
 
-  // 1. Try persistent data volume first (Docker / admin uploads)
-  const dataPath = path.join(CATEGORY_IMAGES_DIR, relativePath);
-  if (fs.existsSync(dataPath)) {
-    return serveFile(dataPath);
-  }
-
-  // 2. Fallback to public/images/ (dev environment / Abacus deployment)
-  const publicPath = path.join(PUBLIC_IMAGES_DIR, relativePath);
-  if (fs.existsSync(publicPath)) {
-    return serveFile(publicPath);
+  // Search through all candidate paths
+  const basePaths = getResolvedBasePaths();
+  for (const base of basePaths) {
+    const fullPath = path.join(base, relativePath);
+    try {
+      if (fs.existsSync(fullPath)) {
+        return serveFile(fullPath);
+      }
+    } catch { /* skip */ }
   }
 
   return new NextResponse(null, { status: 404 });
