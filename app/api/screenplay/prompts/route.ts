@@ -272,6 +272,30 @@ Respond with raw JSON only.`
         let buffer = '';
         let partialRead = '';
         
+        let completedSent = false;
+        const finalizeAndSend = () => {
+            if (completedSent) return;
+            completedSent = true;
+            try {
+              // Strip code fences if any
+              let text = buffer.trim();
+              const fenceMatch = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+              if (fenceMatch) text = fenceMatch[1].trim();
+              // Extract outermost JSON object
+              const firstBrace = text.indexOf('{');
+              const lastBrace = text.lastIndexOf('}');
+              if (firstBrace !== -1 && lastBrace > firstBrace) {
+                text = text.slice(firstBrace, lastBrace + 1);
+              }
+              const prompts = JSON.parse(text);
+              const finalData = JSON.stringify({ status: 'completed', prompts });
+              controller.enqueue(encoder.encode(`data: ${finalData}\n\n`));
+            } catch (e) {
+              console.error('Failed to parse prompts buffer:', buffer.slice(0, 500));
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ status: 'error', message: 'Failed to parse prompts' })}\n\n`));
+            }
+          };
+
         try {
           while (reader) {
             const { done, value } = await reader.read();
@@ -285,16 +309,7 @@ Respond with raw JSON only.`
               if (line.startsWith('data: ')) {
                 const data = line.slice(6);
                 if (data === '[DONE]') {
-                  try {
-                    const prompts = JSON.parse(buffer);
-                    const finalData = JSON.stringify({
-                      status: 'completed',
-                      prompts
-                    });
-                    controller.enqueue(encoder.encode(`data: ${finalData}\n\n`));
-                  } catch (e) {
-                    controller.enqueue(encoder.encode(`data: ${JSON.stringify({ status: 'error', message: 'Failed to parse prompts' })}\n\n`));
-                  }
+                  finalizeAndSend();
                   return;
                 }
                 try {
@@ -314,8 +329,11 @@ Respond with raw JSON only.`
               }
             }
           }
+          // Stream ended without [DONE] — finalize with whatever we accumulated
+          finalizeAndSend();
         } catch (error) {
           console.error('Stream error:', error);
+          try { finalizeAndSend(); } catch {}
           controller.error(error);
         } finally {
           controller.close();

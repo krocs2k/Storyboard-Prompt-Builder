@@ -202,6 +202,75 @@ export function PromptBuilder() {
   const [projectActionMenuId, setProjectActionMenuId] = useState<string | null>(null);
   const [folderActionMenuId, setFolderActionMenuId] = useState<string | null>(null);
 
+  // Parse dialogue lines from screenplay content (Fountain/standard screenplay format)
+  // Recognises CHARACTER (in ALL CAPS) followed by optional (parenthetical) then dialogue lines.
+  useEffect(() => {
+    if (!screenplay?.content) return;
+    if (dialogueLines.length > 0) return; // already populated (e.g. from analyzer)
+    try {
+      const lines = screenplay.content.split('\n');
+      const parsed: DialogueLine[] = [];
+      let i = 0;
+      const isHeading = (s: string) => /^(INT\.|EXT\.|FADE IN|FADE OUT|CUT TO|TITLE:|COLD OPEN|TEASER|ACT\s+\w|SCENE\s+\d)/i.test(s);
+      const isCharacterLine = (s: string) => {
+        if (!s) return false;
+        if (isHeading(s)) return false;
+        // ALL CAPS line, possibly with (V.O.) (O.S.) (CONT'D) etc, max ~40 chars
+        if (s.length > 40) return false;
+        if (!/[A-Z]/.test(s)) return false;
+        // Must be mostly uppercase letters / spaces / parens / apostrophes / dots
+        if (!/^[A-Z0-9 .,'#\-()/]+$/.test(s)) return false;
+        // Need at least 2 uppercase letters
+        const letters = s.replace(/[^A-Za-z]/g, '');
+        if (letters.length < 2) return false;
+        if (letters !== letters.toUpperCase()) return false;
+        return true;
+      };
+      while (i < lines.length) {
+        const raw = lines[i];
+        const trimmed = raw.trim();
+        if (isCharacterLine(trimmed)) {
+          // Extract base name (strip parentheticals like (V.O.))
+          const name = trimmed.replace(/\s*\([^)]*\)\s*/g, '').trim();
+          let delivery = '';
+          let dialogue = '';
+          i++;
+          // Optional parenthetical line(s) for delivery
+          while (i < lines.length && /^\s*\(.+\)\s*$/.test(lines[i])) {
+            const p = lines[i].trim().replace(/^\(|\)$/g, '').trim();
+            delivery = delivery ? `${delivery}, ${p}` : p;
+            i++;
+          }
+          // Collect dialogue lines until blank line
+          while (i < lines.length && lines[i].trim() !== '') {
+            // Stop if next line is another character cue
+            if (isCharacterLine(lines[i].trim())) break;
+            // Inline parenthetical within dialogue → treat as delivery hint
+            const dl = lines[i].trim();
+            const inlinePara = dl.match(/^\((.+)\)$/);
+            if (inlinePara) {
+              delivery = delivery ? `${delivery}, ${inlinePara[1]}` : inlinePara[1];
+            } else {
+              dialogue = dialogue ? `${dialogue} ${dl}` : dl;
+            }
+            i++;
+          }
+          if (name && dialogue) {
+            parsed.push({ character: name, dialogue, delivery: delivery || 'Natural delivery' });
+          }
+          continue;
+        }
+        i++;
+      }
+      if (parsed.length > 0) {
+        setDialogueLines(parsed);
+      }
+    } catch (err) {
+      console.error('Failed to parse dialogue lines from screenplay:', err);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [screenplay?.content]);
+
   // Reset session - clears all state for a fresh start
   const resetSession = useCallback(() => {
     setSelections({
