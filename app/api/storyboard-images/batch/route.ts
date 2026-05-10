@@ -7,6 +7,7 @@ import { prisma } from '@/lib/db';
 import { generateImage } from '@/lib/imagen';
 import { saveImage } from '@/lib/image-storage';
 import { getMovieStyleSettings, loadStyleReferenceImage } from '@/lib/movie-style-ref';
+import { submitAllWithProgress } from '@/lib/concurrency';
 
 /**
  * POST - Batch render all storyboard images, streaming progress via SSE
@@ -96,86 +97,90 @@ export async function POST(req: NextRequest) {
 
       let completed = 0;
       let failed = 0;
-      const BATCH_SIZE = 3; // Process 3 at a time to avoid rate limits
-      const DELAY_BETWEEN_BATCHES = 2000; // 2s delay between batches
 
-      for (let i = 0; i < blocksToRender.length; i += BATCH_SIZE) {
-        const batch = blocksToRender.slice(i, i + BATCH_SIZE);
-
-        const promises = batch.map(async (block) => {
+      // Build job list — one per block, all submitted to the concurrency manager
+      // which handles optimal parallelism, rate-limit backoff, and per-provider limits
+      const jobs = blocksToRender
+        .map((block) => {
           const prompt = block.prompt || block.subjectAction || block.action || block.scene || '';
           if (!prompt) {
             failed++;
-            return;
+            return null;
           }
+          return {
+            id: `block-${block.blockNumber}`,
+            fn: async () => {
+              send({
+                status: 'generating',
+                message: `Generating Block ${block.blockNumber}...`,
+                total: blocksToRender.length,
+                completed,
+                currentBlock: block.blockNumber,
+              });
 
-          try {
-            send({
-              status: 'generating',
-              message: `Generating Block ${block.blockNumber}...`,
-              total: blocksToRender.length,
-              completed,
-              currentBlock: block.blockNumber,
-            });
+              const results = await generateImage(prompt, {
+                aspectRatio: (aspectRatio as '16:9') || '16:9',
+                numberOfImages: 1,
+                styleReferenceImage,
+              });
 
-            const results = await generateImage(prompt, {
-              aspectRatio: (aspectRatio as '16:9') || '16:9',
-              numberOfImages: 1,
-              styleReferenceImage,
-            });
+              const imageData = results[0];
+              const buffer = Buffer.from(imageData.imageBytes, 'base64');
+              const { relativePath, fileName } = saveImage(projectId, block.blockNumber, buffer, 'png');
 
-            const imageData = results[0];
-            const buffer = Buffer.from(imageData.imageBytes, 'base64');
-            const { relativePath, fileName } = saveImage(projectId, block.blockNumber, buffer, 'png');
+              await prisma.storyboardImage.upsert({
+                where: {
+                  projectId_blockNumber: { projectId, blockNumber: block.blockNumber },
+                },
+                update: { prompt, imagePath: relativePath, fileName, aspectRatio },
+                create: { projectId, blockNumber: block.blockNumber, prompt, imagePath: relativePath, fileName, aspectRatio },
+              });
 
-            await prisma.storyboardImage.upsert({
-              where: {
-                projectId_blockNumber: { projectId, blockNumber: block.blockNumber },
-              },
-              update: {
-                prompt,
-                imagePath: relativePath,
-                fileName,
-                aspectRatio,
-              },
-              create: {
-                projectId,
-                blockNumber: block.blockNumber,
-                prompt,
-                imagePath: relativePath,
-                fileName,
-                aspectRatio,
-              },
-            });
+              return block.blockNumber;
+            },
+            userId: session?.user?.id || 'system',
+            jobType: 'image' as const,
+            provider: 'gemini' as const, // Image gen defaults to gemini
+            priority: 5,
+          };
+        })
+        .filter(Boolean) as Array<{
+          id: string;
+          fn: () => Promise<number>;
+          userId: string;
+          jobType: 'image';
+          provider: 'gemini';
+          priority: number;
+        }>;
 
+      // Submit ALL blocks to the concurrency manager at once — it will
+      // run as many as safely possible in parallel (respecting provider rate limits)
+      await submitAllWithProgress({
+        jobs,
+        onProgress: (done, total, id, result) => {
+          if (result.status === 'fulfilled') {
             completed++;
             send({
               status: 'progress',
-              message: `Completed Block ${block.blockNumber}`,
+              message: `Completed Block ${result.value}`,
               total: blocksToRender.length,
               completed,
-              currentBlock: block.blockNumber,
+              currentBlock: result.value,
             });
-          } catch (err) {
+          } else {
             failed++;
+            const blockNum = id.replace('block-', '');
             send({
               status: 'block_error',
-              message: `Failed Block ${block.blockNumber}: ${err instanceof Error ? err.message : 'Unknown error'}`,
+              message: `Failed Block ${blockNum}: ${result.reason instanceof Error ? result.reason.message : 'Unknown error'}`,
               total: blocksToRender.length,
               completed,
               failed,
-              currentBlock: block.blockNumber,
+              currentBlock: parseInt(blockNum),
             });
           }
-        });
-
-        await Promise.all(promises);
-
-        // Delay between batches to avoid rate limiting
-        if (i + BATCH_SIZE < blocksToRender.length) {
-          await new Promise((resolve) => setTimeout(resolve, DELAY_BETWEEN_BATCHES));
-        }
-      }
+        },
+      });
 
       send({
         status: 'complete',

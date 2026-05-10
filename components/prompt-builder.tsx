@@ -9,7 +9,8 @@ import {
   Trash2, Film, Aperture, Image as ImageIcon, Save, History,
   FolderOpen, Plus, Download, Loader2, Clapperboard, Upload,
   LayoutGrid, Users, MapPin, ChevronDown, X, FolderPlus, Edit3, Grid3X3, Mic, RefreshCw,
-  LogOut, Settings, User, Star, AtSign, Maximize2, ZoomIn, ChevronLeft, ChevronRight, Heart
+  LogOut, Settings, User, Star, AtSign, Maximize2, ZoomIn, ChevronLeft, ChevronRight, Heart,
+  MoreVertical, FolderInput, AlertTriangle
 } from 'lucide-react';
 import { SectionCard } from './section-card';
 import { SelectionButton } from './selection-button';
@@ -189,6 +190,18 @@ export function PromptBuilder() {
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
   const [savingProject, setSavingProject] = useState(false);
 
+  // CRUD state for projects & folders
+  const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
+  const [editingProjectName, setEditingProjectName] = useState('');
+  const [editingFolderId, setEditingFolderId] = useState<string | null>(null);
+  const [editingFolderName, setEditingFolderName] = useState('');
+  const [deletingProjectId, setDeletingProjectId] = useState<string | null>(null);
+  const [deletingFolderId, setDeletingFolderId] = useState<string | null>(null);
+  const [movingProjectId, setMovingProjectId] = useState<string | null>(null);
+  const [movingToFolderId, setMovingToFolderId] = useState<string | null | undefined>(undefined);
+  const [projectActionMenuId, setProjectActionMenuId] = useState<string | null>(null);
+  const [folderActionMenuId, setFolderActionMenuId] = useState<string | null>(null);
+
   // Reset session - clears all state for a fresh start
   const resetSession = useCallback(() => {
     setSelections({
@@ -267,6 +280,131 @@ export function PromptBuilder() {
     } catch (err) {
       console.error('Failed to create folder:', err);
     }
+  };
+
+  // --- Project CRUD handlers ---
+  const renameProject = async (projectId: string, newName: string) => {
+    if (!newName.trim()) return;
+    try {
+      const res = await authFetch('/api/projects', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: projectId, name: newName.trim() }),
+      });
+      if (res.ok) {
+        loadProjects();
+        loadFolders();
+        if (currentProject?.id === projectId) {
+          setCurrentProject(prev => prev ? { ...prev, name: newName.trim() } : null);
+        }
+      }
+    } catch (err) { console.error('Failed to rename project:', err); }
+    setEditingProjectId(null);
+    setEditingProjectName('');
+  };
+
+  const deleteProject = async (projectId: string) => {
+    try {
+      const res = await authFetch(`/api/projects?id=${projectId}`, { method: 'DELETE' });
+      if (res.ok) {
+        loadProjects();
+        loadFolders();
+        if (currentProject?.id === projectId) {
+          setCurrentProject(null);
+          resetSession();
+        }
+      }
+    } catch (err) { console.error('Failed to delete project:', err); }
+    setDeletingProjectId(null);
+  };
+
+  const duplicateProject = async (project: Project) => {
+    try {
+      // Load the full project data first
+      const getRes = await authFetch(`/api/projects?id=${project.id}`);
+      if (!getRes.ok) return;
+      const fullProject = await getRes.json();
+
+      const duplicateData = {
+        name: `${fullProject.name} (Copy)`,
+        folderId: fullProject.folderId || null,
+        selections: fullProject.selections || null,
+        recommendations: fullProject.recommendations || null,
+        screenplay: fullProject.screenplay ? {
+          title: `${fullProject.screenplay.title} (Copy)`,
+          runtime: fullProject.screenplay.runtime,
+          content: fullProject.screenplay.content,
+          characters: fullProject.screenplay.characters,
+          environments: fullProject.screenplay.environments,
+          sourceType: fullProject.screenplay.sourceType,
+          sourceUrl: fullProject.screenplay.sourceUrl,
+          storyIdea: fullProject.screenplay.storyIdea,
+          characterPrompts: fullProject.screenplay.characterPrompts,
+          environmentPrompts: fullProject.screenplay.environmentPrompts,
+        } : undefined,
+        storyboard: fullProject.storyboard ? {
+          blocks: fullProject.storyboard.blocks,
+          shotlist: fullProject.storyboard.shotlist,
+          totalBlocks: fullProject.storyboard.totalBlocks,
+          estimatedRuntime: fullProject.storyboard.estimatedRuntime,
+        } : undefined,
+      };
+
+      const res = await authFetch('/api/projects', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(duplicateData),
+      });
+      if (res.ok) {
+        loadProjects();
+        loadFolders();
+      }
+    } catch (err) { console.error('Failed to duplicate project:', err); }
+  };
+
+  const moveProject = async (projectId: string, targetFolderId: string | null) => {
+    try {
+      const res = await authFetch('/api/projects', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: projectId, folderId: targetFolderId }),
+      });
+      if (res.ok) {
+        loadProjects();
+        loadFolders();
+        if (currentProject?.id === projectId) {
+          setCurrentProject(prev => prev ? { ...prev, folderId: targetFolderId } : null);
+        }
+      }
+    } catch (err) { console.error('Failed to move project:', err); }
+    setMovingProjectId(null);
+    setMovingToFolderId(undefined);
+  };
+
+  // --- Folder CRUD handlers ---
+  const renameFolder = async (folderId: string, newName: string) => {
+    if (!newName.trim()) return;
+    try {
+      const res = await authFetch('/api/folders', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: folderId, name: newName.trim() }),
+      });
+      if (res.ok) { loadFolders(); }
+    } catch (err) { console.error('Failed to rename folder:', err); }
+    setEditingFolderId(null);
+    setEditingFolderName('');
+  };
+
+  const deleteFolder = async (folderId: string) => {
+    try {
+      const res = await authFetch(`/api/folders?id=${folderId}`, { method: 'DELETE' });
+      if (res.ok) {
+        loadFolders();
+        loadProjects(); // Projects become unfiled
+      }
+    } catch (err) { console.error('Failed to delete folder:', err); }
+    setDeletingFolderId(null);
   };
 
   const saveProject = async () => {
@@ -2412,12 +2550,14 @@ export function PromptBuilder() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
+            onClick={() => { setProjectActionMenuId(null); setFolderActionMenuId(null); }}
           >
             <motion.div
               initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.9, opacity: 0 }}
               className="bg-slate-900 border border-amber-500/30 rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col"
+              onClick={(e) => e.stopPropagation()}
             >
               <div className="flex items-center justify-between p-6 border-b border-slate-700">
                 <h2 className="text-2xl font-bold text-amber-400">Project Manager</h2>
@@ -2438,6 +2578,7 @@ export function PromptBuilder() {
                       type="text"
                       value={newFolderName}
                       onChange={(e) => setNewFolderName(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && createFolder()}
                       placeholder="Folder name..."
                       className="flex-1 px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:border-amber-500 focus:outline-none"
                     />
@@ -2459,19 +2600,64 @@ export function PromptBuilder() {
                       <h4 className="text-amber-400 font-medium mb-3">Unfiled Projects</h4>
                       <div className="grid md:grid-cols-2 gap-3">
                         {projects.filter(p => !p.folderId).map(project => (
-                          <button
-                            key={project.id}
-                            onClick={() => loadProject(project)}
-                            className="flex items-center gap-3 p-3 bg-slate-900/50 hover:bg-slate-900 rounded-lg text-left transition-all"
-                          >
-                            <FileText className="w-5 h-5 text-purple-400" />
-                            <div className="flex-1 min-w-0">
-                              <p className="text-white font-medium truncate">{project.name}</p>
-                              <p className="text-slate-500 text-xs">
-                                {new Date(project.updatedAt).toLocaleDateString()}
-                              </p>
-                            </div>
-                          </button>
+                          <div key={project.id} className="relative group flex items-center gap-2 p-3 bg-slate-900/50 hover:bg-slate-900 rounded-lg transition-all">
+                            {editingProjectId === project.id ? (
+                              <div className="flex-1 flex items-center gap-2">
+                                <input
+                                  type="text"
+                                  value={editingProjectName}
+                                  onChange={(e) => setEditingProjectName(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') renameProject(project.id, editingProjectName);
+                                    if (e.key === 'Escape') { setEditingProjectId(null); setEditingProjectName(''); }
+                                  }}
+                                  autoFocus
+                                  className="flex-1 px-2 py-1 bg-slate-800 border border-amber-500/50 rounded text-white text-sm focus:outline-none"
+                                />
+                                <button onClick={() => renameProject(project.id, editingProjectName)} className="p-1 text-green-400 hover:text-green-300"><Check size={16} /></button>
+                                <button onClick={() => { setEditingProjectId(null); setEditingProjectName(''); }} className="p-1 text-slate-400 hover:text-slate-300"><X size={16} /></button>
+                              </div>
+                            ) : (
+                              <>
+                                <button onClick={() => loadProject(project)} className="flex-1 flex items-center gap-3 text-left min-w-0">
+                                  <FileText className="w-5 h-5 text-purple-400 shrink-0" />
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-white font-medium truncate">{project.name}</p>
+                                    <p className="text-slate-500 text-xs">
+                                      {new Date(project.updatedAt).toLocaleDateString()}
+                                      {project.screenplay ? ' · Has screenplay' : ''}
+                                    </p>
+                                  </div>
+                                </button>
+                                {/* Action menu trigger */}
+                                <div className="relative">
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); setProjectActionMenuId(projectActionMenuId === project.id ? null : project.id); setFolderActionMenuId(null); }}
+                                    className="p-1.5 rounded-lg text-slate-500 hover:text-white hover:bg-slate-700 opacity-0 group-hover:opacity-100 transition-all"
+                                  >
+                                    <MoreVertical size={16} />
+                                  </button>
+                                  {projectActionMenuId === project.id && (
+                                    <div className="absolute right-0 top-8 z-20 w-48 bg-slate-800 border border-slate-600 rounded-xl shadow-xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
+                                      <button onClick={() => { setEditingProjectId(project.id); setEditingProjectName(project.name); setProjectActionMenuId(null); }} className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-slate-200 hover:bg-slate-700 transition-colors">
+                                        <Edit3 size={14} /> Rename
+                                      </button>
+                                      <button onClick={() => { duplicateProject(project); setProjectActionMenuId(null); }} className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-slate-200 hover:bg-slate-700 transition-colors">
+                                        <Copy size={14} /> Duplicate
+                                      </button>
+                                      <button onClick={() => { setMovingProjectId(project.id); setMovingToFolderId(project.folderId); setProjectActionMenuId(null); }} className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-slate-200 hover:bg-slate-700 transition-colors">
+                                        <FolderInput size={14} /> Move to Folder
+                                      </button>
+                                      <div className="border-t border-slate-700" />
+                                      <button onClick={() => { setDeletingProjectId(project.id); setProjectActionMenuId(null); }} className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-red-400 hover:bg-red-500/10 transition-colors">
+                                        <Trash2 size={14} /> Delete
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
+                              </>
+                            )}
+                          </div>
                         ))}
                       </div>
                     </div>
@@ -2480,27 +2666,112 @@ export function PromptBuilder() {
                   {/* Folders */}
                   {folders.map(folder => (
                     <div key={folder.id} className="bg-slate-800 rounded-xl p-4">
-                      <h4 className="text-amber-400 font-medium mb-3 flex items-center gap-2">
-                        <FolderOpen size={18} />
-                        {folder.name}
-                        <span className="text-slate-500 text-sm">({folder._count?.projects || 0})</span>
-                      </h4>
+                      <div className="flex items-center justify-between mb-3">
+                        {editingFolderId === folder.id ? (
+                          <div className="flex items-center gap-2 flex-1">
+                            <FolderOpen size={18} className="text-amber-400" />
+                            <input
+                              type="text"
+                              value={editingFolderName}
+                              onChange={(e) => setEditingFolderName(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') renameFolder(folder.id, editingFolderName);
+                                if (e.key === 'Escape') { setEditingFolderId(null); setEditingFolderName(''); }
+                              }}
+                              autoFocus
+                              className="flex-1 max-w-xs px-2 py-1 bg-slate-900 border border-amber-500/50 rounded text-white text-sm focus:outline-none"
+                            />
+                            <button onClick={() => renameFolder(folder.id, editingFolderName)} className="p-1 text-green-400 hover:text-green-300"><Check size={16} /></button>
+                            <button onClick={() => { setEditingFolderId(null); setEditingFolderName(''); }} className="p-1 text-slate-400 hover:text-slate-300"><X size={16} /></button>
+                          </div>
+                        ) : (
+                          <h4 className="text-amber-400 font-medium flex items-center gap-2">
+                            <FolderOpen size={18} />
+                            {folder.name}
+                            <span className="text-slate-500 text-sm">({folder._count?.projects || 0})</span>
+                          </h4>
+                        )}
+                        {editingFolderId !== folder.id && (
+                          <div className="relative">
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setFolderActionMenuId(folderActionMenuId === folder.id ? null : folder.id); setProjectActionMenuId(null); }}
+                              className="p-1.5 rounded-lg text-slate-500 hover:text-white hover:bg-slate-700 transition-all"
+                            >
+                              <MoreVertical size={16} />
+                            </button>
+                            {folderActionMenuId === folder.id && (
+                              <div className="absolute right-0 top-8 z-20 w-44 bg-slate-800 border border-slate-600 rounded-xl shadow-xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
+                                <button onClick={() => { setEditingFolderId(folder.id); setEditingFolderName(folder.name); setFolderActionMenuId(null); }} className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-slate-200 hover:bg-slate-700 transition-colors">
+                                  <Edit3 size={14} /> Rename
+                                </button>
+                                <div className="border-t border-slate-700" />
+                                <button onClick={() => { setDeletingFolderId(folder.id); setFolderActionMenuId(null); }} className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-red-400 hover:bg-red-500/10 transition-colors">
+                                  <Trash2 size={14} /> Delete Folder
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
                       {folder.projects && folder.projects.length > 0 ? (
                         <div className="grid md:grid-cols-2 gap-3">
                           {folder.projects.map(project => (
-                            <button
-                              key={project.id}
-                              onClick={() => loadProject(project as Project)}
-                              className="flex items-center gap-3 p-3 bg-slate-900/50 hover:bg-slate-900 rounded-lg text-left transition-all"
-                            >
-                              <FileText className="w-5 h-5 text-purple-400" />
-                              <div className="flex-1 min-w-0">
-                                <p className="text-white font-medium truncate">{project.name}</p>
-                                <p className="text-slate-500 text-xs">
-                                  {new Date(project.updatedAt).toLocaleDateString()}
-                                </p>
-                              </div>
-                            </button>
+                            <div key={project.id} className="relative group flex items-center gap-2 p-3 bg-slate-900/50 hover:bg-slate-900 rounded-lg transition-all">
+                              {editingProjectId === project.id ? (
+                                <div className="flex-1 flex items-center gap-2">
+                                  <input
+                                    type="text"
+                                    value={editingProjectName}
+                                    onChange={(e) => setEditingProjectName(e.target.value)}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter') renameProject(project.id, editingProjectName);
+                                      if (e.key === 'Escape') { setEditingProjectId(null); setEditingProjectName(''); }
+                                    }}
+                                    autoFocus
+                                    className="flex-1 px-2 py-1 bg-slate-800 border border-amber-500/50 rounded text-white text-sm focus:outline-none"
+                                  />
+                                  <button onClick={() => renameProject(project.id, editingProjectName)} className="p-1 text-green-400 hover:text-green-300"><Check size={16} /></button>
+                                  <button onClick={() => { setEditingProjectId(null); setEditingProjectName(''); }} className="p-1 text-slate-400 hover:text-slate-300"><X size={16} /></button>
+                                </div>
+                              ) : (
+                                <>
+                                  <button onClick={() => loadProject(project as Project)} className="flex-1 flex items-center gap-3 text-left min-w-0">
+                                    <FileText className="w-5 h-5 text-purple-400 shrink-0" />
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-white font-medium truncate">{project.name}</p>
+                                      <p className="text-slate-500 text-xs">
+                                        {new Date(project.updatedAt).toLocaleDateString()}
+                                      </p>
+                                    </div>
+                                  </button>
+                                  <div className="relative">
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); setProjectActionMenuId(projectActionMenuId === project.id ? null : project.id); setFolderActionMenuId(null); }}
+                                      className="p-1.5 rounded-lg text-slate-500 hover:text-white hover:bg-slate-700 opacity-0 group-hover:opacity-100 transition-all"
+                                    >
+                                      <MoreVertical size={16} />
+                                    </button>
+                                    {projectActionMenuId === project.id && (
+                                      <div className="absolute right-0 top-8 z-20 w-48 bg-slate-800 border border-slate-600 rounded-xl shadow-xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
+                                        <button onClick={() => { setEditingProjectId(project.id); setEditingProjectName(project.name); setProjectActionMenuId(null); }} className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-slate-200 hover:bg-slate-700 transition-colors">
+                                          <Edit3 size={14} /> Rename
+                                        </button>
+                                        <button onClick={() => { duplicateProject(project as Project); setProjectActionMenuId(null); }} className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-slate-200 hover:bg-slate-700 transition-colors">
+                                          <Copy size={14} /> Duplicate
+                                        </button>
+                                        <button onClick={() => { setMovingProjectId(project.id); setMovingToFolderId(project.folderId || null); setProjectActionMenuId(null); }} className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-slate-200 hover:bg-slate-700 transition-colors">
+                                          <FolderInput size={14} /> Move to Folder
+                                        </button>
+                                        <div className="border-t border-slate-700" />
+                                        <button onClick={() => { setDeletingProjectId(project.id); setProjectActionMenuId(null); }} className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-red-400 hover:bg-red-500/10 transition-colors">
+                                          <Trash2 size={14} /> Delete
+                                        </button>
+                                      </div>
+                                    )}
+                                  </div>
+                                </>
+                              )}
+                            </div>
                           ))}
                         </div>
                       ) : (
@@ -2516,6 +2787,115 @@ export function PromptBuilder() {
                     </div>
                   )}
                 </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Delete Project Confirmation */}
+      <AnimatePresence>
+        {deletingProjectId && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }}
+              className="bg-slate-900 border border-red-500/30 rounded-2xl p-6 max-w-md w-full"
+            >
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-full bg-red-500/20 flex items-center justify-center">
+                  <AlertTriangle className="w-5 h-5 text-red-400" />
+                </div>
+                <h3 className="text-lg font-bold text-white">Delete Project</h3>
+              </div>
+              <p className="text-slate-300 mb-2">
+                Are you sure you want to delete <strong className="text-white">{projects.find(p => p.id === deletingProjectId)?.name || folders.flatMap(f => f.projects || []).find(p => p.id === deletingProjectId)?.name || 'this project'}</strong>?
+              </p>
+              <p className="text-slate-500 text-sm mb-6">This will permanently remove the project, its screenplay, storyboard, and all generated images. This action cannot be undone.</p>
+              <div className="flex gap-3 justify-end">
+                <button onClick={() => setDeletingProjectId(null)} className="px-4 py-2 text-slate-300 hover:text-white hover:bg-slate-800 rounded-lg transition-colors">Cancel</button>
+                <button onClick={() => deleteProject(deletingProjectId)} className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg font-medium transition-colors">Delete</button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Delete Folder Confirmation */}
+      <AnimatePresence>
+        {deletingFolderId && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }}
+              className="bg-slate-900 border border-red-500/30 rounded-2xl p-6 max-w-md w-full"
+            >
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-full bg-red-500/20 flex items-center justify-center">
+                  <AlertTriangle className="w-5 h-5 text-red-400" />
+                </div>
+                <h3 className="text-lg font-bold text-white">Delete Folder</h3>
+              </div>
+              <p className="text-slate-300 mb-2">
+                Are you sure you want to delete the folder <strong className="text-white">{folders.find(f => f.id === deletingFolderId)?.name || 'this folder'}</strong>?
+              </p>
+              <p className="text-slate-500 text-sm mb-6">Projects inside this folder will not be deleted — they will become unfiled.</p>
+              <div className="flex gap-3 justify-end">
+                <button onClick={() => setDeletingFolderId(null)} className="px-4 py-2 text-slate-300 hover:text-white hover:bg-slate-800 rounded-lg transition-colors">Cancel</button>
+                <button onClick={() => deleteFolder(deletingFolderId)} className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg font-medium transition-colors">Delete</button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Move Project to Folder Modal */}
+      <AnimatePresence>
+        {movingProjectId && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }}
+              className="bg-slate-900 border border-amber-500/30 rounded-2xl p-6 max-w-md w-full"
+            >
+              <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                <FolderInput size={20} className="text-amber-400" /> Move to Folder
+              </h3>
+              <p className="text-slate-400 text-sm mb-4">
+                Select a destination folder for <strong className="text-white">{projects.find(p => p.id === movingProjectId)?.name || folders.flatMap(f => f.projects || []).find(p => p.id === movingProjectId)?.name || 'this project'}</strong>:
+              </p>
+              <div className="space-y-2 mb-6">
+                <button
+                  onClick={() => setMovingToFolderId(null)}
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg border transition-all text-left ${movingToFolderId === null ? 'border-amber-500 bg-amber-500/10 text-amber-400' : 'border-slate-700 bg-slate-800 text-slate-300 hover:border-slate-600'}`}
+                >
+                  <FileText size={16} /> No Folder (Unfiled)
+                </button>
+                {folders.map(f => (
+                  <button
+                    key={f.id}
+                    onClick={() => setMovingToFolderId(f.id)}
+                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg border transition-all text-left ${movingToFolderId === f.id ? 'border-amber-500 bg-amber-500/10 text-amber-400' : 'border-slate-700 bg-slate-800 text-slate-300 hover:border-slate-600'}`}
+                  >
+                    <FolderOpen size={16} /> {f.name}
+                    <span className="text-slate-500 text-sm ml-auto">({f._count?.projects || 0})</span>
+                  </button>
+                ))}
+              </div>
+              <div className="flex gap-3 justify-end">
+                <button onClick={() => { setMovingProjectId(null); setMovingToFolderId(undefined); }} className="px-4 py-2 text-slate-300 hover:text-white hover:bg-slate-800 rounded-lg transition-colors">Cancel</button>
+                <button
+                  onClick={() => movingToFolderId !== undefined && moveProject(movingProjectId, movingToFolderId ?? null)}
+                  className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-900 rounded-lg font-medium transition-colors"
+                >
+                  Move
+                </button>
               </div>
             </motion.div>
           </motion.div>

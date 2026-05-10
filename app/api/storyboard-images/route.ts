@@ -7,6 +7,7 @@ import { prisma } from '@/lib/db';
 import { generateImage } from '@/lib/imagen';
 import { saveImage, deleteImage, deleteProjectImages } from '@/lib/image-storage';
 import { getMovieStyleSettings, loadStyleReferenceImage } from '@/lib/movie-style-ref';
+import { submitJob } from '@/lib/concurrency';
 
 /**
  * GET - List all storyboard images for a project
@@ -65,11 +66,17 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Generate image
-    const results = await generateImage(prompt, {
-      aspectRatio: aspectRatio || '16:9',
-      numberOfImages: 1,
-      styleReferenceImage,
+    // Generate image — routed through concurrency manager
+    const results = await submitJob({
+      fn: () => generateImage(prompt, {
+        aspectRatio: aspectRatio || '16:9',
+        numberOfImages: 1,
+        styleReferenceImage,
+      }),
+      userId: session.user?.id || 'anonymous',
+      jobType: 'image',
+      provider: 'gemini',
+      priority: 5,
     });
 
     const imageData = results[0];

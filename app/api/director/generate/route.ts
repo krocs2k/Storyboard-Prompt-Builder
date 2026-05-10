@@ -4,8 +4,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/db';
-import { generateVideo } from '@/lib/video-gen';
+import { generateVideo, getVideoModelInfo } from '@/lib/video-gen';
 import { trackUsage } from '@/lib/usage-tracker';
+import { submitJob } from '@/lib/concurrency';
+import type { Provider } from '@/lib/concurrency';
 
 export async function POST(request: NextRequest) {
   try {
@@ -25,12 +27,25 @@ export async function POST(request: NextRequest) {
       data: { status: 'generating', errorMessage: null },
     });
 
+    // Determine provider for concurrency management
+    let providerHint: Provider = 'gemini';
     try {
-      // Generate video using the hybrid provider system
-      const result = await generateVideo({
-        prompt,
-        startFrameUrl: startFrameUrl || null,
-        endFrameUrl: endFrameUrl || null,
+      const modelInfo = await getVideoModelInfo();
+      if (modelInfo?.provider) providerHint = modelInfo.provider as Provider;
+    } catch { /* use default */ }
+
+    try {
+      // Submit through concurrency manager for optimal parallel execution
+      const result = await submitJob({
+        fn: () => generateVideo({
+          prompt,
+          startFrameUrl: startFrameUrl || null,
+          endFrameUrl: endFrameUrl || null,
+        }),
+        userId: session.user?.id || 'anonymous',
+        jobType: 'video',
+        provider: providerHint,
+        priority: 3, // Videos are higher priority
       });
 
       // Update video record with result

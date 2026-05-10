@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
-import { motion, AnimatePresence, Reorder } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   Film, Play, Pause, SkipForward, SkipBack, Download, Trash2,
   RefreshCw, Eye, EyeOff, GripVertical, Scissors, ChevronLeft,
@@ -381,10 +381,13 @@ export default function DirectorPage() {
         setGenTasks(tasks);
         // Add all video records as generating
         setVideos(prev => [...prev, ...data.videos.map((v: DirectorVideoItem) => ({ ...v, status: 'generating' }))]);
-        // Trigger generation for each cell sequentially
-        for (const v of data.videos) {
-          await triggerGenerate(v.id, v.prompt, v.startFrameUrl, null);
-        }
+        // Fire all video generation requests in parallel — the server-side
+        // concurrency manager handles throttling and rate-limit safety
+        await Promise.allSettled(
+          data.videos.map((v: DirectorVideoItem) =>
+            triggerGenerate(v.id, v.prompt, v.startFrameUrl, null)
+          )
+        );
       } catch (err) {
         console.error('Multi-generate error:', err);
         setGenTasks(prev => prev.length > 0 ? prev : [{ id: 'err', label: 'Error', status: 'failed', error: String(err) }]);
@@ -1275,7 +1278,7 @@ export default function DirectorPage() {
                           <div key={v.id} className="bg-slate-800/50 border border-red-500/20 rounded-xl p-3">
                             <div className="aspect-video bg-black rounded-lg mb-2 flex items-center justify-center">
                               {v.videoUrl ? (
-                                <video src={v.videoUrl} className="w-full h-full object-contain rounded-lg" />
+                                <video src={`${v.videoUrl}#t=0.5`} className="w-full h-full object-contain rounded-lg" muted playsInline preload="metadata" />
                               ) : (
                                 <Video size={20} className="text-slate-700" />
                               )}
@@ -1313,95 +1316,136 @@ export default function DirectorPage() {
                     <p className="text-sm">No videos yet. Generate your first video above.</p>
                   </div>
                 ) : (
-                  <Reorder.Group
-                    axis="y"
-                    values={activeVideos}
-                    onReorder={(newOrder) => handleReorder(newOrder)}
-                    className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3"
-                  >
-                    {activeVideos.map(v => (
-                      <Reorder.Item key={v.id} value={v} className="list-none">
-                        <motion.div
-                          layout
-                          className={`bg-slate-800/50 border rounded-xl p-2 cursor-grab active:cursor-grabbing transition-colors ${
-                            selectedVideoId === v.id ? 'border-purple-500/50 ring-1 ring-purple-500/20' : 'border-slate-700/50 hover:border-slate-600'
-                          } ${!v.enabled ? 'opacity-50' : ''}`}
+                  <div className="space-y-2">
+                    {activeVideos.map((v, idx) => (
+                      <div
+                        key={v.id}
+                        draggable
+                        onDragStart={(e) => {
+                          e.dataTransfer.setData('text/plain', v.id);
+                          e.dataTransfer.effectAllowed = 'move';
+                          (e.currentTarget as HTMLElement).style.opacity = '0.5';
+                        }}
+                        onDragEnd={(e) => {
+                          (e.currentTarget as HTMLElement).style.opacity = '1';
+                        }}
+                        onDragOver={(e) => {
+                          e.preventDefault();
+                          e.dataTransfer.dropEffect = 'move';
+                          const el = e.currentTarget as HTMLElement;
+                          el.style.borderTopColor = 'rgb(168 85 247)';
+                          el.style.borderTopWidth = '2px';
+                        }}
+                        onDragLeave={(e) => {
+                          const el = e.currentTarget as HTMLElement;
+                          el.style.borderTopColor = '';
+                          el.style.borderTopWidth = '';
+                        }}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          const el = e.currentTarget as HTMLElement;
+                          el.style.borderTopColor = '';
+                          el.style.borderTopWidth = '';
+                          const draggedId = e.dataTransfer.getData('text/plain');
+                          if (!draggedId || draggedId === v.id) return;
+                          const newOrder = [...activeVideos];
+                          const fromIdx = newOrder.findIndex(x => x.id === draggedId);
+                          if (fromIdx === -1) return;
+                          const [moved] = newOrder.splice(fromIdx, 1);
+                          const toIdx = newOrder.findIndex(x => x.id === v.id);
+                          newOrder.splice(toIdx, 0, moved);
+                          handleReorder(newOrder);
+                        }}
+                        className={`flex items-center gap-3 bg-slate-800/50 border rounded-xl p-2 transition-colors ${
+                          selectedVideoId === v.id ? 'border-purple-500/50 ring-1 ring-purple-500/20' : 'border-slate-700/50 hover:border-slate-600'
+                        } ${!v.enabled ? 'opacity-50' : ''}`}
+                      >
+                        {/* Drag handle + index */}
+                        <div className="flex flex-col items-center gap-1 cursor-grab active:cursor-grabbing flex-shrink-0">
+                          <GripVertical size={14} className="text-slate-500" />
+                          <span className="text-[9px] text-slate-600 font-mono">{idx + 1}</span>
+                        </div>
+
+                        {/* Video thumbnail */}
+                        <div
+                          className="relative w-32 aspect-video bg-black rounded-lg cursor-pointer overflow-hidden group flex-shrink-0"
+                          onClick={() => {
+                            setSelectedVideoId(v.id);
+                            setPlayMode('single');
+                          }}
                         >
-                          {/* Video thumbnail */}
-                          <div
-                            className="relative aspect-video bg-black rounded-lg mb-2 cursor-pointer overflow-hidden group"
-                            onClick={() => {
-                              setSelectedVideoId(v.id);
-                              setPlayMode('single');
-                            }}
-                          >
-                            {v.status === 'generating' ? (
-                              <div className="absolute inset-0 flex flex-col items-center justify-center">
-                                <Loader2 size={24} className="text-purple-400 animate-spin" />
-                                <span className="text-[10px] text-purple-300 mt-1">Generating...</span>
-                              </div>
-                            ) : v.status === 'failed' ? (
-                              <div className="absolute inset-0 flex flex-col items-center justify-center px-2" title={v.errorMessage || 'Generation failed'}>
-                                <AlertCircle size={20} className="text-red-400" />
-                                <span className="text-[10px] text-red-300 mt-1">Failed</span>
-                                {v.errorMessage && (
-                                  <span className="text-[8px] text-red-400/60 mt-0.5 text-center line-clamp-2">{v.errorMessage}</span>
-                                )}
-                              </div>
-                            ) : v.videoUrl ? (
-                              <video src={v.videoUrl} className="w-full h-full object-contain" preload="metadata" />
-                            ) : null}
-
-                            {/* Overlay controls */}
-                            {v.status === 'ready' && (
-                              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                                <Play size={24} className="text-white" />
-                              </div>
-                            )}
-
-                            {/* Sort handle */}
-                            <div className="absolute top-1 left-1 p-1 bg-black/50 rounded opacity-0 group-hover:opacity-100 transition-opacity">
-                              <GripVertical size={12} className="text-white" />
+                          {v.status === 'generating' ? (
+                            <div className="absolute inset-0 flex flex-col items-center justify-center">
+                              <Loader2 size={16} className="text-purple-400 animate-spin" />
+                              <span className="text-[8px] text-purple-300 mt-0.5">Generating...</span>
                             </div>
+                          ) : v.status === 'failed' ? (
+                            <div className="absolute inset-0 flex flex-col items-center justify-center px-1" title={v.errorMessage || 'Generation failed'}>
+                              <AlertCircle size={14} className="text-red-400" />
+                              <span className="text-[8px] text-red-300 mt-0.5">Failed</span>
+                            </div>
+                          ) : v.videoUrl ? (
+                            <video
+                              src={`${v.videoUrl}#t=0.5`}
+                              className="w-full h-full object-contain"
+                              preload="metadata"
+                              muted
+                              playsInline
+                            />
+                          ) : null}
 
-                            {/* Trim indicators */}
-                            {(v.inPoint > 0 || (v.outPoint > 0 && v.outPoint < v.duration)) && (
-                              <div className="absolute bottom-1 left-1 flex items-center gap-1 bg-black/60 rounded px-1 py-0.5">
-                                <Scissors size={8} className="text-amber-400" />
-                                <span className="text-[8px] text-amber-300">
-                                  {formatTime(v.inPoint)} - {formatTime(v.outPoint || v.duration)}
-                                </span>
-                              </div>
-                            )}
-                          </div>
+                          {/* Play overlay */}
+                          {v.status === 'ready' && (
+                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                              <Play size={16} className="text-white" />
+                            </div>
+                          )}
 
-                          {/* Prompt preview */}
-                          <p className="text-[10px] text-slate-400 truncate mb-2 px-1">{v.prompt}</p>
+                          {/* Trim indicators */}
+                          {(v.inPoint > 0 || (v.outPoint > 0 && v.outPoint < v.duration)) && (
+                            <div className="absolute bottom-0.5 left-0.5 flex items-center gap-0.5 bg-black/60 rounded px-1 py-0.5">
+                              <Scissors size={7} className="text-amber-400" />
+                              <span className="text-[7px] text-amber-300">
+                                {formatTime(v.inPoint)}-{formatTime(v.outPoint || v.duration)}
+                              </span>
+                            </div>
+                          )}
+                        </div>
 
-                          {/* Action buttons */}
-                          <div className="flex items-center gap-1 px-1">
-                            <button onClick={() => toggleEnable(v.id)} className="p-1 rounded hover:bg-slate-700 transition-colors" title={v.enabled ? 'Disable' : 'Enable'}>
-                              {v.enabled ? <Eye size={12} className="text-emerald-400" /> : <EyeOff size={12} className="text-slate-500" />}
-                            </button>
-                            <button onClick={() => openTrim(v)} className="p-1 rounded hover:bg-slate-700 transition-colors" title="Trim">
-                              <Scissors size={12} className="text-slate-400" />
-                            </button>
-                            <button onClick={() => rerender(v.id)} className="p-1 rounded hover:bg-slate-700 transition-colors" title="Re-render">
-                              <RefreshCw size={12} className="text-slate-400" />
-                            </button>
-                            {v.videoUrl && (
-                              <a href={v.videoUrl} download className="p-1 rounded hover:bg-slate-700 transition-colors" title="Download">
-                                <Download size={12} className="text-slate-400" />
-                              </a>
-                            )}
-                            <button onClick={() => softDelete(v.id)} className="p-1 rounded hover:bg-slate-700 transition-colors ml-auto" title="Delete">
-                              <Trash2 size={12} className="text-red-400/60 hover:text-red-400" />
-                            </button>
-                          </div>
-                        </motion.div>
-                      </Reorder.Item>
+                        {/* Prompt + info */}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[11px] text-slate-300 truncate">{v.prompt}</p>
+                          {v.status === 'failed' && v.errorMessage && (
+                            <p className="text-[9px] text-red-400/70 truncate mt-0.5">{v.errorMessage}</p>
+                          )}
+                          {v.duration > 0 && (
+                            <p className="text-[9px] text-slate-600 mt-0.5">{formatTime(v.duration)}</p>
+                          )}
+                        </div>
+
+                        {/* Action buttons */}
+                        <div className="flex items-center gap-0.5 flex-shrink-0">
+                          <button onClick={() => toggleEnable(v.id)} className="p-1.5 rounded hover:bg-slate-700 transition-colors" title={v.enabled ? 'Disable' : 'Enable'}>
+                            {v.enabled ? <Eye size={12} className="text-emerald-400" /> : <EyeOff size={12} className="text-slate-500" />}
+                          </button>
+                          <button onClick={() => openTrim(v)} className="p-1.5 rounded hover:bg-slate-700 transition-colors" title="Trim">
+                            <Scissors size={12} className="text-slate-400" />
+                          </button>
+                          <button onClick={() => rerender(v.id)} className="p-1.5 rounded hover:bg-slate-700 transition-colors" title="Re-render">
+                            <RefreshCw size={12} className="text-slate-400" />
+                          </button>
+                          {v.videoUrl && (
+                            <a href={v.videoUrl} download className="p-1.5 rounded hover:bg-slate-700 transition-colors" title="Download">
+                              <Download size={12} className="text-slate-400" />
+                            </a>
+                          )}
+                          <button onClick={() => softDelete(v.id)} className="p-1.5 rounded hover:bg-slate-700 transition-colors" title="Delete">
+                            <Trash2 size={12} className="text-red-400/60 hover:text-red-400" />
+                          </button>
+                        </div>
+                      </div>
                     ))}
-                  </Reorder.Group>
+                  </div>
                 )
               )}
             </div>

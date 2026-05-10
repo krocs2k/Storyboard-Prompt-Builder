@@ -5,6 +5,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { generateImage, ReferenceImage } from '@/lib/imagen';
 import { getMovieStyleSettings, loadStyleReferenceImage } from '@/lib/movie-style-ref';
+import { submitJob } from '@/lib/concurrency';
 
 /**
  * POST - Generate an image from any prompt and return it as base64
@@ -49,11 +50,17 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const results = await generateImage(prompt, {
-      aspectRatio: aspectRatio || '16:9',
-      numberOfImages: 1,
-      styleReferenceImage,
-      referenceImages: referenceImages.length > 0 ? referenceImages : undefined,
+    const results = await submitJob({
+      fn: () => generateImage(prompt, {
+        aspectRatio: aspectRatio || '16:9',
+        numberOfImages: 1,
+        styleReferenceImage,
+        referenceImages: referenceImages.length > 0 ? referenceImages : undefined,
+      }),
+      userId: session.user?.id || 'anonymous',
+      jobType: 'image',
+      provider: 'gemini',
+      priority: 5,
     });
 
     const imageData = results[0];
