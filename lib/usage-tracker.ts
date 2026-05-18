@@ -8,6 +8,7 @@ import { prisma } from '@/lib/db';
 
 export type EventType =
   | 'story_idea'
+  | 'story_tropes'
   | 'story_concept'
   | 'screenplay_generate'
   | 'screenplay_convert'

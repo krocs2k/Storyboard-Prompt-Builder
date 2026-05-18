@@ -44,7 +44,7 @@ CULTURAL DIVERSITY MANDATE:
 
 export async function POST(request: NextRequest) {
   try {
-    const { genre, genreName } = await request.json();
+    const { genre, genreName, trope } = await request.json();
     
     if (!genre || !genreName) {
       return NextResponse.json(
@@ -52,6 +52,11 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
+
+    // trope is optional: { name: string, description: string }
+    const tropeContext = trope
+      ? `\n\nIMPORTANT — TROPE FOCUS: The user has selected the \"${trope.name}\" trope (${trope.description}). Every story idea you generate MUST creatively incorporate and centre around this trope. Show how this trope can be used in fresh, surprising, and original ways within the ${genreName} genre. Do NOT simply repeat the trope definition — instead, craft unique story situations where this trope drives the narrative.`
+      : '';
 
     // Look up the genre to get personas if available
     const genreData = storyGenres.find(g => g.id === genre);
@@ -85,7 +90,7 @@ export async function POST(request: NextRequest) {
           },
           {
             role: 'user',
-            content: `Generate 10 unique and compelling ${isPromoAd ? 'concepts' : 'story ideas/subjects'} for the ${genreName} genre.${genreSpecificGuidance}
+            content: `Generate 10 unique and compelling ${isPromoAd ? 'concepts' : 'story ideas/subjects'} for the ${genreName} genre.${tropeContext}${genreSpecificGuidance}
 
 Each idea should be:
 - A specific, intriguing premise or concept (1-2 sentences)

@@ -40,11 +40,18 @@ interface ScreenplayCreatorProps {
   onClose: () => void;
 }
 
-type ConceptModeStep = 'genre' | 'ideas' | 'concepts' | 'generating' | 'complete';
+interface StoryTrope {
+  id: number;
+  name: string;
+  description: string;
+  example: string;
+}
+
+type ConceptModeStep = 'genre' | 'tropes' | 'ideas' | 'concepts' | 'generating' | 'complete';
 
 /* ── Compact step progress bar ────────────────────────────── */
 function StepProgressBar({ current }: { current: number }) {
-  const steps = ['Genre', 'Ideas', 'Concepts', 'Screenplay'];
+  const steps = ['Genre', 'Tropes', 'Ideas', 'Concepts', 'Screenplay'];
   return (
     <div className="flex items-center gap-0.5">
       {steps.map((label, i) => {
@@ -127,6 +134,9 @@ export default function ScreenplayCreator({ onScreenplayCreated, onClose }: Scre
   const [selectedIdea, setSelectedIdea] = useState<StoryIdea | null>(null);
   const [customIdea, setCustomIdea] = useState('');
   const [useCustomIdea, setUseCustomIdea] = useState(false);
+  const [storyTropes, setStoryTropes] = useState<StoryTrope[]>([]);
+  const [selectedTrope, setSelectedTrope] = useState<StoryTrope | null>(null);
+  const [tropeSearch, setTropeSearch] = useState('');
   const [concepts, setConcepts] = useState<ConceptItem[]>([]);
   const [selectedConcept, setSelectedConcept] = useState<ConceptItem | null>(null);
   
@@ -183,6 +193,29 @@ export default function ScreenplayCreator({ onScreenplayCreated, onClose }: Scre
     }
   }, [youtubeUrl, manualTranscript]);
 
+  const generateTropes = useCallback(async () => {
+    if (!selectedGenre) return;
+    setLoading(true);
+    setError('');
+    setStoryTropes([]);
+    setSelectedTrope(null);
+    setTropeSearch('');
+    try {
+      const response = await authFetch('/api/screenplay/tropes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ genre: selectedGenre.id, genreName: selectedGenre.name }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error);
+      setStoryTropes(data.tropes || []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to generate tropes');
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedGenre]);
+
   const generateStoryIdeas = useCallback(async () => {
     if (!selectedGenre) return;
     setLoading(true);
@@ -193,7 +226,11 @@ export default function ScreenplayCreator({ onScreenplayCreated, onClose }: Scre
       const response = await authFetch('/api/screenplay/ideas', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ genre: selectedGenre.id, genreName: selectedGenre.name }),
+        body: JSON.stringify({
+          genre: selectedGenre.id,
+          genreName: selectedGenre.name,
+          trope: selectedTrope ? { name: selectedTrope.name, description: selectedTrope.description } : undefined,
+        }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error);
@@ -203,7 +240,7 @@ export default function ScreenplayCreator({ onScreenplayCreated, onClose }: Scre
     } finally {
       setLoading(false);
     }
-  }, [selectedGenre]);
+  }, [selectedGenre, selectedTrope]);
 
   const generateConcepts = useCallback(async () => {
     const ideaText = useCustomIdea ? customIdea : (selectedIdea ? `${selectedIdea.title}: ${selectedIdea.premise}` : '');
@@ -562,6 +599,9 @@ export default function ScreenplayCreator({ onScreenplayCreated, onClose }: Scre
   const resetConceptFlow = () => {
     setConceptStep('genre');
     setSelectedGenre(null);
+    setStoryTropes([]);
+    setSelectedTrope(null);
+    setTropeSearch('');
     setStoryIdeas([]);
     setSelectedIdea(null);
     setCustomIdea('');
@@ -574,8 +614,13 @@ export default function ScreenplayCreator({ onScreenplayCreated, onClose }: Scre
   };
 
   const goBackInConceptFlow = () => {
-    if (conceptStep === 'ideas') {
+    if (conceptStep === 'tropes') {
       setConceptStep('genre');
+      setStoryTropes([]);
+      setSelectedTrope(null);
+      setTropeSearch('');
+    } else if (conceptStep === 'ideas') {
+      setConceptStep('tropes');
       setStoryIdeas([]);
       setSelectedIdea(null);
     } else if (conceptStep === 'concepts') {
@@ -776,9 +821,74 @@ export default function ScreenplayCreator({ onScreenplayCreated, onClose }: Scre
                   </div>
                 </div>
 
-                <button onClick={() => { setConceptStep('ideas'); generateStoryIdeas(); }} disabled={!selectedGenre}
+                <button onClick={() => { setConceptStep('tropes'); generateTropes(); }} disabled={!selectedGenre}
                   className="w-full py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 disabled:from-slate-600 disabled:to-slate-700 text-slate-900 disabled:text-slate-500 font-semibold rounded-xl transition-all flex items-center justify-center gap-2 text-sm shrink-0">
-                  <Sparkles className="w-4 h-4" /> Generate Story Ideas
+                  <Sparkles className="w-4 h-4" /> Discover Popular Tropes
+                </button>
+              </motion.div>
+            )}
+
+            {/* ═══ Concept: Story Tropes ═══ */}
+            {mode === 'concept' && conceptStep === 'tropes' && (
+              <motion.div key="tropes" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                className="flex flex-col gap-3 flex-1 min-h-0">
+                <div className="flex items-center gap-4 shrink-0">
+                  <button onClick={goBackInConceptFlow}
+                    className="flex items-center gap-1.5 text-slate-400 hover:text-white transition-colors text-sm">
+                    <ChevronRight className="w-3.5 h-3.5 rotate-180" /> Back
+                  </button>
+                  <div className="flex-1"><StepProgressBar current={1} /></div>
+                </div>
+
+                <div className="flex items-center justify-between shrink-0">
+                  <div>
+                    <h3 className="text-base font-semibold text-white">Select a Story Trope</h3>
+                    <p className="text-slate-500 text-xs">Genre: <span className="text-amber-400">{selectedGenre?.icon} {selectedGenre?.name}</span> — Pick a proven narrative pattern</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input type="text" value={tropeSearch} onChange={(e) => setTropeSearch(e.target.value)}
+                      placeholder="Search tropes..."
+                      className="w-40 px-2.5 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-white text-xs placeholder-slate-500 focus:border-amber-500 focus:outline-none" />
+                    <button onClick={generateTropes} disabled={loading}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-600 rounded-lg text-slate-300 text-xs transition-colors">
+                      <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} /> Regenerate
+                    </button>
+                  </div>
+                </div>
+
+                {loading ? (
+                  <div className="flex-1 flex items-center justify-center">
+                    <Loader2 className="w-7 h-7 text-amber-400 animate-spin" />
+                    <span className="ml-3 text-slate-300 text-sm">Generating popular tropes...</span>
+                  </div>
+                ) : (
+                  <div className="flex-1 min-h-0 overflow-y-auto -mx-1 px-1">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {storyTropes
+                        .filter(t => !tropeSearch || t.name.toLowerCase().includes(tropeSearch.toLowerCase()) || t.description.toLowerCase().includes(tropeSearch.toLowerCase()))
+                        .map((trope) => (
+                        <button key={trope.id} onClick={() => setSelectedTrope(trope)}
+                          className={`p-3 rounded-lg border text-left transition-all ${selectedTrope?.id === trope.id
+                            ? 'bg-amber-500/20 border-amber-500 shadow-sm shadow-amber-500/20'
+                            : 'bg-slate-800/50 border-slate-700/60 hover:border-slate-600'}`}>
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className="text-amber-400 font-mono text-[10px] bg-amber-500/10 rounded px-1.5 py-0.5 shrink-0">#{trope.id}</span>
+                              <h4 className="font-semibold text-white text-sm truncate">{trope.name}</h4>
+                            </div>
+                            {selectedTrope?.id === trope.id && <CheckCircle className="w-4 h-4 text-amber-400 shrink-0" />}
+                          </div>
+                          <p className="text-slate-400 text-xs mt-1 line-clamp-2">{trope.description}</p>
+                          <p className="text-slate-600 text-[10px] mt-1 italic line-clamp-1">e.g. {trope.example}</p>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <button onClick={() => { setConceptStep('ideas'); generateStoryIdeas(); }} disabled={!selectedTrope || loading}
+                  className="w-full py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 disabled:from-slate-600 disabled:to-slate-700 text-slate-900 disabled:text-slate-500 font-semibold rounded-xl transition-all flex items-center justify-center gap-2 text-sm shrink-0">
+                  <Sparkles className="w-4 h-4" /> Generate Story Ideas from Trope
                 </button>
               </motion.div>
             )}
@@ -792,13 +902,13 @@ export default function ScreenplayCreator({ onScreenplayCreated, onClose }: Scre
                     className="flex items-center gap-1.5 text-slate-400 hover:text-white transition-colors text-sm">
                     <ChevronRight className="w-3.5 h-3.5 rotate-180" /> Back
                   </button>
-                  <div className="flex-1"><StepProgressBar current={1} /></div>
+                  <div className="flex-1"><StepProgressBar current={2} /></div>
                 </div>
 
                 <div className="flex items-center justify-between shrink-0">
                   <div>
                     <h3 className="text-base font-semibold text-white">Select a Story Idea</h3>
-                    <p className="text-slate-500 text-xs">Genre: <span className="text-amber-400">{selectedGenre?.icon} {selectedGenre?.name}</span></p>
+                    <p className="text-slate-500 text-xs">Genre: <span className="text-amber-400">{selectedGenre?.icon} {selectedGenre?.name}</span>{selectedTrope && <> · Trope: <span className="text-purple-400">{selectedTrope.name}</span></>}</p>
                   </div>
                   <button onClick={generateStoryIdeas} disabled={loading}
                     className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-600 rounded-lg text-slate-300 text-xs transition-colors">
@@ -864,7 +974,7 @@ export default function ScreenplayCreator({ onScreenplayCreated, onClose }: Scre
                     className="flex items-center gap-1.5 text-slate-400 hover:text-white transition-colors text-sm">
                     <ChevronRight className="w-3.5 h-3.5 rotate-180" /> Back
                   </button>
-                  <div className="flex-1"><StepProgressBar current={2} /></div>
+                  <div className="flex-1"><StepProgressBar current={3} /></div>
                 </div>
 
                 <div className="flex items-center justify-between shrink-0">
@@ -1057,7 +1167,7 @@ export default function ScreenplayCreator({ onScreenplayCreated, onClose }: Scre
             {mode === 'concept' && conceptStep === 'complete' && !generating && (
               <motion.div key="complete" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                 className="flex flex-col gap-3 flex-1 min-h-0">
-                <div className="shrink-0"><StepProgressBar current={4} /></div>
+                <div className="shrink-0"><StepProgressBar current={5} /></div>
 
                 <div className="flex items-center gap-3 shrink-0">
                   <div className="w-10 h-10 bg-green-500/20 rounded-full flex items-center justify-center shrink-0">
