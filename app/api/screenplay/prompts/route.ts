@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { getLLMConfig } from '@/lib/llm';
 import { trackUsage } from '@/lib/usage-tracker';
 import { withSonnetSoul } from '@/lib/sonnet-soul-protocol';
+import { buildShotLevelOptions } from '@/lib/auto-select-helpers';
 
 interface SelectionItem {
   name: string;
@@ -123,6 +124,9 @@ export async function POST(request: NextRequest) {
       '[ENVIRONMENT MOOD/ATMOSPHERE]',
     );
 
+    // Build per-shot options for cinematographer decisions
+    const shotOptions = buildShotLevelOptions();
+
     const llm = await getLLMConfig();
     const response = await fetch(llm.baseUrl, {
       method: 'POST',
@@ -135,9 +139,20 @@ export async function POST(request: NextRequest) {
         messages: [
           {
             role: 'system',
-            content: withSonnetSoul('prompts', `You are an expert at creating highly detailed, production-ready image generation prompts for film and television production. Your prompts must follow the EXACT Constructed Prompt structure provided below - this ensures visual consistency across the entire production.
+            content: withSonnetSoul('prompts', `You are an AWARD-WINNING EXPERT CINEMATOGRAPHER and prompt engineer with decades of experience on major feature films. Your prompts must follow the EXACT Constructed Prompt structure provided below - this ensures visual consistency across the entire production.
+
+As a master cinematographer, you must make DELIBERATE, MOTIVATED choices for each character and environment across two key dimensions:
+
+1. FRAMING (Section 2): Choose the shot type that best reveals character personality, emotional state, and narrative role. For environments, choose framing that establishes spatial relationships and atmosphere.
+2. LIGHTING & MOOD (Section 3): Choose the lighting source that best serves the emotional tone and visual storytelling for each character/environment. Also describe the specific atmosphere/mood.
 
 CRITICAL: Every prompt you generate MUST follow the exact template structure provided. Fill in the [BRACKETED] sections with specific content while keeping all visual specifications exactly as provided.
+
+=== AVAILABLE SHOT TYPES — Section 2 (choose the best framing for each character/environment) ===
+${shotOptions.shotTypes.map(s => `- ${s.name} (${s.id})`).join('\\n')}
+
+=== AVAILABLE LIGHTING SOURCES — Section 3 (choose the best lighting for each character/environment) ===
+${shotOptions.lightingSources.map(l => `- ${l.name} [${l.id}]: ${l.description}`).join('\\n')}
 
 CONTENT SAFETY REQUIREMENT: All character descriptions MUST depict adults (18+ years old). If the screenplay features younger characters, age them up to young adults in all visual prompts. Never use words like "child", "children", "kid", "kids", "boy", "girl", "teen", "teenager", "toddler", "infant", "baby", "minor", "youth", "juvenile", "young boy", "young girl", or any other terms implying a person under 18. Instead, describe them as young adults with appropriate mature features. This is required for content safety compliance with image generation APIs.`)
           },
@@ -235,7 +250,10 @@ Respond in JSON format:
       "voicePrompt": "DETAILED VOICE DESCRIPTION for hume.ai voice generation",
       "subjectDescription": "The SUBJECT & ACTION portion only (what you filled in for the subject placeholder)",
       "environmentDescription": "The ENVIRONMENT portion only (what you filled in for the environment placeholder)",
-      "atmosphereDescription": "The ATMOSPHERE/MOOD portion only (1-3 words)"
+      "atmosphereDescription": "The ATMOSPHERE/MOOD portion only (1-3 words)",
+      "recommendedShotType": "The shot type ID from the available list that best captures this character",
+      "recommendedLighting": "The lighting source ID from the available list that best serves this character's emotional tone",
+      "recommendedAtmosphere": "A 2-5 word evocative atmosphere description chosen by the cinematographer"
     }
   ],
   "environmentPrompts": [
@@ -244,7 +262,10 @@ Respond in JSON format:
       "prompt": "THE COMPLETE CONSTRUCTED PROMPT with all [BRACKETED] sections filled in",
       "subjectDescription": "The SUBJECT & ACTION portion only (the establishing shot description)",
       "environmentDescription": "The ENVIRONMENT portion only (the full environment description)",
-      "atmosphereDescription": "The ATMOSPHERE/MOOD portion only (1-3 words)"
+      "atmosphereDescription": "The ATMOSPHERE/MOOD portion only (1-3 words)",
+      "recommendedShotType": "The shot type ID from the available list that best establishes this environment",
+      "recommendedLighting": "The lighting source ID from the available list that best serves this environment's mood",
+      "recommendedAtmosphere": "A 2-5 word evocative atmosphere description chosen by the cinematographer"
     }
   ]
 }

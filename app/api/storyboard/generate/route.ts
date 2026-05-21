@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { getLLMConfig } from '@/lib/llm';
 import { trackUsage } from '@/lib/usage-tracker';
 import { withSonnetSoul } from '@/lib/sonnet-soul-protocol';
+import { buildShotLevelOptions } from '@/lib/auto-select-helpers';
 
 interface SelectionItem {
   name: string;
@@ -138,6 +139,9 @@ export async function POST(request: NextRequest) {
       '[ATMOSPHERE/MOOD]'
     );
 
+    // Build per-shot options for cinematographer decisions
+    const shotOptions = buildShotLevelOptions();
+
     const llm = await getLLMConfig();
     const response = await fetch(llm.baseUrl, {
       method: 'POST',
@@ -150,9 +154,20 @@ export async function POST(request: NextRequest) {
         messages: [
           {
             role: 'system',
-            content: withSonnetSoul('storyboard', `You are an expert storyboard artist and cinematographer. Your task is to break down screenplays into detailed storyboard blocks, each representing approximately 30 seconds of screen time.
+            content: withSonnetSoul('storyboard', `You are an AWARD-WINNING EXPERT CINEMATOGRAPHER and storyboard artist with decades of experience on major feature films. Your task is to break down screenplays into detailed storyboard blocks, each representing approximately 30 seconds of screen time.
 
-CRITICAL: Each storyboard block prompt MUST follow the EXACT Constructed Prompt structure below. You will fill in the [BRACKETED] sections with specific content from each scene while keeping all other visual specifications exactly as provided.`)
+As a master cinematographer, you must make DELIBERATE, MOTIVATED choices for each block across two key dimensions:
+
+1. FRAMING (Section 2): Every shot type must serve the storytelling — choose close-ups for emotional beats, wide shots for establishing context, tracking shots for movement, etc. Vary your shot selection throughout the sequence to create visual rhythm and maintain audience engagement.
+2. LIGHTING & MOOD (Section 3): Choose the lighting source that best serves the emotional tone and visual storytelling for each block. Also craft a specific atmosphere/mood description.
+
+CRITICAL: Each storyboard block prompt MUST follow the EXACT Constructed Prompt structure below. You will fill in the [BRACKETED] sections with specific content from each scene while keeping all other visual specifications exactly as provided.
+
+=== AVAILABLE SHOT TYPES — Section 2 (choose the best framing for each block) ===
+${shotOptions.shotTypes.map(s => `- ${s.name} (${s.id})`).join('\\n')}
+
+=== AVAILABLE LIGHTING SOURCES — Section 3 (choose the best lighting for each block) ===
+${shotOptions.lightingSources.map(l => `- ${l.name} [${l.id}]: ${l.description}`).join('\\n')}`)
           },
           {
             role: 'user',
@@ -214,6 +229,8 @@ Respond in JSON format:
       "atmosphere": "The specific atmosphere/mood",
       "shotType": "MEDIUM SHOT",
       "lighting": "Specific lighting notes for this block",
+      "recommendedShotTypeId": "The shot type ID from the available list (e.g. close-up, establishing, etc.)",
+      "recommendedLightingId": "The lighting source ID from the available list (e.g. chiaroscuro, backlighting, etc.)",
       "prompt": "THE COMPLETE CONSTRUCTED PROMPT with all [BRACKETED] sections filled in with this block's specific content",
       "notes": "Cinematography and mood notes"
     }

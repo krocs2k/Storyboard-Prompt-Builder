@@ -17,7 +17,8 @@ export type EventType =
   | 'prompt_generate'
   | 'image_generate'
   | 'image_grid_detect'
-  | 'video_generate';
+  | 'video_generate'
+  | 'auto_select';
 
 export type ApiType = 'llm' | 'imagen' | 'video';
 export type Provider = 'gemini' | 'openai' | 'abacus';

@@ -190,6 +190,9 @@ export function PromptBuilder() {
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
   const [savingProject, setSavingProject] = useState(false);
 
+  // Auto-selection state (AI Cinematographer)
+  const [autoSelecting, setAutoSelecting] = useState(false);
+
   // CRUD state for projects & folders
   const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
   const [editingProjectName, setEditingProjectName] = useState('');
@@ -475,6 +478,31 @@ export function PromptBuilder() {
     } catch (err) { console.error('Failed to delete folder:', err); }
     setDeletingFolderId(null);
   };
+
+  // AI Cinematographer: auto-select aesthetic options based on screenplay content
+  const triggerAutoSelections = useCallback(async (screenplayContent: string, title?: string, genre?: string, mood?: string) => {
+    setAutoSelecting(true);
+    try {
+      const res = await authFetch('/api/screenplay/auto-selections', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ screenplayContent, title, genre, mood }),
+      });
+      if (!res.ok) {
+        console.warn('[AutoSelect] API returned', res.status);
+        return;
+      }
+      const data = await res.json();
+      if (data.selections && Object.keys(data.selections).length > 0) {
+        setSelections(prev => ({ ...prev, ...data.selections }));
+      }
+    } catch (err) {
+      console.warn('[AutoSelect] Failed:', err);
+      // Silent failure — auto-selections are a convenience, not critical
+    } finally {
+      setAutoSelecting(false);
+    }
+  }, []);
 
   const saveProject = async () => {
     if (!newProjectName.trim() && !currentProject) return;
@@ -1603,6 +1631,23 @@ export function PromptBuilder() {
 
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 pt-6 pb-12">
+        {/* AI Cinematographer auto-selection indicator */}
+        <AnimatePresence>
+          {autoSelecting && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="mb-4 flex items-center gap-3 px-4 py-3 rounded-xl bg-gradient-to-r from-amber-500/10 to-orange-500/10 border border-amber-500/20"
+            >
+              <Loader2 size={18} className="animate-spin text-amber-400" />
+              <span className="text-sm text-amber-200/90">
+                <span className="font-semibold text-amber-300">AI Cinematographer</span> analyzing screenplay and selecting optimal aesthetics…
+              </span>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         <div className="grid lg:grid-cols-2 gap-6">
           {/* Left Column - Sections 1-3 */}
           <div className="space-y-6">
@@ -2567,6 +2612,10 @@ export function PromptBuilder() {
               if (!currentProject && formattedTitle) {
                 setNewProjectName(formattedTitle);
               }
+              // Auto-select aesthetics based on the screenplay
+              if (data.content) {
+                triggerAutoSelections(data.content, formattedTitle, data.storyIdea);
+              }
             }}
             onClose={() => setShowScreenplayCreator(false)}
           />
@@ -2594,6 +2643,10 @@ export function PromptBuilder() {
               // Prepopulate project name with story title if no project is loaded
               if (!currentProject && title) {
                 setNewProjectName(title);
+              }
+              // Auto-select aesthetics based on the uploaded screenplay
+              if (data.screenplay) {
+                triggerAutoSelections(data.screenplay, title, data.analysis.genre, data.analysis.mood);
               }
             }}
             onRecommendationsApply={(newSelections) => {
