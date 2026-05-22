@@ -3,6 +3,7 @@ import { getLLMConfig } from '@/lib/llm';
 import { trackUsage } from '@/lib/usage-tracker';
 import { withSonnetSoul } from '@/lib/sonnet-soul-protocol';
 import { buildShotLevelOptions } from '@/lib/auto-select-helpers';
+import { repairJSON } from '@/lib/repair-json';
 
 interface SelectionItem {
   name: string;
@@ -298,16 +299,8 @@ Respond with raw JSON only.`
             if (completedSent) return;
             completedSent = true;
             try {
-              // Strip code fences if any
-              let text = buffer.trim();
-              const fenceMatch = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-              if (fenceMatch) text = fenceMatch[1].trim();
-              // Extract outermost JSON object
-              const firstBrace = text.indexOf('{');
-              const lastBrace = text.lastIndexOf('}');
-              if (firstBrace !== -1 && lastBrace > firstBrace) {
-                text = text.slice(firstBrace, lastBrace + 1);
-              }
+              // Repair & parse — handles truncated LLM output
+              const text = repairJSON(buffer);
               const prompts = JSON.parse(text);
               const finalData = JSON.stringify({ status: 'completed', prompts });
               controller.enqueue(encoder.encode(`data: ${finalData}\n\n`));
