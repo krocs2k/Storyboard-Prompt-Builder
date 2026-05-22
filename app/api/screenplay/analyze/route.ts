@@ -4,6 +4,7 @@ import WordExtractor from 'word-extractor';
 import { getLLMConfig } from '@/lib/llm';
 import { trackUsage } from '@/lib/usage-tracker';
 import { withSonnetSoul } from '@/lib/sonnet-soul-protocol';
+import { repairJSON } from '@/lib/repair-json';
 
 export async function POST(request: NextRequest) {
   try {
@@ -161,7 +162,7 @@ Respond with raw JSON only.`
     
     let analysis;
     try {
-      analysis = JSON.parse(analysisData.choices[0].message.content);
+      analysis = JSON.parse(repairJSON(analysisData.choices?.[0]?.message?.content || '{}'));
     } catch (parseError) {
       console.error('Failed to parse analysis JSON:', analysisData.choices[0].message.content);
       throw new Error('Failed to parse analysis response');
@@ -226,7 +227,7 @@ Include EVERY line of dialogue in order of appearance. Respond with raw JSON onl
     if (dialogueResponse.ok) {
       try {
         const dialogueData = await dialogueResponse.json();
-        const dialogueResult = JSON.parse(dialogueData.choices[0].message.content);
+        const dialogueResult = JSON.parse(repairJSON(dialogueData.choices?.[0]?.message?.content || '{}'));
         dialogueLines = dialogueResult.dialogueLines || [];
       } catch (e) {
         console.error('Failed to parse dialogue:', e);

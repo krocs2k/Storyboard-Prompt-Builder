@@ -3,6 +3,7 @@ import { getLLMConfig } from '@/lib/llm';
 import { storyGenres } from '@/lib/data/story-genres';
 import { trackUsage } from '@/lib/usage-tracker';
 import { withSonnetSoul } from '@/lib/sonnet-soul-protocol';
+import { repairJSON } from '@/lib/repair-json';
 
 interface PersonaInfo {
   role: string;
@@ -124,7 +125,7 @@ Respond with raw JSON only. Do not include code blocks, markdown, or any other f
     }
 
     const data = await response.json();
-    const ideas = JSON.parse(data.choices[0].message.content);
+    const ideas = JSON.parse(repairJSON(data.choices?.[0]?.message?.content || '{}'));
     
     trackUsage({ eventType: 'story_idea', apiModel: llm.model, apiType: 'llm', provider: llm.provider });
     return NextResponse.json(ideas);

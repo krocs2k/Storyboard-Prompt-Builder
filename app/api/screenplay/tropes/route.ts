@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getLLMConfig } from '@/lib/llm';
 import { trackUsage } from '@/lib/usage-tracker';
 import { withSonnetSoul } from '@/lib/sonnet-soul-protocol';
+import { repairJSON } from '@/lib/repair-json';
 
 export async function POST(request: NextRequest) {
   try {
@@ -70,11 +71,13 @@ Respond with raw JSON only. Do not include code blocks, markdown, or any other f
     }
 
     const data = await response.json();
-    let content = data.choices[0].message.content;
-    // Strip code fences if present
-    const fenceMatch = content.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-    if (fenceMatch) content = fenceMatch[1];
-    const result = JSON.parse(content);
+    let content = data.choices?.[0]?.message?.content;
+    if (!content) {
+      console.error('[Tropes] Empty LLM response:', JSON.stringify(data).slice(0, 300));
+      throw new Error('Empty response from AI');
+    }
+    const repaired = repairJSON(content);
+    const result = JSON.parse(repaired);
 
     trackUsage({ eventType: 'story_tropes', apiModel: llm.model, apiType: 'llm', provider: llm.provider });
     return NextResponse.json(result);
