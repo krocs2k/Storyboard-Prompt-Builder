@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getLLMConfig } from '@/lib/llm';
 import { trackUsage } from '@/lib/usage-tracker';
 import { mapIdsToSelections, type AutoSelectionIds } from '@/lib/auto-select-helpers';
+import { repairJSON } from '@/lib/repair-json';
 import { imageTypes } from '@/lib/data/image-types';
 import { cameraBodies } from '@/lib/data/camera-bodies';
 import { focalLengths } from '@/lib/data/focal-lengths';
@@ -104,13 +105,12 @@ Return JSON: {"imageType":"<id>","camera":"<id>","focalLength":"<id>","lensType"
         return NextResponse.json({ error: 'Empty response from AI' }, { status: 500 });
       }
 
-      // Parse the JSON response
+      // Parse the JSON response (with repair for truncated output)
       let selectionIds: AutoSelectionIds;
       try {
-        const cleaned = content.replace(/```json\n?|```\n?/g, '').trim();
-        selectionIds = JSON.parse(cleaned);
+        selectionIds = JSON.parse(repairJSON(content));
       } catch (parseErr) {
-        console.error('[AutoSelect] Failed to parse LLM JSON:', content.slice(0, 300));
+        console.error('[AutoSelect] Failed to parse LLM JSON:', content.slice(0, 500));
         return NextResponse.json({ error: 'Failed to parse AI response' }, { status: 500 });
       }
 

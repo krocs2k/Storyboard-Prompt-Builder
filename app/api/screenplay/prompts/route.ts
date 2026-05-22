@@ -293,9 +293,15 @@ Respond with raw JSON only.`
         const encoder = new TextEncoder();
         let buffer = '';
         let partialRead = '';
+
+        // Keep-alive heartbeat to prevent ERR_HTTP2_PROTOCOL_ERROR
+        const heartbeat = setInterval(() => {
+          try { controller.enqueue(encoder.encode(': heartbeat\n\n')); } catch {}
+        }, 15000);
         
         let completedSent = false;
         const finalizeAndSend = () => {
+            clearInterval(heartbeat);
             if (completedSent) return;
             completedSent = true;
             try {
@@ -350,6 +356,7 @@ Respond with raw JSON only.`
           try { finalizeAndSend(); } catch {}
           controller.error(error);
         } finally {
+          clearInterval(heartbeat);
           controller.close();
         }
       },

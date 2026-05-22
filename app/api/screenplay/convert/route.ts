@@ -240,6 +240,11 @@ For EACH location in the screenplay:
         let buffer = '';
         let partialRead = '';
 
+        // Keep-alive heartbeat to prevent ERR_HTTP2_PROTOCOL_ERROR
+        const heartbeat = setInterval(() => {
+          try { controller.enqueue(encoder.encode(': heartbeat\n\n')); } catch {}
+        }, 15000);
+
         try {
           while (reader) {
             const { done, value } = await reader.read();
@@ -258,6 +263,7 @@ For EACH location in the screenplay:
                     screenplay: buffer
                   });
                   controller.enqueue(encoder.encode(`data: ${finalData}\n\n`));
+                  clearInterval(heartbeat);
                   return;
                 }
                 try {
@@ -290,6 +296,7 @@ For EACH location in the screenplay:
           const errorData = JSON.stringify({ status: 'error', message: 'Stream processing failed' });
           controller.enqueue(encoder.encode(`data: ${errorData}\n\n`));
         } finally {
+          clearInterval(heartbeat);
           controller.close();
         }
       },

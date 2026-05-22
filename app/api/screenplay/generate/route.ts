@@ -322,6 +322,11 @@ For EACH location:
         const encoder = new TextEncoder();
         let buffer = '';
         let partialRead = '';
+
+        // Keep-alive heartbeat to prevent ERR_HTTP2_PROTOCOL_ERROR
+        const heartbeat = setInterval(() => {
+          try { controller.enqueue(encoder.encode(': heartbeat\n\n')); } catch {}
+        }, 15000);
         
         try {
           while (reader) {
@@ -341,6 +346,7 @@ For EACH location:
                     screenplay: buffer
                   });
                   controller.enqueue(encoder.encode(`data: ${finalData}\n\n`));
+                  clearInterval(heartbeat);
                   return;
                 }
                 try {
@@ -364,6 +370,7 @@ For EACH location:
           console.error('Stream error:', error);
           controller.error(error);
         } finally {
+          clearInterval(heartbeat);
           controller.close();
         }
       },
