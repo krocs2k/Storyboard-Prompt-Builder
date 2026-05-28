@@ -1,11 +1,11 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Youtube, Lightbulb, Clock, Loader2, ChevronRight, RefreshCw,
   CheckCircle, FileText, X, AlertCircle, ClipboardPaste, Download,
-  BookOpen, Sparkles, PenTool, Film, Upload, BookMarked
+  BookOpen, Sparkles, PenTool, Film, Upload, BookMarked, Layers, Zap
 } from 'lucide-react';
 import { StoryConcept } from '@/lib/types';
 import { storyGenres, StoryGenre } from '@/lib/data/story-genres';
@@ -26,6 +26,20 @@ interface ConceptItem {
   emotionalHook: string;
 }
 
+interface EpisodeHistory {
+  title: string;
+  content: string;
+  episodeNumber: number;
+}
+
+interface ContinueFromData {
+  previousEpisodes: EpisodeHistory[];
+  characters: Array<{ name: string; description: string }>;
+  environments: Array<{ name: string; description: string }>;
+  genre: string;
+  seriesTitle: string;
+}
+
 interface ScreenplayCreatorProps {
   onScreenplayCreated: (screenplay: {
     title: string;
@@ -34,10 +48,12 @@ interface ScreenplayCreatorProps {
     characters: Array<{ name: string; description: string }>;
     environments: Array<{ name: string; description: string }>;
     sourceType: 'youtube' | 'concept';
+    genre?: string;
     sourceUrl?: string;
     storyIdea?: string;
   }) => void;
   onClose: () => void;
+  continueFrom?: ContinueFromData;
 }
 
 interface StoryTrope {
@@ -95,9 +111,9 @@ function extractTitleFromContent(content: string): string {
   return '';
 }
 
-export default function ScreenplayCreator({ onScreenplayCreated, onClose }: ScreenplayCreatorProps) {
-  const [mode, setMode] = useState<'select' | 'youtube' | 'concept' | 'convert'>('select');
-  const [conceptStep, setConceptStep] = useState<ConceptModeStep>('genre');
+export default function ScreenplayCreator({ onScreenplayCreated, onClose, continueFrom }: ScreenplayCreatorProps) {
+  const [mode, setMode] = useState<'select' | 'youtube' | 'concept' | 'convert'>(continueFrom ? 'concept' : 'select');
+  const [conceptStep, setConceptStep] = useState<ConceptModeStep>(continueFrom ? 'tropes' : 'genre');
   const [runtime, setRuntime] = useState(15);
   
   // Format runtime (minutes) as MM:SS string
@@ -155,6 +171,19 @@ export default function ScreenplayCreator({ onScreenplayCreated, onClose }: Scre
   const [screenplayTitle, setScreenplayTitle] = useState('');
   const [error, setError] = useState('');
   const [genreSearch, setGenreSearch] = useState('');
+
+  // Auto-select genre when continuing a series
+  useEffect(() => {
+    if (continueFrom?.genre) {
+      const matchedGenre = storyGenres.find(
+        g => g.name.toLowerCase() === continueFrom.genre.toLowerCase() ||
+             g.id.toLowerCase() === continueFrom.genre.toLowerCase()
+      );
+      if (matchedGenre) {
+        setSelectedGenre(matchedGenre);
+      }
+    }
+  }, [continueFrom]);
 
   // Filter genres by search
   const filteredGenres = storyGenres.filter(g => 
@@ -341,6 +370,83 @@ export default function ScreenplayCreator({ onScreenplayCreated, onClose }: Scre
     }
   }, [runtime, selectedConcept, selectedGenre]);
 
+  const generateContinuation = useCallback(async () => {
+    if (!continueFrom) return;
+    setGenerating(true);
+    setConceptStep('generating');
+    setProgress('Generating next episode...');
+    setScreenplay('');
+    setError('');
+
+    try {
+      const body = {
+        previousEpisodes: continueFrom.previousEpisodes,
+        characters: continueFrom.characters,
+        environments: continueFrom.environments,
+        genre: continueFrom.genre || selectedGenre?.name,
+        runtime,
+        seriesTitle: continueFrom.seriesTitle,
+        newTrope: selectedTrope?.name || undefined,
+        newIdea: useCustomIdea ? customIdea : (selectedIdea?.premise || undefined),
+        newConcept: selectedConcept
+          ? `Title: ${selectedConcept.title}\nSynopsis: ${selectedConcept.synopsis}\nDramatic Element: ${selectedConcept.dramaticElement || selectedConcept.paranormalElement}\nEmotional Hook: ${selectedConcept.emotionalHook}`
+          : undefined,
+      };
+
+      const response = await authFetch('/api/screenplay/continue', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error);
+      }
+
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let partialRead = '';
+
+      while (reader) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        partialRead += decoder.decode(value, { stream: true });
+        const lines = partialRead.split('\n');
+        partialRead = lines.pop() || '';
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const data = line.slice(6);
+            try {
+              const parsed = JSON.parse(data);
+              if (parsed.status === 'streaming') {
+                buffer += parsed.content;
+                setScreenplay(buffer);
+                setProgress(`Writing Episode ${continueFrom.previousEpisodes.length + 1}...`);
+              } else if (parsed.status === 'completed') {
+                setScreenplay(parsed.screenplay);
+                setScreenplayTitle(selectedConcept?.title || `Episode ${continueFrom.previousEpisodes.length + 1}`);
+                setConceptStep('complete');
+                parseAndComplete(parsed.screenplay, 'concept');
+                return;
+              }
+            } catch {
+              // Skip invalid JSON
+            }
+          }
+        }
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to generate episode');
+      setConceptStep('concepts');
+    } finally {
+      setGenerating(false);
+    }
+  }, [runtime, selectedConcept, selectedGenre, selectedTrope, selectedIdea, useCustomIdea, customIdea, continueFrom]);
+
   const parseAndComplete = (content: string, sourceType: 'youtube' | 'concept') => {
     const charactersMatch = content.match(/---CHARACTER DESCRIPTIONS---([\s\S]*?)(?:---ENVIRONMENT|$)/i);
     const environmentsMatch = content.match(/---ENVIRONMENT DESCRIPTIONS---([\s\S]*?)$/i);
@@ -417,6 +523,7 @@ export default function ScreenplayCreator({ onScreenplayCreated, onClose }: Scre
       sourceType,
       sourceUrl: sourceType === 'youtube' ? youtubeUrl : undefined,
       storyIdea: sourceType === 'concept' ? (useCustomIdea ? customIdea : selectedIdea?.premise) : undefined,
+      genre: selectedGenre?.name || continueFrom?.genre,
     });
   };
 
@@ -442,7 +549,9 @@ export default function ScreenplayCreator({ onScreenplayCreated, onClose }: Scre
   };
 
   const handleConceptSubmit = async () => {
-    if (selectedConcept) {
+    if (continueFrom) {
+      await generateContinuation();
+    } else if (selectedConcept) {
       await generateScreenplay('concept');
     }
   };
@@ -552,25 +661,8 @@ export default function ScreenplayCreator({ onScreenplayCreated, onClose }: Scre
     setError('');
   };
 
-  // Download handlers
-  const downloadScreenplay = (format: 'txt' | 'doc' | 'docx') => {
-    const filename = `${screenplayTitle.replace(/[^a-zA-Z0-9]/g, '_') || 'screenplay'}`;
-    
-    if (format === 'txt') {
-      const blob = new Blob([screenplay], { type: 'text/plain' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${filename}.txt`;
-      a.click();
-      URL.revokeObjectURL(url);
-    } else {
-      // For DOC/DOCX, we need to use the API
-      downloadAsDoc(format);
-    }
-  };
-
-  const downloadAsDoc = async (format: 'doc' | 'docx') => {
+  // Download handler - industry-standard DOCX
+  const downloadScreenplay = async () => {
     try {
       const response = await authFetch('/api/screenplay/download', {
         method: 'POST',
@@ -578,7 +670,7 @@ export default function ScreenplayCreator({ onScreenplayCreated, onClose }: Scre
         body: JSON.stringify({ 
           screenplay, 
           title: screenplayTitle,
-          format 
+          format: 'docx' 
         }),
       });
       
@@ -588,11 +680,11 @@ export default function ScreenplayCreator({ onScreenplayCreated, onClose }: Scre
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `${screenplayTitle.replace(/[^a-zA-Z0-9]/g, '_') || 'screenplay'}.${format}`;
+      a.download = `${screenplayTitle.replace(/[^a-zA-Z0-9]/g, '_') || 'screenplay'}.docx`;
       a.click();
       URL.revokeObjectURL(url);
     } catch (err) {
-      setError('Failed to download file');
+      setError('Failed to download screenplay');
     }
   };
 
@@ -613,8 +705,14 @@ export default function ScreenplayCreator({ onScreenplayCreated, onClose }: Scre
     setError('');
   };
 
+  const nextEpisodeNumber = continueFrom ? continueFrom.previousEpisodes.length + 1 : 1;
+
   const goBackInConceptFlow = () => {
     if (conceptStep === 'tropes') {
+      if (continueFrom) {
+        onClose();
+        return;
+      }
       setConceptStep('genre');
       setStoryTropes([]);
       setSelectedTrope(null);
@@ -655,14 +753,11 @@ export default function ScreenplayCreator({ onScreenplayCreated, onClose }: Scre
   /* ── Download bar (reused in complete & convert-complete) ── */
   const DownloadBar = ({ accentColor = 'amber' }: { accentColor?: 'amber' | 'emerald' }) => (
     <div className="flex items-center gap-2">
-      <span className={`text-${accentColor}-400 text-sm font-medium flex items-center gap-1.5`}>
-        <Download className="w-4 h-4" /> Download:
-      </span>
-      {(['txt', 'doc', 'docx'] as const).map(fmt => (
-        <button key={fmt} onClick={() => downloadScreenplay(fmt)}
-          className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-600 hover:border-slate-500 rounded-lg text-white text-xs font-medium transition-colors uppercase"
-        >{fmt}</button>
-      ))}
+      <button onClick={downloadScreenplay}
+        className={`flex items-center gap-1.5 px-4 py-1.5 bg-slate-800 hover:bg-slate-700 border border-${accentColor}-500/40 hover:border-${accentColor}-400/60 rounded-lg text-white text-xs font-medium transition-colors`}
+      >
+        <Download className="w-4 h-4" /> Download DOCX
+      </button>
     </div>
   );
 
@@ -835,10 +930,28 @@ export default function ScreenplayCreator({ onScreenplayCreated, onClose }: Scre
                 <div className="flex items-center gap-4 shrink-0">
                   <button onClick={goBackInConceptFlow}
                     className="flex items-center gap-1.5 text-slate-400 hover:text-white transition-colors text-sm">
-                    <ChevronRight className="w-3.5 h-3.5 rotate-180" /> Back
+                    <ChevronRight className="w-3.5 h-3.5 rotate-180" /> {continueFrom ? 'Cancel' : 'Back'}
                   </button>
                   <div className="flex-1"><StepProgressBar current={1} /></div>
                 </div>
+
+                {continueFrom && (
+                  <div className="bg-cyan-500/10 border border-cyan-500/30 rounded-lg px-3 py-2 shrink-0">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Layers className="w-4 h-4 text-cyan-400 shrink-0" />
+                        <div>
+                          <p className="text-cyan-400 font-medium text-xs">Series Continuation — Episode {nextEpisodeNumber}</p>
+                          <p className="text-slate-400 text-[10px]">{continueFrom.seriesTitle} · {continueFrom.genre}</p>
+                        </div>
+                      </div>
+                      <button onClick={() => generateContinuation()} disabled={loading}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/40 rounded-lg text-cyan-300 text-xs font-medium transition-colors">
+                        <Zap className="w-3.5 h-3.5" /> Generate Directly
+                      </button>
+                    </div>
+                  </div>
+                )}
 
                 <div className="flex items-center justify-between shrink-0">
                   <div>
@@ -886,10 +999,18 @@ export default function ScreenplayCreator({ onScreenplayCreated, onClose }: Scre
                   </div>
                 )}
 
-                <button onClick={() => { setConceptStep('ideas'); generateStoryIdeas(); }} disabled={!selectedTrope || loading}
-                  className="w-full py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 disabled:from-slate-600 disabled:to-slate-700 text-slate-900 disabled:text-slate-500 font-semibold rounded-xl transition-all flex items-center justify-center gap-2 text-sm shrink-0">
-                  <Sparkles className="w-4 h-4" /> Generate Story Ideas from Trope
-                </button>
+                <div className="flex gap-2 shrink-0">
+                  {continueFrom && selectedTrope && (
+                    <button onClick={() => generateContinuation()} disabled={loading}
+                      className="flex-1 py-2.5 bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-400 hover:to-cyan-500 disabled:from-slate-600 disabled:to-slate-700 text-slate-900 disabled:text-slate-500 font-semibold rounded-xl transition-all flex items-center justify-center gap-2 text-sm">
+                      <PenTool className="w-4 h-4" /> Generate Episode {nextEpisodeNumber}
+                    </button>
+                  )}
+                  <button onClick={() => { setConceptStep('ideas'); generateStoryIdeas(); }} disabled={!selectedTrope || loading}
+                    className={`${continueFrom && selectedTrope ? 'flex-1' : 'w-full'} py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 disabled:from-slate-600 disabled:to-slate-700 text-slate-900 disabled:text-slate-500 font-semibold rounded-xl transition-all flex items-center justify-center gap-2 text-sm`}>
+                    <Sparkles className="w-4 h-4" /> {continueFrom ? 'Refine with Ideas' : 'Generate Story Ideas from Trope'}
+                  </button>
+                </div>
               </motion.div>
             )}
 
@@ -957,11 +1078,19 @@ export default function ScreenplayCreator({ onScreenplayCreated, onClose }: Scre
                   </div>
                 )}
 
-                <button onClick={() => { setConceptStep('concepts'); generateConcepts(); }}
-                  disabled={(useCustomIdea ? !customIdea : !selectedIdea) || loading}
-                  className="w-full py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 disabled:from-slate-600 disabled:to-slate-700 text-slate-900 disabled:text-slate-500 font-semibold rounded-xl transition-all flex items-center justify-center gap-2 text-sm shrink-0">
-                  <BookOpen className="w-4 h-4" /> Generate Story Concepts
-                </button>
+                <div className="flex gap-2 shrink-0">
+                  {continueFrom && (useCustomIdea ? customIdea : selectedIdea) && (
+                    <button onClick={() => generateContinuation()} disabled={loading}
+                      className="flex-1 py-2.5 bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-400 hover:to-cyan-500 disabled:from-slate-600 disabled:to-slate-700 text-slate-900 disabled:text-slate-500 font-semibold rounded-xl transition-all flex items-center justify-center gap-2 text-sm">
+                      <PenTool className="w-4 h-4" /> Generate Episode {nextEpisodeNumber}
+                    </button>
+                  )}
+                  <button onClick={() => { setConceptStep('concepts'); generateConcepts(); }}
+                    disabled={(useCustomIdea ? !customIdea : !selectedIdea) || loading}
+                    className={`${continueFrom && (useCustomIdea ? customIdea : selectedIdea) ? 'flex-1' : 'w-full'} py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 disabled:from-slate-600 disabled:to-slate-700 text-slate-900 disabled:text-slate-500 font-semibold rounded-xl transition-all flex items-center justify-center gap-2 text-sm`}>
+                    <BookOpen className="w-4 h-4" /> {continueFrom ? 'Refine with Concepts' : 'Generate Story Concepts'}
+                  </button>
+                </div>
               </motion.div>
             )}
 
@@ -1016,9 +1145,9 @@ export default function ScreenplayCreator({ onScreenplayCreated, onClose }: Scre
 
                 <RuntimeControl keyPrefix="concept" />
 
-                <button onClick={handleConceptSubmit} disabled={!selectedConcept || loading}
+                <button onClick={handleConceptSubmit} disabled={continueFrom ? loading : (!selectedConcept || loading)}
                   className="w-full py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 disabled:from-slate-600 disabled:to-slate-700 text-slate-900 disabled:text-slate-500 font-semibold rounded-xl transition-all flex items-center justify-center gap-2 text-sm shrink-0">
-                  <PenTool className="w-4 h-4" /> Generate Screenplay
+                  <PenTool className="w-4 h-4" /> {continueFrom ? `Generate Episode ${nextEpisodeNumber}` : 'Generate Screenplay'}
                 </button>
               </motion.div>
             )}

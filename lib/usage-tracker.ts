@@ -18,7 +18,10 @@ export type EventType =
   | 'image_generate'
   | 'image_grid_detect'
   | 'video_generate'
-  | 'auto_select';
+  | 'auto_select'
+  | 'novel_generate'
+  | 'audio_drama_generate'
+  | 'screenplay_continue';
 
 export type ApiType = 'llm' | 'imagen' | 'video';
 export type Provider = 'gemini' | 'openai' | 'abacus';

@@ -8,9 +8,9 @@ import {
   Palette, Frame, Sun, Camera, Sparkles, FileText, Copy, Check, 
   Trash2, Film, Aperture, Image as ImageIcon, Save, History,
   FolderOpen, Plus, Download, Loader2, Clapperboard, Upload,
-  LayoutGrid, Users, MapPin, ChevronDown, X, FolderPlus, Edit3, Grid3X3, Mic, RefreshCw,
+  LayoutGrid, Users, MapPin, ChevronDown, X, FolderPlus, Edit3, Grid3X3, BookOpen, Headphones, RefreshCw,
   LogOut, Settings, User, Star, AtSign, Maximize2, ZoomIn, ChevronLeft, ChevronRight, Heart,
-  MoreVertical, FolderInput, AlertTriangle
+  MoreVertical, FolderInput, AlertTriangle, Layers
 } from 'lucide-react';
 import { SectionCard } from './section-card';
 import { SelectionButton } from './selection-button';
@@ -34,7 +34,7 @@ import {
 import { authFetch } from '@/lib/utils';
 import {
   Project, ProjectFolder, Screenplay, Storyboard,
-  CharacterPrompt, EnvironmentPrompt, StoryboardBlock, SelectionState, DialogueLine
+  CharacterPrompt, EnvironmentPrompt, StoryboardBlock, SelectionState
 } from '@/lib/types';
 
 type ModalType = 'imageType' | 'shotType' | 'lighting' | 'camera' | 'focalLength' | 'lensType' | 'filmStock' | 'photographer' | 'movie' | 'filter' | null;
@@ -149,12 +149,29 @@ export function PromptBuilder() {
   } | null>(null);
   const [characterPrompts, setCharacterPrompts] = useState<CharacterPrompt[]>([]);
   const [environmentPrompts, setEnvironmentPrompts] = useState<EnvironmentPrompt[]>([]);
-  const [dialogueLines, setDialogueLines] = useState<DialogueLine[]>([]);
-  const [downloadingVO, setDownloadingVO] = useState<'docx' | 'csv' | null>(null);
+  const [novelContent, setNovelContent] = useState<string>('');
+  const [generatingNovel, setGeneratingNovel] = useState(false);
+  const [novelProgress, setNovelProgress] = useState<string>('');
+  const [audioDramaContent, setAudioDramaContent] = useState<string>('');
+  const [generatingAudioDrama, setGeneratingAudioDrama] = useState(false);
+  const [audioDramaProgress, setAudioDramaProgress] = useState<string>('');
   const [storyboard, setStoryboard] = useState<{
     blocks: StoryboardBlock[];
     shotlist: Record<string, Array<{ blockNumber: number; shotType: string; action: string; prompt: string }>>;
     summary?: { totalBlocks: number; estimatedRuntime: number; uniqueLocations: number; locations: string[] };
+  } | null>(null);
+
+  // Series / Episode Continuation State
+  const [episodeHistory, setEpisodeHistory] = useState<Array<{ title: string; content: string; episodeNumber: number; characters: Array<{ name: string; description: string }>; environments: Array<{ name: string; description: string }> }>>([]);
+  const [currentEpisodeNumber, setCurrentEpisodeNumber] = useState(1);
+  const [seriesGenre, setSeriesGenre] = useState<string>('');
+  const [seriesTitle, setSeriesTitle] = useState<string>('');
+  const [continueFromData, setContinueFromData] = useState<{
+    previousEpisodes: Array<{ title: string; content: string; episodeNumber: number }>;
+    characters: Array<{ name: string; description: string }>;
+    environments: Array<{ name: string; description: string }>;
+    genre: string;
+    seriesTitle: string;
   } | null>(null);
   const [generatingPrompts, setGeneratingPrompts] = useState(false);
   const [generatingStoryboard, setGeneratingStoryboard] = useState(false);
@@ -205,74 +222,7 @@ export function PromptBuilder() {
   const [projectActionMenuId, setProjectActionMenuId] = useState<string | null>(null);
   const [folderActionMenuId, setFolderActionMenuId] = useState<string | null>(null);
 
-  // Parse dialogue lines from screenplay content (Fountain/standard screenplay format)
-  // Recognises CHARACTER (in ALL CAPS) followed by optional (parenthetical) then dialogue lines.
-  useEffect(() => {
-    if (!screenplay?.content) return;
-    if (dialogueLines.length > 0) return; // already populated (e.g. from analyzer)
-    try {
-      const lines = screenplay.content.split('\n');
-      const parsed: DialogueLine[] = [];
-      let i = 0;
-      const isHeading = (s: string) => /^(INT\.|EXT\.|FADE IN|FADE OUT|CUT TO|TITLE:|COLD OPEN|TEASER|ACT\s+\w|SCENE\s+\d)/i.test(s);
-      const isCharacterLine = (s: string) => {
-        if (!s) return false;
-        if (isHeading(s)) return false;
-        // ALL CAPS line, possibly with (V.O.) (O.S.) (CONT'D) etc, max ~40 chars
-        if (s.length > 40) return false;
-        if (!/[A-Z]/.test(s)) return false;
-        // Must be mostly uppercase letters / spaces / parens / apostrophes / dots
-        if (!/^[A-Z0-9 .,'#\-()/]+$/.test(s)) return false;
-        // Need at least 2 uppercase letters
-        const letters = s.replace(/[^A-Za-z]/g, '');
-        if (letters.length < 2) return false;
-        if (letters !== letters.toUpperCase()) return false;
-        return true;
-      };
-      while (i < lines.length) {
-        const raw = lines[i];
-        const trimmed = raw.trim();
-        if (isCharacterLine(trimmed)) {
-          // Extract base name (strip parentheticals like (V.O.))
-          const name = trimmed.replace(/\s*\([^)]*\)\s*/g, '').trim();
-          let delivery = '';
-          let dialogue = '';
-          i++;
-          // Optional parenthetical line(s) for delivery
-          while (i < lines.length && /^\s*\(.+\)\s*$/.test(lines[i])) {
-            const p = lines[i].trim().replace(/^\(|\)$/g, '').trim();
-            delivery = delivery ? `${delivery}, ${p}` : p;
-            i++;
-          }
-          // Collect dialogue lines until blank line
-          while (i < lines.length && lines[i].trim() !== '') {
-            // Stop if next line is another character cue
-            if (isCharacterLine(lines[i].trim())) break;
-            // Inline parenthetical within dialogue → treat as delivery hint
-            const dl = lines[i].trim();
-            const inlinePara = dl.match(/^\((.+)\)$/);
-            if (inlinePara) {
-              delivery = delivery ? `${delivery}, ${inlinePara[1]}` : inlinePara[1];
-            } else {
-              dialogue = dialogue ? `${dialogue} ${dl}` : dl;
-            }
-            i++;
-          }
-          if (name && dialogue) {
-            parsed.push({ character: name, dialogue, delivery: delivery || 'Natural delivery' });
-          }
-          continue;
-        }
-        i++;
-      }
-      if (parsed.length > 0) {
-        setDialogueLines(parsed);
-      }
-    } catch (err) {
-      console.error('Failed to parse dialogue lines from screenplay:', err);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [screenplay?.content]);
+
 
   // Reset session - clears all state for a fresh start
   const resetSession = useCallback(() => {
@@ -296,7 +246,12 @@ export function PromptBuilder() {
     setScreenplay(null);
     setCharacterPrompts([]);
     setEnvironmentPrompts([]);
-    setDialogueLines([]);
+    setNovelContent('');
+    setGeneratingNovel(false);
+    setNovelProgress('');
+    setAudioDramaContent('');
+    setGeneratingAudioDrama(false);
+    setAudioDramaProgress('');
     setStoryboard(null);
     setCurrentProject(null);
     setEditedPrompt('');
@@ -305,6 +260,12 @@ export function PromptBuilder() {
     setImageGenError(null);
     setGalleryImages([]);
     setPrimaryImages(new Map());
+    // Reset series state
+    setEpisodeHistory([]);
+    setCurrentEpisodeNumber(1);
+    setSeriesGenre('');
+    setSeriesTitle('');
+    setContinueFromData(null);
   }, []);
 
   // Load folders and projects on mount
@@ -765,69 +726,216 @@ export function PromptBuilder() {
     downloadAsDoc(content, 'character-environment-prompts.doc');
   };
 
-  const downloadScreenplay = () => {
+  const downloadScreenplay = async () => {
     if (!screenplay) return;
-    let content = `${screenplay.title.toUpperCase()}\n`;
-    content += `${'='.repeat(screenplay.title.length)}\n\n`;
-    content += `Title: ${screenplay.title}\n`;
-    content += `Runtime: ${screenplay.runtime} minutes\n`;
-    content += `Source: ${screenplay.sourceType === 'youtube' ? 'YouTube Testimonial' : 'Story Concept'}\n`;
-    content += `\n${'='.repeat(50)}\n\n`;
-    content += screenplay.content;
-    downloadAsDoc(content, `${screenplay.title.replace(/[^a-zA-Z0-9]/g, '_')}_screenplay.doc`);
+    try {
+      const response = await authFetch('/api/screenplay/download', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          screenplay: screenplay.content,
+          title: screenplay.title,
+          format: 'docx'
+        }),
+      });
+      if (!response.ok) throw new Error('Download failed');
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${screenplay.title.replace(/[^a-zA-Z0-9]/g, '_')}_screenplay.docx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Failed to download screenplay:', err);
+    }
   };
 
-  const downloadVoiceOver = async (format: 'docx' | 'csv') => {
-    if (dialogueLines.length === 0) return;
-    
-    setDownloadingVO(format);
+  const generateNovel = async () => {
+    if (!screenplay) return;
+    setGeneratingNovel(true);
+    setNovelContent('');
+    setNovelProgress('Crafting your literary novel...');
+
     try {
-      if (format === 'docx') {
-        const response = await authFetch('/api/screenplay/voiceover', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            dialogueLines,
-            title: screenplay?.title || 'Screenplay',
-          }),
-        });
+      const response = await authFetch('/api/screenplay/novel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          screenplay: screenplay.content,
+          title: screenplay.title,
+          runtime: screenplay.runtime,
+          characters: screenplay.characters,
+          environments: screenplay.environments,
+        }),
+      });
 
-        if (!response.ok) throw new Error('Failed to download voice-over script');
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Novel generation failed');
+      }
 
-        const blob = await response.blob();
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `${(screenplay?.title || 'Screenplay').replace(/[^a-zA-Z0-9\s-]/g, '')}_VoiceOver.docx`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-      } else {
-        // Generate CSV
-        const csvContent = [
-          ['Character', 'Dialogue', 'Delivery Direction'].join(','),
-          ...dialogueLines.map(line => [
-            `"${line.character.replace(/"/g, '""')}"`,
-            `"${line.dialogue.replace(/"/g, '""')}"`,
-            `"${line.delivery.replace(/"/g, '""')}"`
-          ].join(','))
-        ].join('\n');
-        
-        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `${(screenplay?.title || 'Screenplay').replace(/[^a-zA-Z0-9\s-]/g, '')}_VoiceOver.csv`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+      let partialRead = '';
+      let fullContent = '';
+
+      while (reader) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        partialRead += decoder.decode(value, { stream: true });
+        const lines = partialRead.split('\n');
+        partialRead = lines.pop() || '';
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              if (data.status === 'streaming' && data.content) {
+                fullContent += data.content;
+                setNovelContent(fullContent);
+                const wordCount = fullContent.split(/\s+/).length;
+                setNovelProgress(`Writing novel... ${wordCount.toLocaleString()} words`);
+              } else if (data.status === 'completed') {
+                setNovelContent(data.novel || fullContent);
+                const finalWords = (data.novel || fullContent).split(/\s+/).length;
+                setNovelProgress(`Novel complete — ${finalWords.toLocaleString()} words`);
+              } else if (data.status === 'error') {
+                throw new Error(data.message || 'Stream error');
+              }
+            } catch (e) {
+              // Skip invalid JSON / heartbeats
+            }
+          }
+        }
       }
     } catch (err) {
-      console.error('Failed to download voice-over script:', err);
+      console.error('Failed to generate novel:', err);
+      setNovelProgress('Failed to generate novel. Please try again.');
     } finally {
-      setDownloadingVO(null);
+      setGeneratingNovel(false);
+    }
+  };
+
+  const downloadNovel = async () => {
+    if (!novelContent || !screenplay) return;
+    try {
+      const response = await authFetch('/api/screenplay/novel-download', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          novel: novelContent,
+          title: screenplay.title,
+        }),
+      });
+      if (!response.ok) throw new Error('Download failed');
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${screenplay.title.replace(/[^a-zA-Z0-9\s-]/g, '')}_Novel.docx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Failed to download novel:', err);
+    }
+  };
+
+  const generateAudioDrama = async () => {
+    if (!screenplay) return;
+    setGeneratingAudioDrama(true);
+    setAudioDramaContent('');
+    setAudioDramaProgress('Crafting your audio drama...');
+
+    try {
+      const response = await authFetch('/api/screenplay/audio-drama', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          screenplay: screenplay.content,
+          title: screenplay.title,
+          runtime: screenplay.runtime,
+          characters: screenplay.characters,
+          environments: screenplay.environments,
+        }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Audio drama generation failed');
+      }
+
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+      let partialRead = '';
+      let fullContent = '';
+
+      while (reader) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        partialRead += decoder.decode(value, { stream: true });
+        const lines = partialRead.split('\n');
+        partialRead = lines.pop() || '';
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              if (data.status === 'streaming' && data.content) {
+                fullContent += data.content;
+                setAudioDramaContent(fullContent);
+                const wordCount = fullContent.split(/\s+/).length;
+                setAudioDramaProgress(`Writing audio drama... ${wordCount.toLocaleString()} words`);
+              } else if (data.status === 'completed') {
+                setAudioDramaContent(data.audioDrama || fullContent);
+                const finalWords = (data.audioDrama || fullContent).split(/\s+/).length;
+                setAudioDramaProgress(`Audio drama complete — ${finalWords.toLocaleString()} words`);
+              } else if (data.status === 'error') {
+                throw new Error(data.message || 'Stream error');
+              }
+            } catch (e) {
+              // Skip invalid JSON / heartbeats
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Failed to generate audio drama:', err);
+      setAudioDramaProgress('Failed to generate audio drama. Please try again.');
+    } finally {
+      setGeneratingAudioDrama(false);
+    }
+  };
+
+  const downloadAudioDrama = async () => {
+    if (!audioDramaContent || !screenplay) return;
+    try {
+      const response = await authFetch('/api/screenplay/audio-drama-download', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          audioDrama: audioDramaContent,
+          title: screenplay.title,
+        }),
+      });
+      if (!response.ok) throw new Error('Download failed');
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${screenplay.title.replace(/[^a-zA-Z0-9\s-]/g, '')}_Audio_Drama.docx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Failed to download audio drama:', err);
     }
   };
 
@@ -1971,25 +2079,71 @@ export function PromptBuilder() {
                 <span className="flex items-center gap-1"><Clapperboard size={16} /> Screenplay</span>
                 <span className="text-slate-600">•</span>
                 <span>{screenplay.runtime} min</span>
+                {episodeHistory.length > 0 && (
+                  <>
+                    <span className="text-slate-600">•</span>
+                    <span className="flex items-center gap-1 text-cyan-400">
+                      <Layers size={14} /> Episode {currentEpisodeNumber}
+                    </span>
+                  </>
+                )}
               </div>
+              {episodeHistory.length > 0 && seriesTitle && (
+                <p className="mt-1 text-slate-500 text-xs">Series: {seriesTitle}</p>
+              )}
             </div>
 
             {/* Screenplay Info */}
             <div className="bg-slate-800 rounded-xl border border-purple-500/30 p-6">
               
-              {/* Download Screenplay Button - First action available */}
+              {/* Download Screenplay & Next Episode Buttons */}
               <div className="bg-slate-900/50 rounded-lg p-4 mb-6">
                 <div className="flex items-center justify-between">
                   <div>
                     <h4 className="text-white font-medium">Screenplay Ready</h4>
                     <p className="text-slate-400 text-sm">Download the screenplay before proceeding to prompts.</p>
                   </div>
-                  <button
-                    onClick={downloadScreenplay}
-                    className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-400 hover:to-purple-500 text-white font-medium rounded-lg transition-all"
-                  >
-                    <Download size={18} /> Download Screenplay
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={downloadScreenplay}
+                      className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-400 hover:to-purple-500 text-white font-medium rounded-lg transition-all"
+                    >
+                      <Download size={18} /> Download Screenplay
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (!screenplay) return;
+                        // Archive current episode to history
+                        setEpisodeHistory(prev => [...prev, {
+                          title: screenplay.title,
+                          content: screenplay.content,
+                          episodeNumber: currentEpisodeNumber,
+                          characters: screenplay.characters,
+                          environments: screenplay.environments,
+                        }]);
+                        // Build continueFrom data
+                        const allEpisodes = [...episodeHistory, {
+                          title: screenplay.title,
+                          content: screenplay.content,
+                          episodeNumber: currentEpisodeNumber,
+                          characters: screenplay.characters,
+                          environments: screenplay.environments,
+                        }];
+                        setContinueFromData({
+                          previousEpisodes: allEpisodes.map(ep => ({ title: ep.title, content: ep.content, episodeNumber: ep.episodeNumber })),
+                          characters: screenplay.characters,
+                          environments: screenplay.environments,
+                          genre: seriesGenre,
+                          seriesTitle: seriesTitle || screenplay.title,
+                        });
+                        setShowScreenplayCreator(true);
+                      }}
+                      className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-cyan-500 to-teal-500 hover:from-cyan-400 hover:to-teal-400 text-slate-900 font-medium rounded-lg transition-all"
+                      title="Continue the story as a new episode"
+                    >
+                      <Layers size={18} /> Next Episode
+                    </button>
+                  </div>
                 </div>
               </div>
               
@@ -2028,68 +2182,105 @@ export function PromptBuilder() {
               <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-4 mb-6">
                 <h4 className="text-amber-400 font-medium mb-2">Post-Upload Workflow</h4>
                 <ol className="text-slate-300 text-sm space-y-1 list-decimal list-inside">
-                  <li>Download Voice-Over Prompts for dialogue recording</li>
+                  <li>Generate Literary Novel adaptation from screenplay</li>
+                  <li>Generate Audio Drama Novel for voice performance</li>
                   <li>Generate Character & Environment image prompts</li>
                   <li>Create Storyboard & Shotlist with visual prompts</li>
                 </ol>
               </div>
 
-              {/* Step 1: Voice-Over Prompts */}
+              {/* Step 1: Literary Novel */}
               <div className="border-t border-slate-700 pt-6">
                 <h4 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
                   <span className="w-7 h-7 rounded-full bg-amber-500/20 flex items-center justify-center text-amber-400 text-sm font-bold">1</span>
-                  Voice-Over Prompts
+                  Literary Novel
                 </h4>
-                <p className="text-slate-400 text-sm mb-4">Download dialogue lines with delivery directions for voice-over recording.</p>
+                <p className="text-slate-400 text-sm mb-4">Generate a Pulitzer Prize-worthy literary novel adaptation — exploring internal monologues, rich prose, and deep emotional landscapes far beyond the screenplay.</p>
                 <div className="flex flex-wrap gap-3 mb-4">
                   <button
-                    onClick={() => downloadVoiceOver('docx')}
-                    disabled={downloadingVO !== null || dialogueLines.length === 0}
+                    onClick={generateNovel}
+                    disabled={generatingNovel || !screenplay}
                     className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-pink-500 to-pink-600 hover:from-pink-400 hover:to-pink-500 disabled:from-slate-600 disabled:to-slate-700 text-white font-medium rounded-lg transition-all"
                   >
-                    {downloadingVO === 'docx' ? (
-                      <><Loader2 size={18} className="animate-spin" /> Downloading...</>
+                    {generatingNovel ? (
+                      <><Loader2 size={18} className="animate-spin" /> {novelProgress || 'Generating...'}</>
                     ) : (
-                      <><Mic size={18} /> Download DOCX</>
+                      <><BookOpen size={18} /> {novelContent ? 'Regenerate Novel' : 'Generate Novel'}</>
                     )}
                   </button>
-                  <button
-                    onClick={() => downloadVoiceOver('csv')}
-                    disabled={downloadingVO !== null || dialogueLines.length === 0}
-                    className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 disabled:bg-slate-800 text-white disabled:text-slate-500 font-medium rounded-lg transition-all"
-                  >
-                    {downloadingVO === 'csv' ? (
-                      <><Loader2 size={18} className="animate-spin" /> Downloading...</>
-                    ) : (
-                      <><Download size={18} /> Download CSV</>
-                    )}
-                  </button>
+                  {novelContent && (
+                    <button
+                      onClick={downloadNovel}
+                      className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white font-medium rounded-lg transition-all"
+                    >
+                      <Download size={18} /> Download Novel DOCX
+                    </button>
+                  )}
                 </div>
-                {dialogueLines.length > 0 && (
+                {novelContent && (
                   <div className="bg-slate-900/50 rounded-lg p-4">
-                    <p className="text-slate-400 text-sm mb-2">{dialogueLines.length} dialogue lines extracted</p>
-                    <div className="space-y-2 max-h-32 overflow-y-auto">
-                      {dialogueLines.slice(0, 3).map((line, i) => (
-                        <div key={i} className="text-xs">
-                          <span className="text-pink-400 font-medium">{line.character}:</span>
-                          <span className="text-slate-300 ml-2">{line.dialogue.substring(0, 60)}...</span>
-                        </div>
-                      ))}
-                      {dialogueLines.length > 3 && (
-                        <p className="text-slate-500 text-xs">+{dialogueLines.length - 3} more lines...</p>
-                      )}
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-slate-400 text-sm">{novelContent.split(/\s+/).length.toLocaleString()} words generated</p>
+                      <span className="text-emerald-400 text-xs font-medium bg-emerald-400/10 px-2 py-1 rounded">Complete</span>
+                    </div>
+                    <div className="text-slate-300 text-sm max-h-48 overflow-y-auto leading-relaxed prose-invert">
+                      {novelContent.substring(0, 800)}{novelContent.length > 800 && '...'}
                     </div>
                   </div>
                 )}
-                {dialogueLines.length === 0 && (
-                  <p className="text-slate-500 text-sm italic">No dialogue lines available. Upload a screenplay with dialogue.</p>
+                {!novelContent && !generatingNovel && (
+                  <p className="text-slate-500 text-sm italic">{screenplay ? 'Click "Generate Novel" to create a literary adaptation of your screenplay.' : 'Upload a screenplay first to generate a novel adaptation.'}</p>
                 )}
               </div>
 
-              {/* Step 2: Character & Environment Prompts */}
+              {/* Step 2: Audio Drama Novel */}
               <div className="border-t border-slate-700 pt-6 mt-6">
                 <h4 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
                   <span className="w-7 h-7 rounded-full bg-amber-500/20 flex items-center justify-center text-amber-400 text-sm font-bold">2</span>
+                  Audio Drama Novel
+                </h4>
+                <p className="text-slate-400 text-sm mb-4">Generate an Audio Drama — a hybrid screenplay/novel where a Narrator becomes the listener's eyes, describing every visual element while actors perform their roles. Ready for voice performance and sound design.</p>
+                <div className="flex flex-wrap gap-3 mb-4">
+                  <button
+                    onClick={generateAudioDrama}
+                    disabled={generatingAudioDrama || !screenplay}
+                    className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-violet-500 to-violet-600 hover:from-violet-400 hover:to-violet-500 disabled:from-slate-600 disabled:to-slate-700 text-white font-medium rounded-lg transition-all"
+                  >
+                    {generatingAudioDrama ? (
+                      <><Loader2 size={18} className="animate-spin" /> {audioDramaProgress || 'Generating...'}</>
+                    ) : (
+                      <><Headphones size={18} /> {audioDramaContent ? 'Regenerate Audio Drama' : 'Generate Audio Drama'}</>
+                    )}
+                  </button>
+                  {audioDramaContent && (
+                    <button
+                      onClick={downloadAudioDrama}
+                      className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white font-medium rounded-lg transition-all"
+                    >
+                      <Download size={18} /> Download Audio Drama DOCX
+                    </button>
+                  )}
+                </div>
+                {audioDramaContent && (
+                  <div className="bg-slate-900/50 rounded-lg p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-slate-400 text-sm">{audioDramaContent.split(/\s+/).length.toLocaleString()} words generated</p>
+                      <span className="text-violet-400 text-xs font-medium bg-violet-400/10 px-2 py-1 rounded">Complete</span>
+                    </div>
+                    <div className="text-slate-300 text-sm max-h-48 overflow-y-auto leading-relaxed font-mono whitespace-pre-wrap">
+                      {audioDramaContent.substring(0, 800)}{audioDramaContent.length > 800 && '...'}
+                    </div>
+                  </div>
+                )}
+                {!audioDramaContent && !generatingAudioDrama && (
+                  <p className="text-slate-500 text-sm italic">{screenplay ? 'Click "Generate Audio Drama" to create an audio performance script from your screenplay.' : 'Upload a screenplay first to generate an audio drama.'}</p>
+                )}
+              </div>
+
+              {/* Step 3: Character & Environment Prompts */}
+              <div className="border-t border-slate-700 pt-6 mt-6">
+                <h4 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                  <span className="w-7 h-7 rounded-full bg-amber-500/20 flex items-center justify-center text-amber-400 text-sm font-bold">3</span>
                   Character & Environment Prompts
                 </h4>
                 <p className="text-slate-400 text-sm mb-4">Generate detailed image prompts for all characters and environments based on your Section 1-5 configuration.</p>
@@ -2352,10 +2543,10 @@ export function PromptBuilder() {
                 </div>
               )}
 
-              {/* Step 3: Storyboard & Shotlist */}
+              {/* Step 4: Storyboard & Shotlist */}
               <div className="border-t border-slate-700 pt-6 mt-6">
                 <h4 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-                  <span className="w-7 h-7 rounded-full bg-amber-500/20 flex items-center justify-center text-amber-400 text-sm font-bold">3</span>
+                  <span className="w-7 h-7 rounded-full bg-amber-500/20 flex items-center justify-center text-amber-400 text-sm font-bold">4</span>
                   Storyboard & Shotlist
                 </h4>
                 <p className="text-slate-400 text-sm mb-4">Generate 30-second storyboard blocks with detailed prompts, organized into a shotlist by location.</p>
@@ -2608,6 +2799,34 @@ export function PromptBuilder() {
               const formattedTitle = toTitleCase(data.title || 'Untitled Screenplay');
               setScreenplay({ ...data, title: formattedTitle });
               setShowScreenplayCreator(false);
+
+              // Track genre for series continuation
+              if (data.genre) {
+                setSeriesGenre(data.genre);
+              }
+
+              // If this is a continuation episode
+              if (continueFromData) {
+                setCurrentEpisodeNumber(prev => prev + 1);
+                // Clear episode-specific derived content but keep episode history
+                setNovelContent('');
+                setAudioDramaContent('');
+                setCharacterPrompts([]);
+                setEnvironmentPrompts([]);
+                setStoryboard(null);
+                setGeneratedImages(new Map());
+                setGalleryImages([]);
+                setPrimaryImages(new Map());
+                setEditedPrompt('');
+                setIsPromptManuallyEdited(false);
+                setContinueFromData(null);
+              } else {
+                // First episode — set series title
+                setSeriesTitle(formattedTitle);
+                setCurrentEpisodeNumber(1);
+                setEpisodeHistory([]);
+              }
+
               // Prepopulate project name with story title if no project is loaded
               if (!currentProject && formattedTitle) {
                 setNewProjectName(formattedTitle);
@@ -2617,7 +2836,8 @@ export function PromptBuilder() {
                 triggerAutoSelections(data.content, formattedTitle, data.storyIdea);
               }
             }}
-            onClose={() => setShowScreenplayCreator(false)}
+            onClose={() => { setShowScreenplayCreator(false); setContinueFromData(null); }}
+            continueFrom={continueFromData || undefined}
           />
         )}
       </AnimatePresence>
@@ -2636,10 +2856,7 @@ export function PromptBuilder() {
                 environments: data.environments,
                 sourceType: 'upload',
               });
-              // Store dialogue lines for Voice-Over extraction
-              if (data.dialogueLines) {
-                setDialogueLines(data.dialogueLines);
-              }
+
               // Prepopulate project name with story title if no project is loaded
               if (!currentProject && title) {
                 setNewProjectName(title);

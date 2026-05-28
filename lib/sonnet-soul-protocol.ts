@@ -184,7 +184,9 @@ export type ScreenplayDomain =
   | 'prompts'      // Character/environment image prompt generation
   | 'storyboard'   // Storyboard block generation
   | 'analysis'     // Screenplay analysis
-  | 'convert';     // Document-to-screenplay conversion
+  | 'convert'      // Document-to-screenplay conversion
+  | 'novel'        // Full literary novel generation
+  | 'audio-drama'; // Audio drama novel (hybrid screenplay/novel)
 
 /**
  * Returns the full Sonnet Soul Protocol directive for a given screenplay domain.
@@ -219,6 +221,12 @@ export function getSonnetSoulDirective(domain: ScreenplayDomain): string {
       break;
     case 'convert':
       parts.push(DOMAIN_NARRATIVE, DOMAIN_DIALOGUE, DOMAIN_CHARACTER);
+      break;
+    case 'novel':
+      parts.push(DOMAIN_NARRATIVE, DOMAIN_DIALOGUE, DOMAIN_CHARACTER, DOMAIN_IDEATION);
+      break;
+    case 'audio-drama':
+      parts.push(DOMAIN_NARRATIVE, DOMAIN_DIALOGUE, DOMAIN_CHARACTER, DOMAIN_IDEATION);
       break;
   }
 
