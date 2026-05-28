@@ -292,6 +292,7 @@ For EACH location:
     }
 
     const llm = await getLLMConfig('screenplay');
+    const useStream = llm.supportsStreaming;
     const response = await fetch(llm.baseUrl, {
       method: 'POST',
       headers: {
@@ -304,7 +305,7 @@ For EACH location:
           { role: 'system', content: withSonnetSoul('screenplay', systemPrompt) },
           { role: 'user', content: userPrompt }
         ],
-        stream: true,
+        stream: useStream,
         max_tokens: 12000,
       }),
     });
@@ -317,11 +318,7 @@ For EACH location:
 
     const stream = new ReadableStream({
       async start(controller) {
-        const reader = response.body?.getReader();
-        const decoder = new TextDecoder();
         const encoder = new TextEncoder();
-        let buffer = '';
-        let partialRead = '';
 
         // Keep-alive heartbeat to prevent ERR_HTTP2_PROTOCOL_ERROR
         const heartbeat = setInterval(() => {
@@ -329,39 +326,53 @@ For EACH location:
         }, 15000);
         
         try {
-          while (reader) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            
-            partialRead += decoder.decode(value, { stream: true });
-            const lines = partialRead.split('\n');
-            partialRead = lines.pop() || '';
-            
-            for (const line of lines) {
-              if (line.startsWith('data: ')) {
-                const data = line.slice(6);
-                if (data === '[DONE]') {
-                  const finalData = JSON.stringify({
-                    status: 'completed',
-                    screenplay: buffer
-                  });
-                  controller.enqueue(encoder.encode(`data: ${finalData}\n\n`));
-                  clearInterval(heartbeat);
-                  return;
-                }
-                try {
-                  const parsed = JSON.parse(data);
-                  const content = parsed.choices?.[0]?.delta?.content || '';
-                  buffer += content;
-                  if (content) {
-                    const progressData = JSON.stringify({
-                      status: 'streaming',
-                      content: content
+          if (!useStream) {
+            const data = await response.json();
+            const content = data.choices?.[0]?.message?.content || '';
+            if (content) {
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ status: 'streaming', content })}\n\n`));
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ status: 'completed', screenplay: content })}\n\n`));
+            }
+          } else {
+            const reader = response.body?.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+            let partialRead = '';
+
+            while (reader) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              
+              partialRead += decoder.decode(value, { stream: true });
+              const lines = partialRead.split('\n');
+              partialRead = lines.pop() || '';
+              
+              for (const line of lines) {
+                if (line.startsWith('data: ')) {
+                  const data = line.slice(6);
+                  if (data === '[DONE]') {
+                    const finalData = JSON.stringify({
+                      status: 'completed',
+                      screenplay: buffer
                     });
-                    controller.enqueue(encoder.encode(`data: ${progressData}\n\n`));
+                    controller.enqueue(encoder.encode(`data: ${finalData}\n\n`));
+                    clearInterval(heartbeat);
+                    return;
                   }
-                } catch (e) {
-                  // Skip invalid JSON
+                  try {
+                    const parsed = JSON.parse(data);
+                    const content = parsed.choices?.[0]?.delta?.content || '';
+                    buffer += content;
+                    if (content) {
+                      const progressData = JSON.stringify({
+                        status: 'streaming',
+                        content: content
+                      });
+                      controller.enqueue(encoder.encode(`data: ${progressData}\n\n`));
+                    }
+                  } catch (e) {
+                    // Skip invalid JSON
+                  }
                 }
               }
             }

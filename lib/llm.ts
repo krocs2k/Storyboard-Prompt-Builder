@@ -113,6 +113,19 @@ export interface LLMConfig {
   baseUrl: string;
   model: string;
   provider: ApiProvider;
+  /** false when model+provider combo is known to reject stream:true */
+  supportsStreaming: boolean;
+}
+
+/** Models known to fail with stream:true via the Abacus proxy */
+const NON_STREAMABLE_PATTERNS = [
+  /deepseek.*r1/i,
+  /deepseek.*thinking/i,
+];
+
+function canStream(model: string, provider: ApiProvider): boolean {
+  if (provider !== 'abacus') return true;
+  return !NON_STREAMABLE_PATTERNS.some(rx => rx.test(model));
 }
 
 /** Get the API key for a given provider, or null */
@@ -147,11 +160,13 @@ function purposeToFnKey(purpose: LLMPurpose): string {
 export async function getLLMConfig(purpose: LLMPurpose = 'default'): Promise<LLMConfig> {
   // Priority 1: Custom override env vars
   if (process.env.LLM_API_KEY) {
+    const m = process.env.LLM_MODEL || 'gemini-3-flash-preview';
     return {
       apiKey: process.env.LLM_API_KEY,
       baseUrl: process.env.LLM_API_BASE_URL || 'https://api.openai.com/v1/chat/completions',
-      model: process.env.LLM_MODEL || 'gemini-3-flash-preview',
+      model: m,
       provider: 'gemini',
+      supportsStreaming: canStream(m, 'gemini'),
     };
   }
 
@@ -170,6 +185,7 @@ export async function getLLMConfig(purpose: LLMPurpose = 'default'): Promise<LLM
         baseUrl: PROVIDER_URLS[prov],
         model,
         provider: prov,
+        supportsStreaming: canStream(model, prov),
       };
     }
   }
@@ -184,28 +200,33 @@ export async function getLLMConfig(purpose: LLMPurpose = 'default'): Promise<LLM
       baseUrl: PROVIDER_URLS.abacus,
       model,
       provider: 'abacus',
+      supportsStreaming: canStream(model, 'abacus'),
     };
   }
 
   // Priority 4: Legacy provider preference
   const legacyKey = getKeyForProvider(config, config.legacyProvider);
   if (legacyKey) {
+    const m4 = DEFAULT_MODELS[config.legacyProvider];
     return {
       apiKey: legacyKey,
       baseUrl: PROVIDER_URLS[config.legacyProvider],
-      model: DEFAULT_MODELS[config.legacyProvider],
+      model: m4,
       provider: config.legacyProvider,
+      supportsStreaming: canStream(m4, config.legacyProvider),
     };
   }
 
   // Priority 5: First available provider
   const available = findFirstAvailableProvider(config);
   if (available) {
+    const m5 = DEFAULT_MODELS[available.provider];
     return {
       apiKey: available.key,
       baseUrl: PROVIDER_URLS[available.provider],
-      model: DEFAULT_MODELS[available.provider],
+      model: m5,
       provider: available.provider,
+      supportsStreaming: canStream(m5, available.provider),
     };
   }
 
@@ -226,7 +247,7 @@ export async function callLLM(options: {
     messages: options.messages,
   };
 
-  if (options.stream !== undefined) body.stream = options.stream;
+  if (options.stream !== undefined) body.stream = options.stream && config.supportsStreaming;
   if (options.maxTokens) body.max_tokens = options.maxTokens;
   if (options.responseFormat) body.response_format = options.responseFormat;
 

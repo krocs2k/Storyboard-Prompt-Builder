@@ -129,6 +129,7 @@ export async function POST(request: NextRequest) {
     const shotOptions = buildShotLevelOptions();
 
     const llm = await getLLMConfig();
+    const useStream = llm.supportsStreaming;
     const response = await fetch(llm.baseUrl, {
       method: 'POST',
       headers: {
@@ -275,7 +276,7 @@ Respond with raw JSON only.`
           }
         ],
         response_format: { type: 'json_object' },
-        stream: true,
+        stream: useStream,
         max_tokens: 10000,
       }),
     });
@@ -288,11 +289,7 @@ Respond with raw JSON only.`
 
     const stream = new ReadableStream({
       async start(controller) {
-        const reader = response.body?.getReader();
-        const decoder = new TextDecoder();
         const encoder = new TextEncoder();
-        let buffer = '';
-        let partialRead = '';
 
         // Keep-alive heartbeat to prevent ERR_HTTP2_PROTOCOL_ERROR
         const heartbeat = setInterval(() => {
@@ -300,61 +297,71 @@ Respond with raw JSON only.`
         }, 15000);
         
         let completedSent = false;
-        const finalizeAndSend = () => {
+        const finalizeAndSend = (rawText: string) => {
             clearInterval(heartbeat);
             if (completedSent) return;
             completedSent = true;
             try {
               // Repair & parse — handles truncated LLM output
-              const text = repairJSON(buffer);
+              const text = repairJSON(rawText);
               const prompts = JSON.parse(text);
               const finalData = JSON.stringify({ status: 'completed', prompts });
               controller.enqueue(encoder.encode(`data: ${finalData}\n\n`));
             } catch (e) {
-              console.error('Failed to parse prompts buffer:', buffer.slice(0, 500));
+              console.error('Failed to parse prompts buffer:', rawText.slice(0, 500));
               controller.enqueue(encoder.encode(`data: ${JSON.stringify({ status: 'error', message: 'Failed to parse prompts' })}\n\n`));
             }
           };
 
         try {
-          while (reader) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            
-            partialRead += decoder.decode(value, { stream: true });
-            const lines = partialRead.split('\n');
-            partialRead = lines.pop() || '';
-            
-            for (const line of lines) {
-              if (line.startsWith('data: ')) {
-                const data = line.slice(6);
-                if (data === '[DONE]') {
-                  finalizeAndSend();
-                  return;
-                }
-                try {
-                  const parsed = JSON.parse(data);
-                  const content = parsed.choices?.[0]?.delta?.content || '';
-                  buffer += content;
-                  if (content) {
-                    const progressData = JSON.stringify({
-                      status: 'processing',
-                      message: 'Generating prompts...'
-                    });
-                    controller.enqueue(encoder.encode(`data: ${progressData}\n\n`));
+          if (!useStream) {
+            const data = await response.json();
+            const content = data.choices?.[0]?.message?.content || '';
+            finalizeAndSend(content);
+          } else {
+            const reader = response.body?.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+            let partialRead = '';
+
+            while (reader) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              
+              partialRead += decoder.decode(value, { stream: true });
+              const lines = partialRead.split('\n');
+              partialRead = lines.pop() || '';
+              
+              for (const line of lines) {
+                if (line.startsWith('data: ')) {
+                  const data = line.slice(6);
+                  if (data === '[DONE]') {
+                    finalizeAndSend(buffer);
+                    return;
                   }
-                } catch (e) {
-                  // Skip invalid JSON
+                  try {
+                    const parsed = JSON.parse(data);
+                    const content = parsed.choices?.[0]?.delta?.content || '';
+                    buffer += content;
+                    if (content) {
+                      const progressData = JSON.stringify({
+                        status: 'processing',
+                        message: 'Generating prompts...'
+                      });
+                      controller.enqueue(encoder.encode(`data: ${progressData}\n\n`));
+                    }
+                  } catch (e) {
+                    // Skip invalid JSON
+                  }
                 }
               }
             }
+            // Stream ended without [DONE] — finalize with whatever we accumulated
+            finalizeAndSend(buffer);
           }
-          // Stream ended without [DONE] — finalize with whatever we accumulated
-          finalizeAndSend();
         } catch (error) {
           console.error('Stream error:', error);
-          try { finalizeAndSend(); } catch {}
-          controller.error(error);
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ status: 'error', message: 'Stream processing failed' })}\n\n`));
         } finally {
           clearInterval(heartbeat);
           controller.close();
