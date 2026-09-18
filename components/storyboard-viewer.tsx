@@ -45,6 +45,7 @@ export default function StoryboardViewer({ projectId, blocks, shotlist, projectN
   const [batchProgress, setBatchProgress] = useState<BatchProgress | null>(null);
   const [lightboxBlock, setLightboxBlock] = useState<number | null>(null);
   const [generatingPdf, setGeneratingPdf] = useState(false);
+  const [pdfShareLink, setPdfShareLink] = useState<string | null>(null);
   const [aspectRatio, setAspectRatio] = useState<string>('16:9');
   const [toastMsg, setToastMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [copiedPromptId, setCopiedPromptId] = useState<string | null>(null);
@@ -362,6 +363,37 @@ export default function StoryboardViewer({ projectId, blocks, shotlist, projectN
 
       pdf.save(`${(data.title || data.projectName || 'storyboard').replace(/[^a-zA-Z0-9]/g, '_')}_storyboard.pdf`);
       showToast('PDF downloaded!');
+
+      // Persist the generated PDF to cloud storage for a permanent shareable link.
+      try {
+        const pdfBlob: Blob = pdf.output('blob');
+        const dataBase64: string = await new Promise((resolve, reject) => {
+          const fr = new FileReader();
+          fr.onerror = () => reject(fr.error);
+          fr.onload = () => resolve(String(fr.result));
+          fr.readAsDataURL(pdfBlob);
+        });
+        const saveRes = await authFetch('/api/project-documents', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            projectId,
+            docType: 'storyboard-pdf',
+            format: 'pdf',
+            title: data.title || data.projectName || 'storyboard',
+            dataBase64,
+          }),
+        });
+        if (saveRes.ok) {
+          const saved = await saveRes.json().catch(() => ({}));
+          if (saved?.cdnUrl) {
+            setPdfShareLink(saved.cdnUrl);
+            showToast('Permanent shareable link saved');
+          }
+        }
+      } catch (persistErr) {
+        console.warn('Storyboard PDF persistence failed:', persistErr);
+      }
     } catch (err) {
       console.error('PDF generation failed:', err);
       showToast('Failed to generate PDF', 'error');
@@ -510,6 +542,29 @@ export default function StoryboardViewer({ projectId, blocks, shotlist, projectN
             )}
           </div>
         </div>
+
+        {/* Permanent shareable link for the saved storyboard PDF */}
+        {pdfShareLink && (
+          <div className="mt-3 flex items-center gap-2 text-xs">
+            <span className="text-emerald-400 font-medium whitespace-nowrap">Shareable PDF link:</span>
+            <a
+              href={pdfShareLink}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-cyan-400 hover:text-cyan-300 truncate underline"
+              title={pdfShareLink}
+            >
+              {pdfShareLink}
+            </a>
+            <button
+              type="button"
+              onClick={() => { navigator.clipboard?.writeText(pdfShareLink); }}
+              className="px-2 py-1 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded whitespace-nowrap"
+            >
+              Copy
+            </button>
+          </div>
+        )}
 
         {/* Batch Progress */}
         {batchRendering && batchProgress && (

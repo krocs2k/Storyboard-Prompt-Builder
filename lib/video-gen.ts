@@ -12,6 +12,7 @@ import { GoogleGenAI } from '@google/genai';
 import { getProviderKeys, type ApiProvider } from '@/lib/llm';
 import { trackUsage } from '@/lib/usage-tracker';
 import { PROVIDERS, getProviderModels } from '@/lib/data/provider-models';
+import { isBunnyStorageReady, uploadToBunny } from '@/lib/bunny-storage';
 import * as fs from 'fs';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
@@ -168,35 +169,48 @@ async function persistVideo(videoUrl: string): Promise<string> {
   const fileName = `${videoId}.mp4`;
   const filePath = path.join(VIDEO_DIR, fileName);
 
+  // Obtain the raw bytes from either a base64 data URL or an http(s) URL.
+  let buffer: Buffer | null = null;
   if (videoUrl.startsWith('data:video/')) {
-    // Base64 data URL
     const base64Match = videoUrl.match(/^data:video\/[^;]+;base64,(.+)$/);
-    if (base64Match) {
-      fs.writeFileSync(filePath, Buffer.from(base64Match[1], 'base64'));
-      console.log(`[video-gen] Persisted base64 video to ${filePath} (${fs.statSync(filePath).size} bytes)`);
-      return `/api/director/video-file/${fileName}`;
-    }
-  }
-
-  if (videoUrl.startsWith('http')) {
-    // Download from URL
+    if (base64Match) buffer = Buffer.from(base64Match[1], 'base64');
+  } else if (videoUrl.startsWith('http')) {
     try {
       const res = await fetch(videoUrl);
       if (res.ok) {
-        const buffer = Buffer.from(await res.arrayBuffer());
-        if (buffer.length > 1000) { // Sanity check: at least 1KB
-          fs.writeFileSync(filePath, buffer);
-          console.log(`[video-gen] Persisted remote video to ${filePath} (${buffer.length} bytes)`);
-          return `/api/director/video-file/${fileName}`;
-        }
+        const b = Buffer.from(await res.arrayBuffer());
+        if (b.length > 1000) buffer = b; // Sanity check: at least 1KB
       }
     } catch (e) {
       console.warn(`[video-gen] Failed to download video for persistence:`, e);
     }
   }
 
-  // Can't persist — return original URL
-  return videoUrl;
+  if (!buffer) {
+    // Can't persist — return original URL
+    return videoUrl;
+  }
+
+  // When BunnyCDN is configured, store on the CDN and serve directly from it.
+  try {
+    if (await isBunnyStorageReady()) {
+      const cdnUrl = await uploadToBunny(`videos/${fileName}`, buffer, 'video/mp4');
+      console.log(`[video-gen] Persisted video to BunnyCDN: ${cdnUrl} (${buffer.length} bytes)`);
+      return cdnUrl;
+    }
+  } catch (e) {
+    console.warn(`[video-gen] Bunny video upload failed, falling back to local disk:`, e);
+  }
+
+  // Fallback: write to local disk and serve through the app.
+  try {
+    fs.writeFileSync(filePath, buffer);
+    console.log(`[video-gen] Persisted video to ${filePath} (${buffer.length} bytes)`);
+    return `/api/director/video-file/${fileName}`;
+  } catch (e) {
+    console.warn(`[video-gen] Failed to write video to disk:`, e);
+    return videoUrl;
+  }
 }
 
 /**

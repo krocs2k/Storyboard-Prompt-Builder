@@ -9,6 +9,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
 import { getLLMConfig } from '@/lib/llm';
+import { mirrorToBunnyFromApiPath } from '@/lib/bunny-storage';
 
 const DATA_DIR = process.env.DATA_DIR || path.join(process.cwd(), 'data');
 const POOL_BASE = path.join(DATA_DIR, 'category-images', 'pool');
@@ -178,7 +179,13 @@ export async function POST(request: NextRequest) {
 
       const cellName = `${randomUUID()}.jpg`;
       fs.writeFileSync(path.join(cellsDir, cellName), upBuf);
-      cellUrls.push(`/api/category-images/pool/${projectId}/cells/${cellName}`);
+      const cellApiPath = `/api/category-images/pool/${projectId}/cells/${cellName}`;
+      try {
+        await mirrorToBunnyFromApiPath(cellApiPath, upBuf, 'image/jpeg');
+      } catch (e) {
+        console.error('[multi-generate] Bunny mirror failed for', cellName, e);
+      }
+      cellUrls.push(cellApiPath);
     }
 
     if (!cellUrls.length) return NextResponse.json({ error: 'No valid cells produced' }, { status: 500 });

@@ -9,6 +9,7 @@ import { invalidateMovieStyleCache } from '@/lib/movie-style-ref';
 import * as fs from 'fs';
 import * as path from 'path';
 import sharp from 'sharp';
+import { mirrorToBunnyFromApiPath } from '@/lib/bunny-storage';
 
 const THUMB_SIZE = 384;
 const THUMB_QUALITY = 80;
@@ -115,6 +116,7 @@ export async function POST(req: NextRequest) {
       const buffer = Buffer.from(arrayBuffer);
       const ext = relativePath.toLowerCase().split('.').pop() || '';
 
+      let finalBuffer: Buffer = buffer;
       if (['png', 'jpg', 'jpeg', 'webp', 'gif', 'tiff'].includes(ext)) {
         try {
           const meta = await sharp(buffer).metadata();
@@ -137,6 +139,7 @@ export async function POST(req: NextRequest) {
             }
 
             fs.writeFileSync(destPath, output);
+            finalBuffer = output;
             resized++;
           } else {
             fs.writeFileSync(destPath, buffer);
@@ -146,6 +149,13 @@ export async function POST(req: NextRequest) {
         }
       } else {
         fs.writeFileSync(destPath, buffer);
+      }
+      // Mirror the imported asset to BunnyCDN (no-op when not configured)
+      try {
+        const objectKey = 'category-images/' + relativePath.split(path.sep).join('/');
+        await mirrorToBunnyFromApiPath('/api/' + objectKey, finalBuffer);
+      } catch (e) {
+        console.error('[import] Bunny mirror failed for', relativePath, e);
       }
       imported++;
     }

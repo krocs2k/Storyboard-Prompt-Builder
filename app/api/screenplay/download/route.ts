@@ -3,6 +3,9 @@ import {
   Document, Packer, Paragraph, TextRun, AlignmentType,
   convertInchesToTwip, Header, Footer, PageBreak
 } from 'docx';
+import { persistProjectDocument } from '@/lib/document-storage';
+
+export const dynamic = 'force-dynamic';
 
 /**
  * Industry-standard screenplay formatting constants.
@@ -45,19 +48,23 @@ function isParenthetical(line: string): boolean {
 
 export async function POST(request: NextRequest) {
   try {
-    const { screenplay, title, format } = await request.json();
+    const { screenplay, title, format, projectId } = await request.json();
 
     if (!screenplay) {
       return NextResponse.json({ error: 'Screenplay content is required' }, { status: 400 });
     }
 
     if (format === 'txt') {
-      return new NextResponse(screenplay, {
-        headers: {
-          'Content-Type': 'text/plain',
-          'Content-Disposition': `attachment; filename="${title || 'screenplay'}.txt"`,
-        },
-      });
+      const txtBuf = Buffer.from(screenplay, 'utf-8');
+      const persisted = await persistProjectDocument(
+        projectId, 'screenplay', 'txt', title || 'screenplay', txtBuf, 'text/plain',
+      ).catch(() => null);
+      const headers: Record<string, string> = {
+        'Content-Type': 'text/plain',
+        'Content-Disposition': `attachment; filename="${title || 'screenplay'}.txt"`,
+      };
+      if (persisted?.cdnUrl) headers['X-CDN-Url'] = persisted.cdnUrl;
+      return new NextResponse(screenplay, { headers });
     }
 
     // Build industry-standard screenplay DOCX
@@ -311,13 +318,18 @@ export async function POST(request: NextRequest) {
 
     const buffer = await Packer.toBuffer(doc);
 
+    const persisted = await persistProjectDocument(
+      projectId, 'screenplay', 'docx', title || 'screenplay', buffer,
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    ).catch(() => null);
+
     // Always return as DOCX
-    return new NextResponse(buffer, {
-      headers: {
-        'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        'Content-Disposition': `attachment; filename="${(title || 'screenplay').replace(/[^a-zA-Z0-9\s-]/g, '')}.docx"`,
-      },
-    });
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'Content-Disposition': `attachment; filename="${(title || 'screenplay').replace(/[^a-zA-Z0-9\s-]/g, '')}.docx"`,
+    };
+    if (persisted?.cdnUrl) headers['X-CDN-Url'] = persisted.cdnUrl;
+    return new NextResponse(buffer, { headers });
   } catch (error) {
     console.error('Screenplay download error:', error);
     return NextResponse.json(

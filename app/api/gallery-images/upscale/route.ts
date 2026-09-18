@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
     const image = await prisma.galleryImage.findUnique({ where: { id: imageId } });
     if (!image) return NextResponse.json({ error: 'Image not found' }, { status: 404 });
 
-    const buffer = readGalleryImage(image.imagePath);
+    const buffer = await readGalleryImage(image.imagePath);
     if (!buffer) return NextResponse.json({ error: 'Image file not found on disk' }, { status: 404 });
 
     // Get current dimensions
@@ -53,10 +53,10 @@ export async function POST(req: NextRequest) {
     }
 
     // Delete old file
-    deleteGalleryImageFile(image.imagePath);
+    await deleteGalleryImageFile(image.imagePath);
 
     // Save new file
-    const { relativePath, fileName } = saveGalleryImage(image.projectId, upscaled, ext);
+    const { relativePath, fileName } = await saveGalleryImage(image.projectId, upscaled, ext);
 
     // Update DB record
     const updated = await prisma.galleryImage.update({

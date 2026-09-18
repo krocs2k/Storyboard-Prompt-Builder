@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import * as fs from 'fs';
 import * as path from 'path';
+import { isBunnyStorageReady, bunnyCdnUrl } from '@/lib/bunny-storage';
 
 const MIME_TYPES: Record<string, string> = {
   '.jpg': 'image/jpeg',
@@ -86,15 +87,37 @@ export async function GET(
 
   const relativePath = cleanSegments.join(path.sep);
 
+  // Bundled images were re-encoded to JPEG, so a request for an old extension
+  // (.png/.webp/.jpeg/.gif) should also resolve to the .jpg variant. Try the
+  // requested path first, then the .jpg fallback — for both disk and CDN lookups.
+  const jpgRelative = relativePath.replace(/\.(png|jpeg|gif|webp)$/i, '.jpg');
+  const relCandidates = jpgRelative === relativePath ? [relativePath] : [relativePath, jpgRelative];
+
   // Search through all candidate paths
   const basePaths = getResolvedBasePaths();
   for (const base of basePaths) {
-    const fullPath = path.join(base, relativePath);
-    try {
-      if (fs.existsSync(fullPath)) {
-        return serveFile(fullPath);
+    for (const rel of relCandidates) {
+      const fullPath = path.join(base, rel);
+      try {
+        if (fs.existsSync(fullPath)) {
+          return serveFile(fullPath);
+        }
+      } catch { /* skip */ }
+    }
+  }
+
+  // Not on local disk: if BunnyCDN is configured, redirect to the CDN copy.
+  // Uploads are mirrored to Bunny under the "category-images/..." key prefix.
+  if (await isBunnyStorageReady()) {
+    const cleanJoined = cleanSegments.join('/');
+    const jpgJoined = cleanJoined.replace(/\.(png|jpeg|gif|webp)$/i, '.jpg');
+    const keyCandidates = jpgJoined === cleanJoined ? [cleanJoined] : [cleanJoined, jpgJoined];
+    for (const k of keyCandidates) {
+      const cdn = await bunnyCdnUrl('category-images/' + k);
+      if (cdn) {
+        return NextResponse.redirect(cdn, 302);
       }
-    } catch { /* skip */ }
+    }
   }
 
   return new NextResponse(null, { status: 404 });

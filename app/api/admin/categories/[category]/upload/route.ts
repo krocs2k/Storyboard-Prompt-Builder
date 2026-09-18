@@ -7,6 +7,7 @@ import { CATEGORY_CONFIG } from '@/lib/category-overrides';
 import * as fs from 'fs';
 import * as path from 'path';
 import sharp from 'sharp';
+import { mirrorToBunnyFromApiPath } from '@/lib/bunny-storage';
 
 const MAX_SIZE = 10 * 1024 * 1024; // 10MB
 const TARGET_DIMENSION = 1024;
@@ -65,21 +66,20 @@ export async function POST(request: NextRequest, { params }: Params) {
     const buffer = Buffer.from(await file.arrayBuffer());
 
     // Auto-resize if larger than target
+    let outBuf: Buffer = buffer;
     try {
       const metadata = await sharp(buffer).metadata();
       if (metadata.width && metadata.height && (metadata.width > TARGET_DIMENSION || metadata.height > TARGET_DIMENSION)) {
-        const resized = await sharp(buffer)
+        outBuf = await sharp(buffer)
           .resize(TARGET_DIMENSION, TARGET_DIMENSION, { fit: 'inside', withoutEnlargement: true })
           .toBuffer();
-        fs.writeFileSync(filePath, resized);
-      } else {
-        fs.writeFileSync(filePath, buffer);
       }
-    } catch {
-      fs.writeFileSync(filePath, buffer);
-    }
+    } catch { /* use original bytes */ }
+    fs.writeFileSync(filePath, outBuf);
+    const outPath = `/api/category-images/${subdir}/${filename}`;
+    await mirrorToBunnyFromApiPath(outPath, outBuf, `image/${ext === 'jpg' ? 'jpeg' : ext}`);
 
-    return NextResponse.json({ path: `/api/category-images/${subdir}/${filename}?v=${Date.now()}` });
+    return NextResponse.json({ path: `${outPath}?v=${Date.now()}` });
   } else {
     // JSON URL download
     const { url, itemId } = await request.json();
@@ -98,21 +98,20 @@ export async function POST(request: NextRequest, { params }: Params) {
 
       const buffer = Buffer.from(await res.arrayBuffer());
       
+      let outBuf: Buffer = buffer;
       try {
         const metadata = await sharp(buffer).metadata();
         if (metadata.width && metadata.height && (metadata.width > TARGET_DIMENSION || metadata.height > TARGET_DIMENSION)) {
-          const resized = await sharp(buffer)
+          outBuf = await sharp(buffer)
             .resize(TARGET_DIMENSION, TARGET_DIMENSION, { fit: 'inside', withoutEnlargement: true })
             .toBuffer();
-          fs.writeFileSync(filePath, resized);
-        } else {
-          fs.writeFileSync(filePath, buffer);
         }
-      } catch {
-        fs.writeFileSync(filePath, buffer);
-      }
+      } catch { /* use original bytes */ }
+      fs.writeFileSync(filePath, outBuf);
+      const outPath = `/api/category-images/${subdir}/${filename}`;
+      await mirrorToBunnyFromApiPath(outPath, outBuf, `image/${ext === 'jpg' ? 'jpeg' : ext}`);
 
-      return NextResponse.json({ path: `/api/category-images/${subdir}/${filename}?v=${Date.now()}` });
+      return NextResponse.json({ path: `${outPath}?v=${Date.now()}` });
     } catch (err: any) {
       return NextResponse.json({ error: err.message || 'Download failed' }, { status: 500 });
     }

@@ -6,6 +6,16 @@ export default withAuth(
     const token = req.nextauth.token;
     const pathname = req.nextUrl.pathname;
 
+    // Serve bundled/default images through the CDN-aware route so they still
+    // resolve when the static public/images files are missing (e.g. on the
+    // self-hosted build that drops the public/ folder). The /api/category-images
+    // handler serves from local disk first and falls back to BunnyCDN.
+    if (pathname.startsWith('/images/')) {
+      const url = req.nextUrl.clone();
+      url.pathname = '/api/category-images' + pathname.slice('/images'.length);
+      return NextResponse.rewrite(url);
+    }
+
     // Allow access to pending-approval page
     if (pathname === '/pending-approval') {
       return NextResponse.next();
@@ -34,6 +44,12 @@ export default withAuth(
         // Public routes that don't require authentication
         const publicRoutes = ['/login', '/register', '/verify-email', '/pending-approval', '/invite/accept'];
         const isPublicRoute = publicRoutes.some(route => pathname.startsWith(route));
+
+        // Bundled/default images are public visual assets (rewritten to the
+        // public /api/category-images route inside the middleware function).
+        if (pathname.startsWith('/images/')) {
+          return true;
+        }
         
         // API routes that should be public
         const publicApiRoutes = [
@@ -59,6 +75,6 @@ export default withAuth(
 
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|favicon.svg|favicon-16x16.png|favicon-32x32.png|icon-192x192.png|icon-512x512.png|apple-touch-icon.png|images|robots.txt|og-image.png|manifest.json|sw.js).*)',
+    '/((?!_next/static|_next/image|favicon.ico|favicon.svg|favicon-16x16.png|favicon-32x32.png|icon-192x192.png|icon-512x512.png|apple-touch-icon.png|robots.txt|og-image.png|manifest.json|sw.js).*)',
   ]
 };

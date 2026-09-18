@@ -59,7 +59,7 @@ export async function POST(req: NextRequest) {
     } catch { /* skip */ }
 
     const ext = mimeType?.includes('jpeg') || mimeType?.includes('jpg') ? 'jpg' : 'png';
-    const { relativePath, fileName } = saveGalleryImage(projectId, buffer, ext);
+    const { relativePath, fileName } = await saveGalleryImage(projectId, buffer, ext);
 
     const image = await prisma.galleryImage.create({
       data: {
@@ -139,7 +139,7 @@ export async function DELETE(req: NextRequest) {
     if (deleteAll && projectId) {
       const images = await prisma.galleryImage.findMany({ where: { projectId } });
       for (const img of images) {
-        deleteGalleryImageFile(img.imagePath);
+        await deleteGalleryImageFile(img.imagePath);
       }
       await prisma.galleryImage.deleteMany({ where: { projectId } });
       return NextResponse.json({ success: true, deleted: images.length });
@@ -150,7 +150,7 @@ export async function DELETE(req: NextRequest) {
     const image = await prisma.galleryImage.findUnique({ where: { id } });
     if (!image) return NextResponse.json({ error: 'Image not found' }, { status: 404 });
 
-    deleteGalleryImageFile(image.imagePath);
+    await deleteGalleryImageFile(image.imagePath);
     await prisma.galleryImage.delete({ where: { id } });
 
     return NextResponse.json({ success: true });

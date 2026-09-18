@@ -8,6 +8,7 @@ import sharp from 'sharp';
 import * as fs from 'fs';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
+import { mirrorToBunnyFromApiPath } from '@/lib/bunny-storage';
 
 const DATA_DIR = process.env.DATA_DIR || path.join(process.cwd(), 'data');
 const POOL_BASE = path.join(DATA_DIR, 'category-images', 'pool');
@@ -52,6 +53,7 @@ export async function POST(request: NextRequest) {
     } catch { /* ignore */ }
 
     const imagePath = `/api/category-images/pool/${projectId}/${filename}`;
+    await mirrorToBunnyFromApiPath(imagePath, buffer, `image/${ext === 'jpg' ? 'jpeg' : ext}`);
 
     const maxSort = await prisma.poolImage.aggregate({
       where: { projectId, deleted: false }, _max: { sortOrder: true },

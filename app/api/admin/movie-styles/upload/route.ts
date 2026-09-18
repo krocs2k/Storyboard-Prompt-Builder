@@ -6,6 +6,7 @@ import { authOptions } from '@/lib/auth';
 import * as fs from 'fs';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
+import { mirrorToBunnyFromApiPath } from '@/lib/bunny-storage';
 
 const DATA_DIR = process.env.DATA_DIR || path.join(process.cwd(), 'data');
 const STYLES_DIR = path.join(DATA_DIR, 'category-images', 'movie-styles');
@@ -59,8 +60,10 @@ export async function POST(req: NextRequest) {
 
       const buffer = Buffer.from(await file.arrayBuffer());
       fs.writeFileSync(filePath, buffer);
+      const basePath = `/api/category-images/movie-styles/${filename}`;
+      await mirrorToBunnyFromApiPath(basePath, buffer, file.type || 'image/jpeg');
 
-      const localPath = `/api/category-images/movie-styles/${filename}?v=${Date.now()}`;
+      const localPath = `${basePath}?v=${Date.now()}`;
       return NextResponse.json({ success: true, path: localPath });
     } else {
       // Handle URL download
@@ -99,8 +102,10 @@ export async function POST(req: NextRequest) {
       const arrayBuffer = await response.arrayBuffer();
       const buffer = Buffer.from(arrayBuffer);
       fs.writeFileSync(filePath, buffer);
+      const basePath = `/api/category-images/movie-styles/${filename}`;
+      await mirrorToBunnyFromApiPath(basePath, buffer, imageContentType);
 
-      const localPath = `/api/category-images/movie-styles/${filename}?v=${Date.now()}`;
+      const localPath = `${basePath}?v=${Date.now()}`;
       return NextResponse.json({ success: true, path: localPath });
     }
   } catch (err) {

@@ -63,6 +63,23 @@ export default function ApiConfigPage() {
     llm_ideas: '', llm_screenplay: '', image: '', video: '',
   });
 
+  // BunnyCDN storage state
+  type BunnyStatus = {
+    hasApiKey: boolean; maskedKey: string | null; provisioned: boolean;
+    storageZone: string | null; pullZone: string | null; cdnUrl: string | null; region: string | null;
+  };
+  const [bunny, setBunny] = useState<BunnyStatus>({
+    hasApiKey: false, maskedKey: null, provisioned: false,
+    storageZone: null, pullZone: null, cdnUrl: null, region: null,
+  });
+  const [bunnyKeyInput, setBunnyKeyInput] = useState('');
+  const [showBunnyKey, setShowBunnyKey] = useState(false);
+  const [bunnyRegion, setBunnyRegion] = useState('DE');
+  const [bunnySaving, setBunnySaving] = useState(false);
+  const [bunnyProvisioning, setBunnyProvisioning] = useState(false);
+  const [bunnyTesting, setBunnyTesting] = useState(false);
+  const [bunnyMigrating, setBunnyMigrating] = useState(false);
+
   useEffect(() => { setMounted(true); }, []);
 
   useEffect(() => {
@@ -99,9 +116,152 @@ export default function ApiConfigPage() {
     }
   }, []);
 
+  const fetchBunny = useCallback(async () => {
+    try {
+      const res = await fetch('/api/admin/bunny');
+      if (!res.ok) return;
+      const data = await res.json();
+      setBunny({
+        hasApiKey: !!data.hasApiKey,
+        maskedKey: data.maskedKey || null,
+        provisioned: !!data.provisioned,
+        storageZone: data.storageZone || null,
+        pullZone: data.pullZone || null,
+        cdnUrl: data.cdnUrl || null,
+        region: data.region || null,
+      });
+      if (data.region) setBunnyRegion(data.region);
+    } catch (err) {
+      console.error('Failed to fetch BunnyCDN status:', err);
+    }
+  }, []);
+
   useEffect(() => {
-    if (session?.user?.role === 'admin') fetchConfig();
-  }, [session, fetchConfig]);
+    if (session?.user?.role === 'admin') { fetchConfig(); fetchBunny(); }
+  }, [session, fetchConfig, fetchBunny]);
+
+  // ── BunnyCDN management ──
+
+  const saveBunnyKey = async () => {
+    const key = bunnyKeyInput.trim();
+    if (!key) return;
+    setBunnySaving(true);
+    setMessage(null);
+    try {
+      const res = await fetch('/api/admin/bunny', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'saveKey', apiKey: key }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setMessage({ type: 'success', text: 'BunnyCDN API key saved' });
+        setBunnyKeyInput('');
+        await fetchBunny();
+      } else {
+        setMessage({ type: 'error', text: data.error || 'Failed to save key' });
+      }
+    } catch {
+      setMessage({ type: 'error', text: 'Failed to save BunnyCDN key' });
+    } finally {
+      setBunnySaving(false);
+    }
+  };
+
+  const provisionBunny = async () => {
+    setBunnyProvisioning(true);
+    setMessage(null);
+    try {
+      const res = await fetch('/api/admin/bunny', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'provision', apiKey: bunnyKeyInput.trim() || undefined, region: bunnyRegion }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setMessage({ type: 'success', text: data.message || 'CDN & Cloud Storage set up successfully' });
+        setBunnyKeyInput('');
+        await fetchBunny();
+      } else {
+        setMessage({ type: 'error', text: data.error || 'Setup failed' });
+      }
+    } catch {
+      setMessage({ type: 'error', text: 'CDN setup failed' });
+    } finally {
+      setBunnyProvisioning(false);
+    }
+  };
+
+  const testBunny = async () => {
+    setBunnyTesting(true);
+    setMessage(null);
+    try {
+      const res = await fetch('/api/admin/bunny', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'test' }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setMessage({ type: 'success', text: data.message || 'BunnyCDN test succeeded' });
+      } else {
+        setMessage({ type: 'error', text: data.error || 'Test failed' });
+      }
+    } catch {
+      setMessage({ type: 'error', text: 'BunnyCDN test failed' });
+    } finally {
+      setBunnyTesting(false);
+    }
+  };
+
+  const migrateBundledImages = async (dryRun: boolean) => {
+    setBunnyMigrating(true);
+    setMessage(null);
+    try {
+      const res = await fetch('/api/admin/bunny', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'migrate-static', dryRun }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setMessage({ type: 'success', text: data.message || 'Migration complete' });
+        // After a dry-run preview that found files to upload, offer to upload now.
+        if (dryRun && data.toUpload > 0) {
+          if (confirm(`${data.toUpload} bundled image(s) are not on the CDN yet (~${(data.bytes / 1048576).toFixed(1)} MB). Upload them now?`)) {
+            await migrateBundledImages(false);
+            return;
+          }
+        }
+      } else {
+        setMessage({ type: 'error', text: data.error || 'Migration failed' });
+      }
+    } catch {
+      setMessage({ type: 'error', text: 'Migration failed' });
+    } finally {
+      setBunnyMigrating(false);
+    }
+  };
+
+  const deleteBunny = async () => {
+    if (!confirm('Remove BunnyCDN configuration? New media will fall back to local storage.')) return;
+    setBunnySaving(true);
+    setMessage(null);
+    try {
+      const res = await fetch('/api/admin/bunny', { method: 'DELETE' });
+      const data = await res.json();
+      if (data.success) {
+        setMessage({ type: 'success', text: 'BunnyCDN configuration removed' });
+        await fetchBunny();
+      } else {
+        setMessage({ type: 'error', text: data.error || 'Failed to remove configuration' });
+      }
+    } catch {
+      setMessage({ type: 'error', text: 'Failed to remove BunnyCDN configuration' });
+    } finally {
+      setBunnySaving(false);
+    }
+  };
 
   // ── Key management ──
 
@@ -408,6 +568,160 @@ export default function ApiConfigPage() {
                 })}
               </div>
             </div>
+            {/* ═══ Section: BunnyCDN Storage & CDN ═══ */}
+            <div>
+              <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
+                <Server className="w-5 h-5 text-orange-500" />
+                Cloud Storage &amp; CDN (BunnyCDN)
+              </h2>
+              <p className="text-gray-500 text-sm mb-4">
+                Provide a BunnyCDN Account API key, then set up storage automatically. Once configured, all images, documents, video and audio generated by the app are stored on BunnyCDN and served over its global CDN.
+              </p>
+
+              <div className="bg-gray-800 border border-gray-700 shadow-lg rounded-xl p-5">
+                {/* Status banner */}
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${bunny.provisioned ? 'bg-green-500/15' : 'bg-orange-500/10'}`}>
+                      <Server className={`w-5 h-5 ${bunny.provisioned ? 'text-green-400' : 'text-orange-400'}`} />
+                    </div>
+                    <div>
+                      <h3 className="text-white font-semibold">BunnyCDN</h3>
+                      <p className="text-gray-500 text-xs">
+                        {bunny.provisioned
+                          ? 'Active — media is stored on and served from BunnyCDN'
+                          : bunny.hasApiKey
+                            ? 'API key saved — click "Set Up CDN & Cloud Storage" to provision'
+                            : 'Not configured — media is served from local storage'}
+                      </p>
+                    </div>
+                  </div>
+                  {bunny.provisioned ? (
+                    <span className="text-xs bg-green-500/15 text-green-400 px-2.5 py-1 rounded-full border border-green-500/30 flex items-center gap-1">
+                      <CheckCircle className="w-3.5 h-3.5" /> Provisioned
+                    </span>
+                  ) : bunny.hasApiKey ? (
+                    <span className="text-xs bg-amber-500/15 text-amber-400 px-2.5 py-1 rounded-full border border-amber-500/30">Key saved</span>
+                  ) : null}
+                </div>
+
+                {/* API key input */}
+                <label className="block text-gray-300 text-sm font-medium mb-1.5">Account API Key</label>
+                <div className="flex items-center gap-2 mb-1">
+                  <div className="relative flex-1">
+                    <input
+                      type={showBunnyKey ? 'text' : 'password'}
+                      value={bunnyKeyInput}
+                      onChange={e => setBunnyKeyInput(e.target.value)}
+                      placeholder={bunny.hasApiKey ? (bunny.maskedKey || '••••••••') : 'Enter your BunnyCDN Account API key'}
+                      className="w-full bg-gray-900 border border-gray-700 text-white rounded-lg px-3 py-2 pr-10 text-sm focus:outline-none focus:border-orange-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowBunnyKey(v => !v)}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300"
+                    >
+                      {showBunnyKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                  <button
+                    onClick={saveBunnyKey}
+                    disabled={bunnySaving || !bunnyKeyInput.trim()}
+                    className="flex items-center gap-1.5 px-3 py-2 bg-orange-600 hover:bg-orange-500 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-lg transition-colors text-sm"
+                  >
+                    {bunnySaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                    Save Key
+                  </button>
+                </div>
+                <div className="mb-4">
+                  <a href="https://dash.bunny.net/account/settings" target="_blank" rel="noopener noreferrer" className="text-orange-400 text-xs hover:underline">
+                    Get your Account API key from bunny.net → Account Settings → API →
+                  </a>
+                </div>
+
+                {/* Region + provision */}
+                <div className="flex flex-col sm:flex-row sm:items-end gap-3 pt-4 border-t border-gray-700">
+                  <div>
+                    <label className="block text-gray-300 text-sm font-medium mb-1.5">Primary Region</label>
+                    <select
+                      value={bunnyRegion}
+                      onChange={e => setBunnyRegion(e.target.value)}
+                      disabled={bunny.provisioned}
+                      className="bg-gray-900 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-orange-500 disabled:opacity-60"
+                    >
+                      <option value="DE">Europe (Falkenstein, DE)</option>
+                      <option value="UK">Europe (London, UK)</option>
+                      <option value="SE">Europe (Stockholm, SE)</option>
+                      <option value="NY">US East (New York)</option>
+                      <option value="LA">US West (Los Angeles)</option>
+                      <option value="BR">South America (São Paulo)</option>
+                      <option value="SG">Asia (Singapore)</option>
+                      <option value="SYD">Oceania (Sydney)</option>
+                      <option value="JH">Africa (Johannesburg)</option>
+                    </select>
+                  </div>
+                  <button
+                    onClick={provisionBunny}
+                    disabled={bunnyProvisioning || (!bunny.hasApiKey && !bunnyKeyInput.trim())}
+                    className="flex items-center justify-center gap-2 px-4 py-2 bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-500 hover:to-amber-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition-colors text-sm"
+                  >
+                    {bunnyProvisioning ? <Loader2 className="w-4 h-4 animate-spin" /> : <Server className="w-4 h-4" />}
+                    {bunny.provisioned ? 'Re-provision Storage' : 'Set Up CDN & Cloud Storage'}
+                  </button>
+                  {bunny.provisioned && (
+                    <>
+                      <button
+                        onClick={testBunny}
+                        disabled={bunnyTesting}
+                        className="flex items-center justify-center gap-2 px-4 py-2 bg-gray-700 hover:bg-gray-600 disabled:opacity-40 text-white rounded-lg transition-colors text-sm"
+                      >
+                        {bunnyTesting ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+                        Test
+                      </button>
+                      <button
+                        onClick={() => migrateBundledImages(true)}
+                        disabled={bunnyMigrating}
+                        title="Upload the app's bundled/default category images to the CDN so they still load if the local files are missing."
+                        className="flex items-center justify-center gap-2 px-4 py-2 bg-gray-700 hover:bg-gray-600 disabled:opacity-40 text-white rounded-lg transition-colors text-sm"
+                      >
+                        {bunnyMigrating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Server className="w-4 h-4" />}
+                        Migrate bundled images
+                      </button>
+                      <button
+                        onClick={deleteBunny}
+                        disabled={bunnySaving}
+                        className="flex items-center justify-center gap-1.5 px-3 py-2 bg-red-600/20 hover:bg-red-600/30 text-red-400 rounded-lg transition-colors text-sm"
+                      >
+                        <Trash2 className="w-4 h-4" /> Remove
+                      </button>
+                    </>
+                  )}
+                </div>
+
+                {/* Provisioned details */}
+                {bunny.provisioned && (
+                  <div className="mt-4 pt-4 border-t border-gray-700 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-sm">
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-500">Storage Zone</span>
+                      <span className="text-gray-200 font-mono text-xs">{bunny.storageZone}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-500">Pull Zone</span>
+                      <span className="text-gray-200 font-mono text-xs">{bunny.pullZone}</span>
+                    </div>
+                    <div className="flex items-center justify-between sm:col-span-2">
+                      <span className="text-gray-500">CDN URL</span>
+                      <a href={bunny.cdnUrl || '#'} target="_blank" rel="noopener noreferrer" className="text-orange-400 font-mono text-xs hover:underline">{bunny.cdnUrl}</a>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-500">Region</span>
+                      <span className="text-gray-200 font-mono text-xs">{bunny.region}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
 
             {/* ═══ Section 2: Per-Function Configuration ═══ */}
             <div>

@@ -6,6 +6,7 @@ import { authOptions } from '@/lib/auth';
 import * as fs from 'fs';
 import * as path from 'path';
 import sharp from 'sharp';
+import { mirrorToBunnyFromApiPath } from '@/lib/bunny-storage';
 
 /**
  * POST - Resize all images in public/images/data/ to optimized thumbnails.
@@ -146,6 +147,15 @@ export async function POST(req: Request) {
       }
 
       fs.writeFileSync(fileInfo.fullPath, outputBuffer);
+      // Mirror the re-encoded category image to BunnyCDN (no-op when not configured)
+      if (fileInfo.fullPath.includes('category-images')) {
+        try {
+          const rel = path.relative(categoryImagesDir, fileInfo.fullPath).split(path.sep).join('/');
+          await mirrorToBunnyFromApiPath('/api/category-images/' + rel, outputBuffer);
+        } catch (e) {
+          console.error('[resize] Bunny mirror failed for', fileInfo.relName, e);
+        }
+      }
       savedBytes += originalSize - outputBuffer.length;
       processed++;
     } catch (err) {

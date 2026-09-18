@@ -202,6 +202,8 @@ export function PromptBuilder() {
   const [folders, setFolders] = useState<ProjectFolder[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [currentProject, setCurrentProject] = useState<Project | null>(null);
+  // Permanent shareable CDN links returned after a document is saved to cloud storage.
+  const [documentLinks, setDocumentLinks] = useState<Record<string, string>>({});
   const [newFolderName, setNewFolderName] = useState('');
   const [newProjectName, setNewProjectName] = useState('');
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
@@ -735,10 +737,13 @@ export function PromptBuilder() {
         body: JSON.stringify({
           screenplay: screenplay.content,
           title: screenplay.title,
-          format: 'docx'
+          format: 'docx',
+          projectId: currentProject?.id,
         }),
       });
       if (!response.ok) throw new Error('Download failed');
+      const cdn = response.headers.get('X-CDN-Url');
+      if (cdn) setDocumentLinks(prev => ({ ...prev, screenplay: cdn }));
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -829,9 +834,12 @@ export function PromptBuilder() {
         body: JSON.stringify({
           novel: novelContent,
           title: screenplay.title,
+          projectId: currentProject?.id,
         }),
       });
       if (!response.ok) throw new Error('Download failed');
+      const cdn = response.headers.get('X-CDN-Url');
+      if (cdn) setDocumentLinks(prev => ({ ...prev, novel: cdn }));
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -922,9 +930,12 @@ export function PromptBuilder() {
         body: JSON.stringify({
           audioDrama: audioDramaContent,
           title: screenplay.title,
+          projectId: currentProject?.id,
         }),
       });
       if (!response.ok) throw new Error('Download failed');
+      const cdn = response.headers.get('X-CDN-Url');
+      if (cdn) setDocumentLinks(prev => ({ ...prev, 'audio-drama': cdn }));
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -937,6 +948,34 @@ export function PromptBuilder() {
     } catch (err) {
       console.error('Failed to download audio drama:', err);
     }
+  };
+
+  // Renders a compact "permanent shareable link" row once a document has been
+  // saved to cloud storage. Returns null until a link exists for that doc type.
+  const renderShareLink = (key: string) => {
+    const link = documentLinks[key];
+    if (!link) return null;
+    return (
+      <div className="mt-3 flex items-center gap-2 text-xs">
+        <span className="text-emerald-400 font-medium whitespace-nowrap">Shareable link:</span>
+        <a
+          href={link}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-cyan-400 hover:text-cyan-300 truncate underline"
+          title={link}
+        >
+          {link}
+        </a>
+        <button
+          type="button"
+          onClick={() => { navigator.clipboard?.writeText(link); }}
+          className="px-2 py-1 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded whitespace-nowrap"
+        >
+          Copy
+        </button>
+      </div>
+    );
   };
 
   // Get gallery images for a specific storyboard block
@@ -2145,6 +2184,7 @@ export function PromptBuilder() {
                     </button>
                   </div>
                 </div>
+                {renderShareLink('screenplay')}
               </div>
               
               <div className="grid md:grid-cols-2 gap-4 mb-6">
@@ -2217,6 +2257,7 @@ export function PromptBuilder() {
                     </button>
                   )}
                 </div>
+                {renderShareLink('novel')}
                 {novelContent && (
                   <div className="bg-slate-900/50 rounded-lg p-4">
                     <div className="flex items-center justify-between mb-2">
@@ -2261,6 +2302,7 @@ export function PromptBuilder() {
                     </button>
                   )}
                 </div>
+                {renderShareLink('audio-drama')}
                 {audioDramaContent && (
                   <div className="bg-slate-900/50 rounded-lg p-4">
                     <div className="flex items-center justify-between mb-2">

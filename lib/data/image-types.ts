@@ -5,7 +5,7 @@ export interface ImageType {
 }
 
 export const imageTypes: ImageType[] = [
-  { id: 'photorealistic', name: 'Photorealistic', image: '/images/data/8410a2c5-26cd-4edb-b4f7-3faa83cab12b.png' },
+  { id: 'photorealistic', name: 'Photorealistic', image: '/images/data/8410a2c5-26cd-4edb-b4f7-3faa83cab12b.jpg' },
   { id: 'anime', name: 'Anime cel-shading style', image: '/images/data/2e89fc3d-60bb-4ffa-b6bc-e3589cee6ace.jpg' },
   { id: 'cartoon', name: 'Cartoon style', image: '/images/data/3999e411-d3a3-4d15-8c72-baa0a91d25ec.jpg' },
   { id: '3d-chibi', name: '3D chibi diorama', image: '/images/data/10944cf4-5342-40c4-bcd4-b8eea061080d.jpg' },

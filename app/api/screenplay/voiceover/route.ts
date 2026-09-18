@@ -14,10 +14,13 @@ import {
   ShadingType,
   VerticalAlign,
 } from 'docx';
+import { persistProjectDocument } from '@/lib/document-storage';
+
+export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest) {
   try {
-    const { dialogueLines, title } = await request.json();
+    const { dialogueLines, title, projectId } = await request.json();
     
     if (!dialogueLines || !Array.isArray(dialogueLines) || dialogueLines.length === 0) {
       return NextResponse.json(
@@ -247,13 +250,18 @@ export async function POST(request: NextRequest) {
 
     // Generate the DOCX buffer
     const buffer = await Packer.toBuffer(doc);
-    
-    return new NextResponse(buffer, {
-      headers: {
-        'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        'Content-Disposition': `attachment; filename="${safeTitle}_VoiceOver.docx"`,
-      },
-    });
+
+    const persisted = await persistProjectDocument(
+      projectId, 'voiceover', 'docx', safeTitle || 'voiceover', buffer,
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    ).catch(() => null);
+
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'Content-Disposition': `attachment; filename="${safeTitle}_VoiceOver.docx"`,
+    };
+    if (persisted?.cdnUrl) headers['X-CDN-Url'] = persisted.cdnUrl;
+    return new NextResponse(buffer, { headers });
   } catch (error) {
     console.error('Voice-over export error:', error);
     return NextResponse.json(

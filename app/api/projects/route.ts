@@ -2,6 +2,44 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/db';
+import { deleteProjectImages } from '@/lib/image-storage';
+import { deleteProjectGalleryImages } from '@/lib/gallery-storage';
+import { deleteProjectDocuments } from '@/lib/document-storage';
+import { deleteFromBunny } from '@/lib/bunny-storage';
+
+/**
+ * Remove every cloud/disk file that belongs to a project so deleting it does
+ * not orphan storage. Best-effort: each step is guarded so a single failure
+ * never blocks the DB deletion.
+ */
+async function cleanupProjectStorage(projectId: string) {
+  // Per-project folders (disk + Bunny).
+  await deleteProjectImages(projectId).catch(() => {});
+  await deleteProjectGalleryImages(projectId).catch(() => {});
+  await deleteProjectDocuments(projectId).catch(() => {});
+  // Pool uploads are namespaced by projectId on Bunny.
+  await deleteFromBunny(`category-images/pool/${projectId}/`).catch(() => {});
+  // Videos are stored per-file (not per-project); delete each object by key.
+  try {
+    const videos = await prisma.directorVideo.findMany({
+      where: { projectId },
+      select: { videoUrl: true, thumbnailUrl: true, startFrameUrl: true, endFrameUrl: true },
+    });
+    const keys = new Set<string>();
+    for (const v of videos) {
+      for (const url of [v.videoUrl, v.thumbnailUrl, v.startFrameUrl, v.endFrameUrl]) {
+        if (!url) continue;
+        const m = url.match(/\/(videos\/[^?]+)/);
+        if (m) keys.add(m[1]);
+      }
+    }
+    for (const key of Array.from(keys)) {
+      await deleteFromBunny(key).catch(() => {});
+    }
+  } catch (e) {
+    console.warn('[projects] video cleanup failed for', projectId, e);
+  }
+}
 
 // GET - List user's projects or get specific project
 export async function GET(request: NextRequest) {
@@ -300,6 +338,11 @@ export async function DELETE(request: NextRequest) {
     if (!existing) {
       return NextResponse.json({ error: 'Project not found' }, { status: 404 });
     }
+
+    // Remove all associated storage before deleting the DB record (which
+    // cascade-deletes child rows). Best-effort so storage issues never block
+    // the deletion the user requested.
+    await cleanupProjectStorage(id);
 
     await prisma.project.delete({
       where: { id },

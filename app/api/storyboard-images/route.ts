@@ -83,7 +83,7 @@ export async function POST(req: NextRequest) {
     const buffer = Buffer.from(imageData.imageBytes, 'base64');
 
     // Save to local filesystem
-    const { relativePath, fileName } = saveImage(projectId, blockNumber, buffer, 'png');
+    const { relativePath, fileName } = await saveImage(projectId, blockNumber, buffer, 'png');
 
     // Upsert to database (replace existing image for this block)
     const image = await prisma.storyboardImage.upsert({
@@ -134,10 +134,10 @@ export async function DELETE(req: NextRequest) {
       // Delete all images for project
       const images = await prisma.storyboardImage.findMany({ where: { projectId } });
       for (const img of images) {
-        deleteImage(img.imagePath);
+        await deleteImage(img.imagePath);
       }
       await prisma.storyboardImage.deleteMany({ where: { projectId } });
-      deleteProjectImages(projectId);
+      await deleteProjectImages(projectId);
       return NextResponse.json({ success: true, deleted: images.length });
     }
 
@@ -154,7 +154,7 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ error: 'Image not found' }, { status: 404 });
     }
 
-    deleteImage(image.imagePath);
+    await deleteImage(image.imagePath);
     await prisma.storyboardImage.delete({ where: { id: image.id } });
 
     return NextResponse.json({ success: true });

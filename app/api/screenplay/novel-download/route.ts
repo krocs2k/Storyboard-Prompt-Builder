@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Document, Packer, Paragraph, TextRun, AlignmentType, TabStopType, TabStopPosition, convertInchesToTwip, PageBreak, Header, Footer } from 'docx';
+import { persistProjectDocument } from '@/lib/document-storage';
+
+export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest) {
   try {
-    const { novel, title } = await request.json();
+    const { novel, title, projectId } = await request.json();
 
     if (!novel) {
       return NextResponse.json({ error: 'Novel content is required' }, { status: 400 });
@@ -193,12 +196,17 @@ export async function POST(request: NextRequest) {
 
     const buffer = await Packer.toBuffer(doc);
 
-    return new NextResponse(buffer, {
-      headers: {
-        'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        'Content-Disposition': `attachment; filename="${(title || 'novel').replace(/[^a-zA-Z0-9\s-]/g, '')}_Novel.docx"`,
-      },
-    });
+    const persisted = await persistProjectDocument(
+      projectId, 'novel', 'docx', title || 'novel', buffer,
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    ).catch(() => null);
+
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'Content-Disposition': `attachment; filename="${(title || 'novel').replace(/[^a-zA-Z0-9\s-]/g, '')}_Novel.docx"`,
+    };
+    if (persisted?.cdnUrl) headers['X-CDN-Url'] = persisted.cdnUrl;
+    return new NextResponse(buffer, { headers });
   } catch (error) {
     console.error('Novel download error:', error);
     return NextResponse.json(

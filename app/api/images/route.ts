@@ -3,10 +3,10 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { readImage } from '@/lib/image-storage';
+import { readImage, imageExists, imageCdnUrl } from '@/lib/image-storage';
 
 /**
- * GET - Serve an image from local storage
+ * GET - Serve an image from local storage, or redirect to BunnyCDN when configured.
  * Usage: /api/images?path=images/projectId/block_001.png
  */
 export async function GET(req: NextRequest) {
@@ -25,18 +25,39 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid path' }, { status: 400 });
   }
 
-  const buffer = readImage(imagePath);
-  if (!buffer) {
-    return NextResponse.json({ error: 'Image not found' }, { status: 404 });
+  // Prefer serving from local disk (legacy / self-hosted volume).
+  if (imageExists(imagePath)) {
+    const buffer = await readImage(imagePath);
+    if (buffer) {
+      const ext = imagePath.split('.').pop()?.toLowerCase();
+      const mimeType = ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : ext === 'webp' ? 'image/webp' : 'image/png';
+      return new NextResponse(buffer as any, {
+        headers: {
+          'Content-Type': mimeType,
+          'Cache-Control': 'public, max-age=86400',
+        },
+      });
+    }
   }
 
-  const ext = imagePath.split('.').pop()?.toLowerCase();
-  const mimeType = ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : ext === 'webp' ? 'image/webp' : 'image/png';
+  // Not on disk: if BunnyCDN is configured, redirect to the global CDN URL.
+  const cdn = await imageCdnUrl(imagePath);
+  if (cdn) {
+    return NextResponse.redirect(cdn, 302);
+  }
 
-  return new NextResponse(buffer, {
-    headers: {
-      'Content-Type': mimeType,
-      'Cache-Control': 'public, max-age=86400',
-    },
-  });
+  // Last resort: try reading bytes from Bunny directly.
+  const buffer = await readImage(imagePath);
+  if (buffer) {
+    const ext = imagePath.split('.').pop()?.toLowerCase();
+    const mimeType = ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : ext === 'webp' ? 'image/webp' : 'image/png';
+    return new NextResponse(buffer as any, {
+      headers: {
+        'Content-Type': mimeType,
+        'Cache-Control': 'public, max-age=86400',
+      },
+    });
+  }
+
+  return NextResponse.json({ error: 'Image not found' }, { status: 404 });
 }

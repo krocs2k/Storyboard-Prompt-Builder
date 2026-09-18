@@ -11,6 +11,7 @@ import {
   AUDIO_GENERATION_MODELS,
   AbacusModel,
 } from '@/lib/data/abacus-models';
+import { getProviderKeys } from '@/lib/llm';
 
 /* ──────────────────────────────────────────────────────────
    Types
@@ -92,9 +93,20 @@ export async function GET(req: Request) {
   const url = new URL(req.url);
   const runConnectivity = url.searchParams.get('connectivity') === 'true';
 
-  const apiKey = process.env.ABACUSAI_API_KEY;
+  // Read the Abacus key DB-first (SystemConfig), falling back to the env var,
+  // so it stays consistent with the rest of the system (lib/llm.ts).
+  let apiKey: string | null = null;
+  try {
+    const keys = await getProviderKeys();
+    apiKey = keys.abacusKey || process.env.ABACUSAI_API_KEY || null;
+  } catch {
+    apiKey = process.env.ABACUSAI_API_KEY || null;
+  }
   if (!apiKey) {
-    return NextResponse.json({ error: 'ABACUSAI_API_KEY not configured' }, { status: 500 });
+    return NextResponse.json(
+      { error: 'Abacus API key not configured. Add it under Admin → Settings (or set ABACUSAI_API_KEY).' },
+      { status: 500 },
+    );
   }
 
   try {

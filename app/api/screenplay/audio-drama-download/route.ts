@@ -3,6 +3,9 @@ import {
   Document, Packer, Paragraph, TextRun, AlignmentType,
   convertInchesToTwip, PageBreak, Header, Footer
 } from 'docx';
+import { persistProjectDocument } from '@/lib/document-storage';
+
+export const dynamic = 'force-dynamic';
 
 // Audio Drama DOCX — screenplay-like format with Courier font
 // NARRATOR blocks get literary italic treatment
@@ -35,7 +38,7 @@ function isNarratorCue(line: string): boolean {
 
 export async function POST(request: NextRequest) {
   try {
-    const { audioDrama, title } = await request.json();
+    const { audioDrama, title, projectId } = await request.json();
 
     if (!audioDrama) {
       return NextResponse.json({ error: 'Audio drama content is required' }, { status: 400 });
@@ -307,12 +310,17 @@ export async function POST(request: NextRequest) {
 
     const buffer = await Packer.toBuffer(doc);
 
-    return new NextResponse(buffer, {
-      headers: {
-        'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        'Content-Disposition': `attachment; filename="${(title || 'audio-drama').replace(/[^a-zA-Z0-9\s-]/g, '')}_Audio_Drama.docx"`,
-      },
-    });
+    const persisted = await persistProjectDocument(
+      projectId, 'audio-drama', 'docx', title || 'audio-drama', buffer,
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    ).catch(() => null);
+
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'Content-Disposition': `attachment; filename="${(title || 'audio-drama').replace(/[^a-zA-Z0-9\s-]/g, '')}_Audio_Drama.docx"`,
+    };
+    if (persisted?.cdnUrl) headers['X-CDN-Url'] = persisted.cdnUrl;
+    return new NextResponse(buffer, { headers });
   } catch (error) {
     console.error('Audio drama download error:', error);
     return NextResponse.json(

@@ -126,7 +126,7 @@ export async function POST(req: NextRequest) {
 
               const imageData = results[0];
               const buffer = Buffer.from(imageData.imageBytes, 'base64');
-              const { relativePath, fileName } = saveImage(projectId, block.blockNumber, buffer, 'png');
+              const { relativePath, fileName } = await saveImage(projectId, block.blockNumber, buffer, 'png');
 
               await prisma.storyboardImage.upsert({
                 where: {

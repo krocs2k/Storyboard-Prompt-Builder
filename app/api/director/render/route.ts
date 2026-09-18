@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
+import { getProviderKeys } from '@/lib/llm';
 
 export async function POST(request: NextRequest) {
   try {
@@ -16,7 +17,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No videos provided' }, { status: 400 });
     }
 
-    const apiKey = process.env.ABACUSAI_API_KEY;
+    // DB-first (SystemConfig), falling back to the env var, so rendering works
+    // even on deployments where only the database holds the key.
+    let apiKey: string | null = null;
+    try {
+      const keys = await getProviderKeys();
+      apiKey = keys.abacusKey || process.env.ABACUSAI_API_KEY || null;
+    } catch {
+      apiKey = process.env.ABACUSAI_API_KEY || null;
+    }
     if (!apiKey) {
       return NextResponse.json({ error: 'FFmpeg API key not configured' }, { status: 500 });
     }
