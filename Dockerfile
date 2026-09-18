@@ -16,7 +16,7 @@
 # This Dockerfile assumes a CLEAN repo — no re-patching needed.
 # ==============================================================================
 
-FROM node:20-slim AS base
+FROM node:22-slim AS base
 
 # ---------- Stage 1: Install dependencies ----------
 FROM base AS deps
