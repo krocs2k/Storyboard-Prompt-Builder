@@ -144,8 +144,8 @@ function RegisterContent() {
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gradient-to-br from-rose-500 to-purple-600 mb-4">
             <Film className="w-8 h-8 text-white" />
           </div>
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Create Account</h1>
-          <p className="text-gray-600">Join Storyshot Creator</p>
+          <h1 className="text-3xl font-bold text-white mb-2">Create Account</h1>
+          <p className="text-slate-400">Join Storyshot Creator</p>
         </div>
 
         <div className="bg-gray-800 border border-gray-700 rounded-2xl shadow-xl p-8">

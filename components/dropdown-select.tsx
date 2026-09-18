@@ -22,7 +22,7 @@ export function DropdownSelect({ label, options, value, onChange }: DropdownSele
         <select
           value={value ?? ''}
           onChange={(e) => onChange?.(e?.target?.value ?? '')}
-          className="w-full px-4 py-3 bg-slate-800/50 border border-amber-500/20 rounded-xl text-amber-50 focus:outline-none focus:border-amber-500/50 focus:ring-2 focus:ring-amber-500/20 transition-all appearance-none cursor-pointer"
+          className="w-full px-4 py-3 bg-slate-800/40 border border-amber-500/15 rounded-xl text-amber-50 hover:border-amber-500/30 focus:outline-none focus:border-amber-500/50 focus:ring-2 focus:ring-amber-500/25 transition-all duration-200 appearance-none cursor-pointer"
         >
           <option value="" className="bg-slate-800">Select {label ?? ''}...</option>
           {(options ?? [])?.map((option) => (

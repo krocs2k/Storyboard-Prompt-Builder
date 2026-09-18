@@ -19,7 +19,7 @@ export function SelectionButton({ label, value, onClick, onClear }: SelectionBut
           whileHover={{ scale: 1.01 }}
           whileTap={{ scale: 0.99 }}
           onClick={onClick}
-          className="flex-1 flex items-center justify-between px-4 py-3 bg-slate-800/50 hover:bg-slate-700/50 border border-amber-500/20 hover:border-amber-500/40 rounded-xl text-left transition-all group"
+          className="flex-1 flex items-center justify-between px-4 py-3 bg-slate-800/40 hover:bg-slate-800/70 border border-amber-500/15 hover:border-amber-500/40 rounded-xl text-left transition-all duration-200 group shadow-sm hover:shadow-md hover:shadow-amber-500/5"
         >
           <span className={value ? 'text-amber-50' : 'text-amber-400/50'}>
             {value ?? `Select ${label ?? ''}...`}

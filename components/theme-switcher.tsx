@@ -126,8 +126,8 @@ export default function ThemeSwitcher() {
         onClick={() => setOpen(!open)}
         className={`w-12 h-12 rounded-full flex items-center justify-center shadow-lg transition-all border ${
           open
-            ? 'bg-white/15 border-white/20 shadow-white/5'
-            : 'bg-black/60 border-white/10 hover:bg-black/70 hover:border-white/15 shadow-black/40'
+            ? 'bg-white/15 border-white/20 shadow-white/5 ring-2 ring-amber-400/30'
+            : 'bg-black/60 border-white/10 hover:bg-black/70 hover:border-amber-400/30 shadow-black/40 hover:shadow-amber-500/10'
         }`}
         style={{ backdropFilter: 'blur(12px)' }}
         title="Change theme"

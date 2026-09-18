@@ -1662,15 +1662,18 @@ export function PromptBuilder() {
   return (
     <div className="min-h-screen">
       {/* Top Navigation Bar */}
-      <nav className="sticky top-0 z-50 bg-slate-900/95 backdrop-blur-md border-b border-slate-700/60 shadow-lg">
+      <nav className="sticky top-0 z-50 bg-slate-900/80 backdrop-blur-xl border-b border-amber-500/10 shadow-lg shadow-black/30">
         <div className="max-w-7xl mx-auto px-4">
           <div className="flex items-center justify-between h-14">
             {/* Logo & Brand */}
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center shadow-md">
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center shadow-lg shadow-amber-500/25 ring-1 ring-amber-300/30">
                 <Film className="text-slate-900" size={18} />
               </div>
-              <span className="text-lg font-bold text-white tracking-tight hidden sm:block">Storyshot Creator</span>
+              <div className="hidden sm:flex flex-col leading-none">
+                <span className="text-[15px] font-bold text-white tracking-tight">Storyshot Creator</span>
+                <span className="text-[10px] font-medium text-amber-400/70 uppercase tracking-[0.18em]">Visual Directing</span>
+              </div>
             </div>
 
             {/* Center Nav Actions */}

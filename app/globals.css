@@ -243,45 +243,69 @@
    ============================================ */
 
 body {
-  color: rgb(var(--c-base-900));
-  background-color: #ffffff;
+  color: rgb(var(--c-base-100));
+  background-color: rgb(var(--c-base-950));
+  /* Premium storyboard canvas: deep theme-aware base + soft ambient light + subtle grid */
   background-image:
-    /* Storyboard grid — horizontal lines */
+    radial-gradient(1200px 640px at 12% -8%, rgb(var(--c-accent-500) / 0.10), transparent 60%),
+    radial-gradient(1100px 720px at 108% 4%, rgb(var(--c-accent-400) / 0.06), transparent 55%),
+    radial-gradient(900px 900px at 50% 120%, rgb(var(--c-base-700) / 0.18), transparent 60%),
     repeating-linear-gradient(
       to bottom,
       transparent,
-      transparent 29px,
-      #d4d4d8 29px,
-      #d4d4d8 30px
+      transparent 31px,
+      rgb(var(--c-base-800) / 0.32) 31px,
+      rgb(var(--c-base-800) / 0.32) 32px
     ),
-    /* Storyboard grid — vertical lines */
     repeating-linear-gradient(
       to right,
       transparent,
       transparent 31px,
-      #d4d4d8 31px,
-      #d4d4d8 32px
+      rgb(var(--c-base-800) / 0.32) 31px,
+      rgb(var(--c-base-800) / 0.32) 32px
     );
+  background-attachment: fixed;
   min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  letter-spacing: -0.011em;
 }
 
-/* Custom scrollbar */
+/* Refined heading rhythm for a premium editorial feel */
+h1, h2, h3, h4 {
+  letter-spacing: -0.022em;
+  text-wrap: balance;
+}
+
+/* Custom scrollbar — elegant, unobtrusive */
 .custom-scrollbar::-webkit-scrollbar {
   width: 8px;
+  height: 8px;
 }
 
 .custom-scrollbar::-webkit-scrollbar-track {
-  background: rgb(var(--c-base-900) / 0.5);
-  border-radius: 4px;
+  background: transparent;
+  border-radius: 8px;
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background: rgb(var(--c-accent-500) / 0.3);
-  border-radius: 4px;
+  background: rgb(var(--c-accent-500) / 0.28);
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: rgb(var(--c-accent-500) / 0.5);
+  background: rgb(var(--c-accent-500) / 0.55);
+  background-clip: padding-box;
+}
+
+/* Subtle app-wide scrollbar (Firefox + fallback) */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(var(--c-accent-500) / 0.28) transparent;
 }
 
 /* Hide hydration errors */
@@ -326,7 +350,7 @@ html {
 
 /* Text gradient */
 .text-gradient {
-  background: linear-gradient(135deg, rgb(var(--c-accent-300)) 0%, rgb(var(--c-accent-500)) 50%, rgb(var(--c-accent-600)) 100%);
+  background: linear-gradient(135deg, rgb(var(--c-accent-200)) 0%, rgb(var(--c-accent-400)) 45%, rgb(var(--c-accent-600)) 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -334,9 +358,117 @@ html {
 
 /* Glass effect */
 .glass {
-  background: rgb(var(--c-base-900) / 0.95);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  background: rgb(var(--c-base-900) / 0.72);
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  border: 1px solid rgb(var(--c-base-100) / 0.06);
+}
+
+.glass-strong {
+  background: rgb(var(--c-base-950) / 0.85);
+  backdrop-filter: blur(22px) saturate(160%);
+  -webkit-backdrop-filter: blur(22px) saturate(160%);
+  border: 1px solid rgb(var(--c-base-100) / 0.08);
+}
+
+/* ============================================
+   PREMIUM UTILITY LAYER
+   Layered depth, refined motion, ambient glow
+   ============================================ */
+
+/* Soft, layered elevation — favours shadow over heavy borders */
+.shadow-premium {
+  box-shadow:
+    0 1px 2px rgb(0 0 0 / 0.28),
+    0 8px 24px -12px rgb(0 0 0 / 0.55),
+    0 24px 60px -30px rgb(0 0 0 / 0.55);
+}
+
+.shadow-premium-lg {
+  box-shadow:
+    0 2px 4px rgb(0 0 0 / 0.30),
+    0 16px 40px -18px rgb(0 0 0 / 0.6),
+    0 40px 90px -45px rgb(0 0 0 / 0.7);
+}
+
+/* Accent glow ring — for focal/active elements */
+.glow-accent {
+  box-shadow:
+    0 0 0 1px rgb(var(--c-accent-500) / 0.35),
+    0 8px 30px -8px rgb(var(--c-accent-500) / 0.35);
+}
+
+/* Interactive lift on hover — consistent across all surfaces */
+.elevate {
+  transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.28s cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 0.28s ease;
+  will-change: transform;
+}
+.elevate:hover {
+  transform: translateY(-3px);
+  box-shadow:
+    0 2px 4px rgb(0 0 0 / 0.30),
+    0 18px 44px -16px rgb(0 0 0 / 0.6),
+    0 44px 100px -50px rgb(var(--c-accent-500) / 0.25);
+}
+
+/* Hairline gradient divider */
+.premium-divider {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgb(var(--c-accent-500) / 0.35), transparent);
+}
+
+/* Reveal / entrance animations */
+@keyframes fade-in-up {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-in-up {
+  animation: fade-in-up 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.animate-fade-in {
+  animation: fade-in 0.4s ease both;
+}
+
+/* Shimmer for loading / skeleton states */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.animate-shimmer {
+  background: linear-gradient(
+    90deg,
+    rgb(var(--c-base-800) / 0.4) 25%,
+    rgb(var(--c-base-700) / 0.7) 37%,
+    rgb(var(--c-base-800) / 0.4) 63%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.6s ease-in-out infinite;
+}
+
+/* Gentle ambient float for hero/brand marks */
+@keyframes float-soft {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+.animate-float-soft {
+  animation: float-soft 5s ease-in-out infinite;
+}
+
+/* Respect reduced-motion preferences for long, comfortable sessions */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 /* Line clamp */

@@ -83,13 +83,13 @@ export function SelectionModal({
           initial={{ scale: 0.95, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           exit={{ scale: 0.95, opacity: 0 }}
-          className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 rounded-xl max-w-5xl w-full max-h-[85vh] overflow-hidden border border-amber-500/20 shadow-2xl shadow-amber-500/10"
+          className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 rounded-2xl max-w-5xl w-full max-h-[85vh] overflow-hidden border border-amber-500/25 shadow-premium-lg"
           onClick={(e) => e?.stopPropagation?.()}
         >
           {/* Header */}
-          <div className="p-6 border-b border-amber-500/20 bg-slate-900/50">
+          <div className="p-6 border-b border-amber-500/15 bg-gradient-to-r from-amber-500/[0.07] via-slate-900/40 to-transparent">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-2xl font-bold text-amber-100">{title ?? ''}</h2>
+              <h2 className="text-2xl font-bold text-amber-100 tracking-tight">{title ?? ''}</h2>
               <button
                 onClick={onClose}
                 className="p-2 hover:bg-amber-500/20 rounded-lg transition-colors text-amber-400"
@@ -125,10 +125,10 @@ export function SelectionModal({
                       onSelect?.(option);
                       onClose?.();
                     }}
-                    className={`relative rounded-xl overflow-hidden border-2 transition-all duration-300 group ${
+                    className={`relative rounded-xl overflow-hidden border-2 transition-all duration-300 group hover:-translate-y-0.5 ${
                       isSelected
-                        ? 'border-amber-400 shadow-lg shadow-amber-500/30'
-                        : 'border-slate-700 hover:border-amber-500/50'
+                        ? 'border-amber-400 shadow-lg shadow-amber-500/30 glow-accent'
+                        : 'border-slate-700/70 hover:border-amber-500/50 hover:shadow-lg hover:shadow-amber-500/10'
                     }`}
                   >
                     {/* Image or Placeholder */}

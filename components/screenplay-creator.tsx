@@ -772,13 +772,18 @@ export default function ScreenplayCreator({ onScreenplayCreated, onClose, contin
         initial={{ scale: 0.95, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.95, opacity: 0 }}
-        className="bg-slate-900 border border-amber-500/30 rounded-2xl w-full max-w-5xl h-[calc(100vh-1.5rem)] max-h-[900px] overflow-hidden flex flex-col"
+        className="bg-slate-900 border border-amber-500/25 rounded-2xl w-full max-w-5xl h-[calc(100vh-1.5rem)] max-h-[900px] overflow-hidden flex flex-col shadow-premium-lg"
       >
         {/* ─── Header ─── */}
-        <div className="flex items-center justify-between px-5 py-2.5 border-b border-slate-700/80 shrink-0">
+        <div className="flex items-center justify-between px-5 py-2.5 border-b border-amber-500/15 bg-gradient-to-r from-amber-500/[0.10] via-amber-500/[0.03] to-transparent shrink-0">
           <div className="flex items-center gap-2.5">
-            <Film className="w-5 h-5 text-amber-400" />
-            <h2 className="text-lg font-bold text-amber-400">AI Screenplay Creator</h2>
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center shadow-lg shadow-amber-500/25 ring-1 ring-amber-300/30">
+              <Film className="w-4 h-4 text-slate-900" />
+            </div>
+            <div className="flex flex-col leading-none">
+              <h2 className="text-base font-bold text-amber-50">AI Screenplay Creator</h2>
+              <span className="text-[10px] font-medium text-amber-400/70 uppercase tracking-[0.16em]">Creative Screenplay</span>
+            </div>
           </div>
           <button onClick={onClose} className="p-1.5 hover:bg-slate-800 rounded-lg transition-colors">
             <X className="w-4 h-4 text-slate-400" />

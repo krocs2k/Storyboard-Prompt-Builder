@@ -786,7 +786,7 @@ export default function DirectorPage() {
   if (!selectedProject) {
     return (
       <div className="min-h-screen bg-slate-950">
-        <div className="sticky top-0 z-40 bg-slate-900/95 backdrop-blur-md border-b border-slate-800">
+        <div className="sticky top-0 z-40 bg-slate-900/80 backdrop-blur-xl border-b border-purple-500/10 shadow-lg shadow-black/30">
           <div className="max-w-7xl mx-auto px-4 h-14 flex items-center justify-between">
             <div className="flex items-center gap-3">
               <Link href="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
@@ -798,7 +798,10 @@ export default function DirectorPage() {
               <div className="w-px h-5 bg-slate-700" />
               <div className="flex items-center gap-1.5 text-purple-400">
                 <Video size={16} />
-                <span className="font-semibold text-sm">Director</span>
+                <div className="flex flex-col leading-none">
+                  <span className="font-semibold text-sm">Director</span>
+                  <span className="text-[10px] font-medium text-purple-400/60 uppercase tracking-[0.16em] hidden sm:block">Visual Playback</span>
+                </div>
               </div>
             </div>
             <Link href="/" className="text-sm text-slate-400 hover:text-white transition-colors flex items-center gap-1">
@@ -853,7 +856,7 @@ export default function DirectorPage() {
   return (
     <div className="min-h-screen bg-slate-950">
       {/* Navbar */}
-      <div className="sticky top-0 z-40 bg-slate-900/95 backdrop-blur-md border-b border-slate-800">
+      <div className="sticky top-0 z-40 bg-slate-900/80 backdrop-blur-xl border-b border-purple-500/10 shadow-lg shadow-black/30">
         <div className="max-w-[1600px] mx-auto px-4 h-14 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <Link href="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
@@ -865,7 +868,10 @@ export default function DirectorPage() {
             <div className="w-px h-5 bg-slate-700" />
             <div className="flex items-center gap-1.5 text-purple-400">
               <Video size={16} />
-              <span className="font-semibold text-sm">Director</span>
+              <div className="flex flex-col leading-none">
+                <span className="font-semibold text-sm">Director</span>
+                <span className="text-[10px] font-medium text-purple-400/60 uppercase tracking-[0.16em] hidden sm:block">Visual Playback</span>
+              </div>
             </div>
           </div>
 
