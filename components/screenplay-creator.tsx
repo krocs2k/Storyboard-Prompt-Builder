@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Youtube, Lightbulb, Clock, Loader2, ChevronRight, RefreshCw,
@@ -145,7 +145,29 @@ export default function ScreenplayCreator({ onScreenplayCreated, onClose, contin
   const [manualTranscript, setManualTranscript] = useState('');
   
   // Concept mode state
-  const [selectedGenre, setSelectedGenre] = useState<StoryGenre | null>(null);
+  // Multi-select genres — selecting more than one produces a hybrid genre
+  const [selectedGenres, setSelectedGenres] = useState<StoryGenre[]>([]);
+
+  // Derived genre passed downstream: single selection = that genre; multiple = hybrid blend
+  const selectedGenre = useMemo<StoryGenre | null>(() => {
+    if (selectedGenres.length === 0) return null;
+    if (selectedGenres.length === 1) return selectedGenres[0];
+    return {
+      id: selectedGenres.map(g => g.id).join('+'),
+      name: selectedGenres.map(g => g.name).join(' + '),
+      description: 'Hybrid genre blending ' + selectedGenres.map(g => g.name).join(', '),
+      icon: selectedGenres[0].icon,
+      personas: selectedGenres.find(g => g.personas)?.personas,
+    };
+  }, [selectedGenres]);
+
+  const toggleGenre = useCallback((genre: StoryGenre) => {
+    setSelectedGenres(prev =>
+      prev.some(g => g.id === genre.id)
+        ? prev.filter(g => g.id !== genre.id)
+        : [...prev, genre]
+    );
+  }, []);
   const [storyIdeas, setStoryIdeas] = useState<StoryIdea[]>([]);
   const [selectedIdea, setSelectedIdea] = useState<StoryIdea | null>(null);
   const [customIdea, setCustomIdea] = useState('');
@@ -180,7 +202,7 @@ export default function ScreenplayCreator({ onScreenplayCreated, onClose, contin
              g.id.toLowerCase() === continueFrom.genre.toLowerCase()
       );
       if (matchedGenre) {
-        setSelectedGenre(matchedGenre);
+        setSelectedGenres([matchedGenre]);
       }
     }
   }, [continueFrom]);
@@ -690,7 +712,7 @@ export default function ScreenplayCreator({ onScreenplayCreated, onClose, contin
 
   const resetConceptFlow = () => {
     setConceptStep('genre');
-    setSelectedGenre(null);
+    setSelectedGenres([]);
     setStoryTropes([]);
     setSelectedTrope(null);
     setTropeSearch('');
@@ -897,7 +919,7 @@ export default function ScreenplayCreator({ onScreenplayCreated, onClose, contin
                 <div className="flex items-center gap-3 shrink-0">
                   <div>
                     <h3 className="text-base font-semibold text-white">Select a Story Genre</h3>
-                    <p className="text-slate-500 text-xs">Choose a genre to generate story ideas</p>
+                    <p className="text-slate-500 text-xs">Pick one — or select several to blend a hybrid genre</p>
                   </div>
                   <div className="flex-1" />
                   <input type="text" value={genreSearch} onChange={(e) => setGenreSearch(e.target.value)}
@@ -908,20 +930,34 @@ export default function ScreenplayCreator({ onScreenplayCreated, onClose, contin
                 {/* Genre Grid — fills remaining space */}
                 <div className="flex-1 min-h-0 overflow-y-auto rounded-lg -mx-1 px-1">
                   <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2">
-                    {filteredGenres.map((genre) => (
-                      <button key={genre.id} onClick={() => setSelectedGenre(genre)}
-                        className={`p-2.5 rounded-lg border text-left transition-all ${selectedGenre?.id === genre.id
+                    {filteredGenres.map((genre) => {
+                      const isSel = selectedGenres.some(g => g.id === genre.id);
+                      const selIndex = selectedGenres.findIndex(g => g.id === genre.id);
+                      return (
+                      <button key={genre.id} onClick={() => toggleGenre(genre)}
+                        className={`relative p-2.5 rounded-lg border text-left transition-all ${isSel
                           ? 'bg-amber-500/20 border-amber-500 shadow-sm shadow-amber-500/20'
                           : 'bg-slate-800/50 border-slate-700/60 hover:border-slate-600'}`}>
+                        {isSel && (
+                          <span className="absolute top-1.5 right-1.5 w-4 h-4 rounded-full bg-amber-500 text-slate-900 text-[10px] font-bold flex items-center justify-center">{selIndex + 1}</span>
+                        )}
                         <div className="text-xl mb-0.5">{genre.icon}</div>
                         <div className="font-medium text-white text-xs leading-tight">{genre.name}</div>
                         <div className="text-slate-500 text-[10px] mt-0.5 line-clamp-1">{genre.description}</div>
                       </button>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
 
-                <button onClick={() => { setConceptStep('tropes'); generateTropes(); }} disabled={!selectedGenre}
+                {selectedGenres.length > 1 && (
+                  <div className="shrink-0 flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/30 text-xs">
+                    <Sparkles className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                    <span className="text-slate-300">Hybrid genre: <span className="text-amber-400 font-medium">{selectedGenres.map(g => g.name).join(' + ')}</span></span>
+                  </div>
+                )}
+
+                <button onClick={() => { setConceptStep('tropes'); generateTropes(); }} disabled={selectedGenres.length === 0}
                   className="w-full py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 disabled:from-slate-600 disabled:to-slate-700 text-slate-900 disabled:text-slate-500 font-semibold rounded-xl transition-all flex items-center justify-center gap-2 text-sm shrink-0">
                   <Sparkles className="w-4 h-4" /> Discover Popular Tropes
                 </button>

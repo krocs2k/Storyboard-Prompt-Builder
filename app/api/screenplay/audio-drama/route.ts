@@ -5,6 +5,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { trackUsage } from '@/lib/usage-tracker';
 import { withSonnetSoul } from '@/lib/sonnet-soul-protocol';
+import { withCreationBible } from '@/lib/creation-bible';
 
 const CULTURAL_DIVERSITY_DIRECTIVE = `
 CULTURAL DIVERSITY MANDATE:
@@ -153,7 +154,7 @@ Write the COMPLETE audio drama script now. Every scene, every line, every sound 
       body: JSON.stringify({
         model: llm.model,
         messages: [
-          { role: 'system', content: withSonnetSoul('audio-drama', AUDIO_DRAMA_SYSTEM_PROMPT) },
+          { role: 'system', content: withSonnetSoul('audio-drama', await withCreationBible('novel', AUDIO_DRAMA_SYSTEM_PROMPT)) },
           { role: 'user', content: userPrompt }
         ],
         stream: useStream,

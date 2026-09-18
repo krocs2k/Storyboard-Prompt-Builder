@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getLLMConfig } from '@/lib/llm';
 import { trackUsage } from '@/lib/usage-tracker';
 import { withSonnetSoul } from '@/lib/sonnet-soul-protocol';
+import { withCreationBible } from '@/lib/creation-bible';
 import { repairJSON } from '@/lib/repair-json';
 
 export async function POST(request: NextRequest) {
@@ -15,7 +16,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const systemPrompt = withSonnetSoul('ideas', `You are a world-class story analyst and screenwriting expert with encyclopedic knowledge of storytelling tropes, narrative patterns, and genre conventions across film, television, animation, and literature. You understand which tropes resonate with audiences, drive compelling narratives, and have proven track records of commercial and critical success.`);
+    const systemPrompt = withSonnetSoul('ideas', await withCreationBible('screenplay', `You are a world-class story analyst and screenwriting expert with encyclopedic knowledge of storytelling tropes, narrative patterns, and genre conventions across film, television, animation, and literature. You understand which tropes resonate with audiences, drive compelling narratives, and have proven track records of commercial and critical success.`));
 
     const llm = await getLLMConfig('ideas');
     const response = await fetch(llm.baseUrl, {

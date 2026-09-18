@@ -5,6 +5,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { trackUsage } from '@/lib/usage-tracker';
 import { withSonnetSoul } from '@/lib/sonnet-soul-protocol';
+import { withCreationBible } from '@/lib/creation-bible';
 
 const CULTURAL_DIVERSITY_DIRECTIVE = `
 CULTURAL DIVERSITY MANDATE:
@@ -125,7 +126,7 @@ Write the COMPLETE novel now. Do not summarize, outline, or abbreviate. Write ev
       body: JSON.stringify({
         model: llm.model,
         messages: [
-          { role: 'system', content: withSonnetSoul('novel', NOVELIST_SYSTEM_PROMPT) },
+          { role: 'system', content: withSonnetSoul('novel', await withCreationBible('novel', NOVELIST_SYSTEM_PROMPT)) },
           { role: 'user', content: userPrompt }
         ],
         stream: useStream,

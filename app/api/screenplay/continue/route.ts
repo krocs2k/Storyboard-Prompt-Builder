@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { getLLMConfig } from '@/lib/llm';
 import { trackUsage } from '@/lib/usage-tracker';
 import { withSonnetSoul } from '@/lib/sonnet-soul-protocol';
+import { withCreationBible } from '@/lib/creation-bible';
 
 const CULTURAL_DIVERSITY_DIRECTIVE = `
 CULTURAL DIVERSITY MANDATE:
@@ -177,7 +178,7 @@ For EACH location (returning AND new):
       body: JSON.stringify({
         model: llm.model,
         messages: [
-          { role: 'system', content: withSonnetSoul('screenplay', CONTINUATION_SYSTEM_PROMPT) },
+          { role: 'system', content: withSonnetSoul('screenplay', await withCreationBible('screenplay', CONTINUATION_SYSTEM_PROMPT)) },
           { role: 'user', content: userPrompt }
         ],
         stream: useStream,
