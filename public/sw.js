@@ -7,7 +7,7 @@ const PRECACHE_ASSETS = [
   '/icon-192x192.png',
   '/icon-512x512.png',
   '/apple-touch-icon.png',
-  '/og-image.png',
+  '/og-image-v2.png',
 ];
 
 // Install event - precache essential assets

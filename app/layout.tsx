@@ -31,7 +31,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: 'Storyshot Creator',
     description: 'Craft cinematic image prompts with precision',
-    images: ['/og-image.png'],
+    images: ['/og-image-v2.png'],
   },
   icons: {
     icon: [
