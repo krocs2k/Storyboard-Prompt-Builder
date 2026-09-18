@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { generateImage, ReferenceImage } from '@/lib/imagen';
+import { generateImage, ReferenceImage, ImageModelUpdatedError } from '@/lib/imagen';
 import { getMovieStyleSettings, loadStyleReferenceImage } from '@/lib/movie-style-ref';
 import { submitJob } from '@/lib/concurrency';
 
@@ -73,6 +73,19 @@ export async function POST(req: NextRequest) {
       },
     });
   } catch (err) {
+    if (err instanceof ImageModelUpdatedError) {
+      console.warn('Image model auto-updated:', err.previousModel, '->', err.newModel);
+      return NextResponse.json(
+        {
+          error: `The image model was out of date and has been automatically updated to a current, valid model (${err.newModel}). Please retry rendering.`,
+          modelUpdated: true,
+          previousModel: err.previousModel,
+          newModel: err.newModel,
+          retry: true,
+        },
+        { status: 409 },
+      );
+    }
     console.error('Image generation failed:', err);
     const message = err instanceof Error ? err.message : 'Image generation failed';
     const stack = err instanceof Error ? err.stack : undefined;

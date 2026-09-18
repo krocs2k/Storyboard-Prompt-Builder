@@ -48,9 +48,8 @@ const GEMINI_MODELS: ProviderModel[] = [
   { id: 'gemini-2.5-pro-preview-06-05', name: 'Gemini 2.5 Pro', description: 'Most capable Gemini model', cost: '$1.25/$10 per 1M tok', functions: ['llm_ideas', 'llm_screenplay'] },
   { id: 'gemini-2.5-flash-preview-05-20', name: 'Gemini 2.5 Flash', description: 'Fast and efficient', cost: '$0.15/$3.50 per 1M tok', functions: ['llm_ideas', 'llm_screenplay'] },
   { id: 'gemini-3-flash-preview', name: 'Gemini 3 Flash', description: 'Latest Gemini flash model', cost: '$0.10/$0.40 per 1M tok', functions: ['llm_ideas', 'llm_screenplay'] },
-  // Image
-  { id: 'imagen-4.0-generate-001', name: 'Imagen 4', description: 'Highest quality, up to 2K', cost: '$0.04/image', functions: ['image'] },
-  { id: 'imagen-4.0-fast-generate-001', name: 'Imagen 4 Fast', description: 'Speed optimized', cost: '$0.02/image', functions: ['image'] },
+  // Image (Gemini-native "Nano Banana" via generateContent — the Imagen 3/4 families were retired on the Gemini API)
+  { id: 'gemini-2.5-flash-image', name: 'Nano Banana', description: 'Native image gen with text (recommended default)', cost: 'Multimodal pricing', functions: ['image'], supportsRefImage: true },
   { id: 'gemini-3.1-flash-image-preview', name: 'Nano Banana 2', description: 'Native image gen with text', cost: 'Multimodal pricing', functions: ['image'], supportsRefImage: true },
   // Video (Veo)
   { id: 'veo-3.1-generate-preview', name: 'Veo 3.1', description: '8s video, 720p–4K, native audio', cost: '~$0.35/video (8s)', functions: ['video'], supportsStartFrame: true, supportsEndFrame: true },

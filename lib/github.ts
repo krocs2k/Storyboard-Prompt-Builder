@@ -69,9 +69,10 @@ const EXCLUDE_PATTERNS = [
 // Paths excluded from backup (relative to project root)
 // ALL images are managed separately via Admin > Image Library export/import (ZIP download)
 const EXCLUDE_PATHS = [
-  'public/images',
-  'data/images',       // empty dir placeholder — Docker volume handles this
-  '.build-test',       // local test artifacts
+  'public/images',          // pre-bundled default dropdown/category images
+  'data/images',            // empty dir placeholder — Docker volume handles this
+  'data/category-images',   // admin-uploaded dropdown/category images (export via Admin > Image Library)
+  '.build-test',            // local test artifacts
 ];
 
 const INCLUDE_EXTENSIONS = [

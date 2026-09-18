@@ -4,7 +4,7 @@ import { NextRequest } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/db';
-import { generateImage } from '@/lib/imagen';
+import { generateImage, ImageModelUpdatedError } from '@/lib/imagen';
 import { saveImage } from '@/lib/image-storage';
 import { getMovieStyleSettings, loadStyleReferenceImage } from '@/lib/movie-style-ref';
 import { submitAllWithProgress } from '@/lib/concurrency';
@@ -97,6 +97,8 @@ export async function POST(req: NextRequest) {
 
       let completed = 0;
       let failed = 0;
+      let modelUpdated = false;
+      let newModelName = '';
 
       // Build job list — one per block, all submitted to the concurrency manager
       // which handles optimal parallelism, rate-limit backoff, and per-provider limits
@@ -170,24 +172,43 @@ export async function POST(req: NextRequest) {
           } else {
             failed++;
             const blockNum = id.replace('block-', '');
-            send({
-              status: 'block_error',
-              message: `Failed Block ${blockNum}: ${result.reason instanceof Error ? result.reason.message : 'Unknown error'}`,
-              total: blocksToRender.length,
-              completed,
-              failed,
-              currentBlock: parseInt(blockNum),
-            });
+            if (result.reason instanceof ImageModelUpdatedError) {
+              modelUpdated = true;
+              newModelName = result.reason.newModel;
+              send({
+                status: 'block_error',
+                message: `Block ${blockNum}: the image model was out of date and has been automatically updated to a current, valid model (${result.reason.newModel}). Please retry rendering.`,
+                modelUpdated: true,
+                newModel: result.reason.newModel,
+                total: blocksToRender.length,
+                completed,
+                failed,
+                currentBlock: parseInt(blockNum),
+              });
+            } else {
+              send({
+                status: 'block_error',
+                message: `Failed Block ${blockNum}: ${result.reason instanceof Error ? result.reason.message : 'Unknown error'}`,
+                total: blocksToRender.length,
+                completed,
+                failed,
+                currentBlock: parseInt(blockNum),
+              });
+            }
           }
         },
       });
 
       send({
         status: 'complete',
-        message: `Batch render complete: ${completed} generated, ${failed} failed, ${blocks.length - blocksToRender.length} skipped`,
+        message: modelUpdated
+          ? `Batch render complete: ${completed} generated, ${failed} failed, ${blocks.length - blocksToRender.length} skipped. The image model was updated to ${newModelName} — please retry the failed blocks.`
+          : `Batch render complete: ${completed} generated, ${failed} failed, ${blocks.length - blocksToRender.length} skipped`,
         total: blocksToRender.length,
         completed,
         failed,
+        modelUpdated,
+        newModel: newModelName,
       });
 
       controller.close();

@@ -83,11 +83,12 @@ function buildGeminiCostRates(): Record<string, { label: string; costPerUnit: nu
     rates[id] = { label: m.label, costPerUnit: Math.round(perCall * 100000) / 100000, unit: 'call' };
   }
 
-  // ── Imagen flat per-image rates (direct Google API) ──
+  // ── Legacy Imagen flat per-image rates (retired on the Gemini API; kept for historical usage labels) ──
   rates['imagen-4.0-generate-001']      = { label: 'Imagen 4 Standard', costPerUnit: 0.04,  unit: 'image' };
   rates['imagen-4.0-fast-generate-001'] = { label: 'Imagen 4 Fast',     costPerUnit: 0.02,  unit: 'image' };
 
   // Gemini-based image generation — ~22K output tokens per image at flash output rate
+  rates['gemini-2.5-flash-image']         = { label: 'Nano Banana',   costPerUnit: 0.039, unit: 'image' };
   rates['gemini-3.1-flash-image-preview'] = { label: 'Nano Banana 2', costPerUnit: 0.066, unit: 'image' };
 
   return rates;

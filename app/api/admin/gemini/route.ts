@@ -47,7 +47,7 @@ export async function GET() {
 
     // Legacy values (still used as fallback)
     const provider = configMap[PROVIDER_KEY] || 'gemini';
-    const imagenModel = configMap[IMAGEN_MODEL_KEY] || 'imagen-4.0-generate-001';
+    const imagenModel = configMap[IMAGEN_MODEL_KEY] || 'gemini-2.5-flash-image';
     const abacusImageModel = configMap[ABACUS_IMAGE_MODEL_KEY] || 'gpt-5.1';
     const abacusIdeasModel = configMap[ABACUS_LLM_IDEAS_MODEL_KEY] || '';
     const abacusScreenplayModel = configMap[ABACUS_LLM_SCREENPLAY_MODEL_KEY] || '';

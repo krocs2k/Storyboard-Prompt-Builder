@@ -55,6 +55,13 @@ coverage
 # Redundant files
 docker-prepare-prisma.sh
 
+# System dropdown/category images — NOT bundled in the deploy.
+# Served at runtime from the persistent data volume, and any missing ones
+# fall back to BunnyCDN via the /images -> /api/category-images middleware
+# rewrite. Re-populate via Admin > Image Library import if ever needed.
+public/images
+data/category-images
+
 # IMPORTANT: Do NOT ignore these — needed for Docker builds:
 # - yarn.lock.bak (canonical lock file)
 # - package.json

@@ -80,6 +80,16 @@ export default function ApiConfigPage() {
   const [bunnyTesting, setBunnyTesting] = useState(false);
   const [bunnyMigrating, setBunnyMigrating] = useState(false);
 
+  // ── Image Model Registry state ──
+  type ImgModelEntry = { apiName: string; displayName: string; pricePerImage: number; active: boolean };
+  const [imgRegistry, setImgRegistry] = useState<ImgModelEntry[]>([]);
+  const [imgCheapest, setImgCheapest] = useState<string | null>(null);
+  const [imgLive, setImgLive] = useState<string[] | null>(null);
+  const [imgLiveError, setImgLiveError] = useState<string | null>(null);
+  const [imgRegLoading, setImgRegLoading] = useState(true);
+  const [imgRegSaving, setImgRegSaving] = useState(false);
+  const [imgRegRefreshing, setImgRegRefreshing] = useState(false);
+
   useEffect(() => { setMounted(true); }, []);
 
   useEffect(() => {
@@ -136,9 +146,74 @@ export default function ApiConfigPage() {
     }
   }, []);
 
+  const fetchImgRegistry = useCallback(async (refresh = false) => {
+    if (refresh) setImgRegRefreshing(true); else setImgRegLoading(true);
+    try {
+      const res = await fetch(`/api/admin/gemini/models${refresh ? '?refresh=true' : ''}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      if (Array.isArray(data.registry)) setImgRegistry(data.registry);
+      setImgCheapest(data.cheapestActive || null);
+      if (refresh) {
+        setImgLive(Array.isArray(data.live) ? data.live : null);
+        setImgLiveError(data.liveError || null);
+        if (data.liveError) {
+          setMessage({ type: 'error', text: `Could not reach the provider: ${data.liveError}` });
+        } else {
+          setMessage({ type: 'success', text: `Refreshed. Provider reports ${Array.isArray(data.live) ? data.live.length : 0} valid image model(s).` });
+        }
+      }
+    } catch (err) {
+      console.error('Failed to fetch image model registry:', err);
+    } finally {
+      setImgRegLoading(false);
+      setImgRegRefreshing(false);
+    }
+  }, []);
+
+  const saveImgRegistry = async () => {
+    setImgRegSaving(true);
+    setMessage(null);
+    try {
+      const cleaned = imgRegistry
+        .map(m => ({ ...m, apiName: m.apiName.trim() }))
+        .filter(m => m.apiName);
+      if (cleaned.length === 0) {
+        setMessage({ type: 'error', text: 'Add at least one model with an API name.' });
+        setImgRegSaving(false);
+        return;
+      }
+      const res = await fetch('/api/admin/gemini/models', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ models: cleaned }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Save failed');
+      if (Array.isArray(data.registry)) setImgRegistry(data.registry);
+      setImgCheapest(data.cheapestActive || null);
+      setMessage({ type: 'success', text: 'Image model registry saved.' });
+    } catch (err) {
+      setMessage({ type: 'error', text: err instanceof Error ? err.message : 'Failed to save registry' });
+    } finally {
+      setImgRegSaving(false);
+    }
+  };
+
+  const updateImgRow = (idx: number, patch: Partial<ImgModelEntry>) => {
+    setImgRegistry(prev => prev.map((m, i) => (i === idx ? { ...m, ...patch } : m)));
+  };
+  const removeImgRow = (idx: number) => setImgRegistry(prev => prev.filter((_, i) => i !== idx));
+  const addImgRow = () => setImgRegistry(prev => [...prev, { apiName: '', displayName: '', pricePerImage: 0, active: true }]);
+  const addLiveModel = (name: string) => {
+    setImgRegistry(prev => prev.some(m => m.apiName === name)
+      ? prev
+      : [...prev, { apiName: name, displayName: name, pricePerImage: 0, active: false }]);
+  };
+
   useEffect(() => {
-    if (session?.user?.role === 'admin') { fetchConfig(); fetchBunny(); }
-  }, [session, fetchConfig, fetchBunny]);
+    if (session?.user?.role === 'admin') { fetchConfig(); fetchBunny(); fetchImgRegistry(false); }
+  }, [session, fetchConfig, fetchBunny, fetchImgRegistry]);
 
   // ── BunnyCDN management ──
 
@@ -854,6 +929,134 @@ export default function ApiConfigPage() {
                     </div>
                   );
                 })}
+              </div>
+            </div>
+
+            {/* ═══ Section: Image Model Registry ═══ */}
+            <div>
+              <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
+                <ImageIcon className="w-5 h-5 text-emerald-500" />
+                Image Model Registry
+              </h2>
+              <p className="text-gray-500 text-sm mb-4">
+                Manage the image models the app is allowed to use — the exact <span className="font-mono">API name</span> sent in the provider call, a friendly name, and the price per image. The app always renders with the <strong>cheapest active</strong> model to protect margin, and if a model name stops being valid it is automatically replaced with the cheapest valid one (you&apos;ll be prompted to retry). Use <strong>Refresh from provider</strong> to pull the list of model names Google currently accepts.
+              </p>
+
+              <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="text-sm text-gray-300">
+                    {imgCheapest
+                      ? <>Current render model (cheapest active): <span className="font-mono text-emerald-400">{imgCheapest}</span></>
+                      : <span className="text-amber-400">No active model — add or activate one below.</span>}
+                  </div>
+                  <button
+                    onClick={() => fetchImgRegistry(true)}
+                    disabled={imgRegRefreshing}
+                    className="flex items-center gap-2 px-3 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-700 disabled:text-gray-500 text-white rounded-lg transition-colors font-medium text-sm"
+                  >
+                    {imgRegRefreshing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+                    Refresh from provider
+                  </button>
+                </div>
+
+                {imgRegLoading ? (
+                  <div className="flex items-center gap-2 text-gray-400 text-sm py-6"><Loader2 className="w-4 h-4 animate-spin" /> Loading registry…</div>
+                ) : (
+                  <>
+                    {/* Header row */}
+                    <div className="hidden md:grid grid-cols-12 gap-2 px-1 text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                      <div className="col-span-4">API name (used in call)</div>
+                      <div className="col-span-3">Display name</div>
+                      <div className="col-span-2">Price / image (USD)</div>
+                      <div className="col-span-2">Active</div>
+                      <div className="col-span-1"></div>
+                    </div>
+                    {imgRegistry.map((m, idx) => {
+                      const validOnProvider = imgLive ? imgLive.includes(m.apiName) : null;
+                      return (
+                        <div key={idx} className="grid grid-cols-1 md:grid-cols-12 gap-2 items-center bg-gray-800/50 rounded-lg p-2">
+                          <div className="md:col-span-4 flex items-center gap-2">
+                            <input
+                              value={m.apiName}
+                              onChange={e => updateImgRow(idx, { apiName: e.target.value })}
+                              placeholder="gemini-2.5-flash-image"
+                              className="w-full px-2 py-1.5 bg-gray-900 border border-gray-700 rounded text-white text-sm font-mono focus:outline-none focus:border-emerald-500"
+                            />
+                            {validOnProvider === true && <span title="Valid on provider"><ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" /></span>}
+                            {validOnProvider === false && <span title="Not reported by provider"><ShieldX className="w-4 h-4 text-red-400 shrink-0" /></span>}
+                          </div>
+                          <div className="md:col-span-3">
+                            <input
+                              value={m.displayName}
+                              onChange={e => updateImgRow(idx, { displayName: e.target.value })}
+                              placeholder="Friendly name"
+                              className="w-full px-2 py-1.5 bg-gray-900 border border-gray-700 rounded text-white text-sm focus:outline-none focus:border-emerald-500"
+                            />
+                          </div>
+                          <div className="md:col-span-2">
+                            <input
+                              type="number" step="0.001" min="0"
+                              value={m.pricePerImage}
+                              onChange={e => updateImgRow(idx, { pricePerImage: parseFloat(e.target.value) || 0 })}
+                              className="w-full px-2 py-1.5 bg-gray-900 border border-gray-700 rounded text-white text-sm focus:outline-none focus:border-emerald-500"
+                            />
+                          </div>
+                          <div className="md:col-span-2">
+                            <button
+                              onClick={() => updateImgRow(idx, { active: !m.active })}
+                              className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${m.active ? 'bg-emerald-600 hover:bg-emerald-500 text-white' : 'bg-gray-700 hover:bg-gray-600 text-gray-300'}`}
+                            >
+                              {m.active ? 'Active' : 'Inactive'}
+                            </button>
+                          </div>
+                          <div className="md:col-span-1 flex justify-end">
+                            <button onClick={() => removeImgRow(idx)} className="p-1.5 text-gray-500 hover:text-red-400 transition-colors" title="Remove">
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+
+                    <div className="flex flex-wrap items-center gap-3 pt-2">
+                      <button onClick={addImgRow} className="px-3 py-2 bg-gray-700 hover:bg-gray-600 text-gray-200 rounded-lg text-sm font-medium transition-colors">+ Add model</button>
+                      <button
+                        onClick={saveImgRegistry}
+                        disabled={imgRegSaving}
+                        className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-gray-700 disabled:text-gray-500 text-white rounded-lg transition-colors font-medium text-sm"
+                      >
+                        {imgRegSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                        Save registry
+                      </button>
+                    </div>
+
+                    {/* Live provider results */}
+                    {imgLiveError && (
+                      <p className="text-sm text-red-400">Provider refresh error: {imgLiveError}. Check the Gemini API key above.</p>
+                    )}
+                    {imgLive && imgLive.length > 0 && (
+                      <div className="border-t border-gray-800 pt-3">
+                        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Image models the provider currently accepts</p>
+                        <div className="flex flex-wrap gap-2">
+                          {imgLive.map(name => {
+                            const inRegistry = imgRegistry.some(m => m.apiName === name);
+                            return (
+                              <button
+                                key={name}
+                                onClick={() => addLiveModel(name)}
+                                disabled={inRegistry}
+                                className={`px-2 py-1 rounded text-xs font-mono transition-colors ${inRegistry ? 'bg-gray-800 text-gray-500 cursor-default' : 'bg-blue-600/20 text-blue-300 hover:bg-blue-600/40'}`}
+                                title={inRegistry ? 'Already in registry' : 'Add to registry (inactive, set a price)'}
+                              >
+                                {inRegistry ? '✓ ' : '+ '}{name}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
             </div>
 

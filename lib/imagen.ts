@@ -4,6 +4,33 @@ import { prisma } from '@/lib/db';
 import { trackUsage } from '@/lib/usage-tracker';
 import { type ApiProvider } from '@/lib/llm';
 import { ALL_HYBRID_CONFIG_KEYS, FUNCTION_CONFIG_KEYS } from '@/lib/data/provider-models';
+import {
+  getImageModelRegistry,
+  activeModelNames,
+  cheapestActiveModel,
+  fetchLiveGeminiImageModels,
+  isInvalidModelError,
+  type ImageModelEntry,
+} from '@/lib/image-model-registry';
+
+/**
+ * Thrown when image generation failed because the configured model name was no
+ * longer valid on the provider, and the app has AUTOMATICALLY reconciled the
+ * registry and updated the stored model name to a current, valid, CHEAPEST
+ * option. API routes translate this into a "please retry" response so the user
+ * can re-run the same render with the corrected model. Never an upgrade: the
+ * replacement is always the cheapest valid model to protect margin.
+ */
+export class ImageModelUpdatedError extends Error {
+  previousModel: string;
+  newModel: string;
+  constructor(previousModel: string, newModel: string) {
+    super(`Image model "${previousModel}" was no longer valid and has been updated to "${newModel}". Please retry.`);
+    this.name = 'ImageModelUpdatedError';
+    this.previousModel = previousModel;
+    this.newModel = newModel;
+  }
+}
 
 // Cache the DB-fetched config for 60 seconds to avoid hitting DB on every call
 let cachedDbConfig: {
@@ -74,16 +101,125 @@ async function getGeminiClient(apiKey?: string): Promise<GoogleGenAI> {
   return new GoogleGenAI({ apiKey: key });
 }
 
-// Models that use the Imagen generateImages API
+// Models that use the legacy Imagen generateImages (predict) API.
+// NOTE: The Imagen 3/4 families have been decommissioned on the Gemini API
+// (the generateImages/predict endpoint returns 404 NOT_FOUND for them). They
+// are kept here only so legacy selections can be detected and rerouted.
 const IMAGEN_MODELS = [
   'imagen-4.0-generate-001',
   'imagen-4.0-fast-generate-001',
+  'imagen-4.0-ultra-generate-001',
+  'imagen-3.0-generate-002',
 ];
 
 // Models that use the Gemini generateContent API (Nano Banana family)
 const GEMINI_IMAGE_MODELS = [
+  'gemini-2.5-flash-image',
   'gemini-3.1-flash-image-preview',
+  'gemini-3.1-flash-image',
+  'gemini-3.1-flash-lite-image',
+  'gemini-3-pro-image',
 ];
+
+// Current default Gemini-native image model (GA "Nano Banana").
+const DEFAULT_GEMINI_IMAGE_MODEL = 'gemini-2.5-flash-image';
+
+// The Imagen 3/4 families no longer exist on the Gemini API. Any legacy
+// imagen-* selection (from stale config or old defaults) is transparently
+// rerouted to the current Gemini-native image model so generation keeps working.
+function normalizeGeminiImageModel(model?: string | null): string {
+  if (!model || /^imagen[-.]/i.test(model)) return DEFAULT_GEMINI_IMAGE_MODEL;
+  return model;
+}
+
+type ImageConfig = Awaited<ReturnType<typeof loadImageConfig>>;
+
+/**
+ * Resolve the Gemini image model to actually call. A legacy imagen-* selection
+ * is rerouted, and any model that is NOT an active entry in the managed registry
+ * falls back to the CHEAPEST active model (margin-safe — never an upgrade).
+ */
+function resolveRegistryModel(registry: ImageModelEntry[], requestedRaw?: string | null): string {
+  const requested = normalizeGeminiImageModel(requestedRaw);
+  const active = activeModelNames(registry);
+  if (active.includes(requested)) return requested;
+  const cheapest = cheapestActiveModel(registry);
+  return cheapest?.apiName || requested || DEFAULT_GEMINI_IMAGE_MODEL;
+}
+
+/**
+ * Attempt to automatically recover from an "invalid/unknown model name" error:
+ * pull the live list of valid image models from the provider, then pick the
+ * CHEAPEST active registry model that the provider currently serves and persist
+ * it as the stored model name (no redeploy needed). Returns the new model name
+ * when a *different*, valid, cheaper-or-equal replacement was applied, else null
+ * (caller then rethrows the original error).
+ */
+async function autoRecoverImageModel(
+  config: ImageConfig,
+  registry: ImageModelEntry[],
+  attemptedModel: string,
+): Promise<string | null> {
+  if (!config.geminiKey) return null;
+  const { ids } = await fetchLiveGeminiImageModels(config.geminiKey);
+  const validNames = new Set(ids);
+  const newEntry = cheapestActiveModel(registry, validNames.size > 0 ? validNames : undefined);
+  if (!newEntry) return null;
+  // If the cheapest valid model is the one we just tried, the failure is not a
+  // model-name problem we can fix — don't claim an update; let the caller rethrow.
+  if (newEntry.apiName === attemptedModel) return null;
+  try {
+    await prisma.systemConfig.upsert({
+      where: { key: 'IMAGEN_MODEL' },
+      update: { value: newEntry.apiName },
+      create: { key: 'IMAGEN_MODEL', value: newEntry.apiName },
+    });
+    if (config.fnImageModel) {
+      const imgKeys = FUNCTION_CONFIG_KEYS.image;
+      await prisma.systemConfig.upsert({
+        where: { key: imgKeys.modelKey },
+        update: { value: newEntry.apiName },
+        create: { key: imgKeys.modelKey, value: newEntry.apiName },
+      });
+    }
+  } catch (e) {
+    console.warn('[imagen] Failed to persist auto-recovered model name:', e);
+  }
+  invalidateImagenCache();
+  console.warn(`[imagen] Auto-recovered invalid image model "${attemptedModel}" -> "${newEntry.apiName}" (cheapest valid).`);
+  return newEntry.apiName;
+}
+
+/**
+ * Run a Gemini image generation with registry-based model resolution and
+ * automatic model-name recovery. On an invalid-model error, reconciles the
+ * registry against the provider, updates the stored model to the cheapest valid
+ * option, and throws ImageModelUpdatedError so the route can prompt a retry.
+ */
+async function generateGeminiImagesWithRecovery(
+  config: ImageConfig,
+  key: string,
+  prompt: string,
+  options: Parameters<typeof generateWithGeminiMultiRef>[3],
+  requestedRaw: string | null,
+  needsMultimodal: boolean,
+): Promise<{ results: ImageGenerationResult[]; usedModel: string }> {
+  const registry = await getImageModelRegistry();
+  const model = resolveRegistryModel(registry, requestedRaw);
+  const ai = await getGeminiClient(key);
+  try {
+    const results = needsMultimodal
+      ? await generateWithGeminiMultiRef(ai, model, prompt, options)
+      : await generateWithGemini(ai, model, prompt, options);
+    return { results, usedModel: model };
+  } catch (err) {
+    if (isInvalidModelError(err)) {
+      const recovered = await autoRecoverImageModel(config, registry, model);
+      if (recovered) throw new ImageModelUpdatedError(model, recovered);
+    }
+    throw err;
+  }
+}
 
 import { IMAGE_GENERATION_MODELS } from '@/lib/data/abacus-models';
 
@@ -614,18 +750,11 @@ export async function generateImage(
         results = await generateWithOpenAI(key, usedModel, prompt, options);
       } else if (prov === 'gemini') {
         usedProvider = 'gemini';
-        const model = config.fnImageModel || config.imagenModel || 'imagen-4.0-generate-001';
-        const ai = await getGeminiClient(key);
-        if (needsMultimodal) {
-          usedModel = GEMINI_IMAGE_MODELS[0] || 'gemini-3.1-flash-image-preview';
-          results = await generateWithGeminiMultiRef(ai, usedModel, prompt, options);
-        } else if (GEMINI_IMAGE_MODELS.includes(model)) {
-          usedModel = model;
-          results = await generateWithGemini(ai, model, prompt, options);
-        } else {
-          usedModel = model;
-          results = await generateWithImagen(ai, model, prompt, options);
-        }
+        const gen = await generateGeminiImagesWithRecovery(
+          config, key, prompt, options, config.fnImageModel || config.imagenModel, needsMultimodal,
+        );
+        results = gen.results;
+        usedModel = gen.usedModel;
       } else {
         // Abacus
         usedProvider = 'abacus';
@@ -649,20 +778,11 @@ export async function generateImage(
   // ── Gemini path ──
   else if (config.geminiKey) {
     usedProvider = 'gemini';
-    const ai = await getGeminiClient();
-    const model = config.imagenModel || 'imagen-4.0-generate-001';
-
-    if (needsMultimodal) {
-      const geminiModel = GEMINI_IMAGE_MODELS[0] || 'gemini-3.1-flash-image-preview';
-      usedModel = geminiModel;
-      results = await generateWithGeminiMultiRef(ai, geminiModel, prompt, options);
-    } else if (GEMINI_IMAGE_MODELS.includes(model)) {
-      usedModel = model;
-      results = await generateWithGemini(ai, model, prompt, options);
-    } else {
-      usedModel = model;
-      results = await generateWithImagen(ai, model, prompt, options);
-    }
+    const gen = await generateGeminiImagesWithRecovery(
+      config, config.geminiKey, prompt, options, config.imagenModel, needsMultimodal,
+    );
+    results = gen.results;
+    usedModel = gen.usedModel;
   }
   // ── OpenAI fallback ──
   else if (config.openaiKey) {

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSession, signOut } from 'next-auth/react';
 import Link from 'next/link';
@@ -1478,8 +1478,9 @@ export function PromptBuilder() {
     promptText: string,
     imageKey: string,
     label?: string,
-    explicitRefImages?: Array<{ base64: string; mimeType: string; role: string; label: string }>
-  ) => {
+    explicitRefImages?: Array<{ base64: string; mimeType: string; role: string; label: string }>,
+    _isModelRetry?: boolean
+  ): Promise<void> => {
     setGeneratingImageFor(imageKey);
     setImageGenError(null);
     try {
@@ -1503,6 +1504,18 @@ export function PromptBuilder() {
         throw new Error(`Image generation failed (status ${res.status}). Please try again.`);
       }
       const data = await res.json();
+      if (res.status === 409 && data?.modelUpdated) {
+        // The image model name was out of date; the app has automatically
+        // reconciled it to a current, valid, cheapest model. Retry once
+        // automatically so the render goes through with the corrected name.
+        if (!_isModelRetry) {
+          setImageGenError(`The image model was out of date and has been automatically updated to ${data.newModel}. Retrying…`);
+          setGeneratingImageFor(null);
+          await generateImageFromPromptRef.current?.(promptText, imageKey, label, explicitRefImages, true);
+          return;
+        }
+        throw new Error(`The image model was updated to ${data.newModel}, but the render still failed. Please try again.`);
+      }
       if (!res.ok) throw new Error(data.error || 'Image generation failed');
 
       const { base64, mimeType } = data.image;
@@ -1565,6 +1578,11 @@ export function PromptBuilder() {
       setGeneratingImageFor(null);
     }
   }, [selections?.aspectRatio, selections?.movie?.id, selections?.subjectAction, selections?.environment, currentProject?.id, detectReferenceImages]);
+
+  // Keep a live ref so the handler can invoke itself for the one automatic
+  // retry after an image-model auto-recovery, without a stale closure.
+  const generateImageFromPromptRef = useRef(generateImageFromPrompt);
+  generateImageFromPromptRef.current = generateImageFromPrompt;
 
   const copyToClipboard = async () => {
     try {

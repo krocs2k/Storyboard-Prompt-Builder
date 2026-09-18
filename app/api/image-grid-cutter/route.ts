@@ -46,6 +46,35 @@ function parseAspectRatio(ratio: string): { width: number; height: number } {
   return { width: w, height: h };
 }
 
+// Strip uniform-colour borders / gutters (black, white, or any solid frame)
+// from the edges of an extracted segment so the delivered images are clean.
+// Uses a safety guard so a legitimate image with a large flat edge (e.g. sky)
+// is never over-cropped away.
+async function trimUniformBorders(buffer: Buffer): Promise<Buffer> {
+  try {
+    const original = await sharp(buffer).metadata();
+    const ow = original.width || 0;
+    const oh = original.height || 0;
+    if (ow < 4 || oh < 4) return buffer;
+
+    // threshold ~18 tolerates slight JPEG noise / anti-aliasing on the border edge
+    const trimmedBuffer = await sharp(buffer).trim({ threshold: 18 }).toBuffer();
+    const trimmed = await sharp(trimmedBuffer).metadata();
+    const tw = trimmed.width || 0;
+    const th = trimmed.height || 0;
+
+    // Guard: if trimming removed more than ~55% of either dimension it most
+    // likely ate real content (not just a border) — keep the original instead.
+    if (tw < ow * 0.45 || th < oh * 0.45 || tw < 1 || th < 1) {
+      return buffer;
+    }
+    return trimmedBuffer;
+  } catch {
+    // sharp.trim throws when the whole image is a single colour — nothing to keep
+    return buffer;
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     await ensureDirs();
@@ -59,6 +88,8 @@ export async function POST(request: NextRequest) {
     const outputFormat = (formData.get('outputFormat') as string) || 'jpg';
     const mode = (formData.get('mode') as string) || 'grid'; // 'grid' or 'auto'
     const regionsJson = formData.get('regions') as string || '[]';
+    // Remove uniform-colour borders/gutters from each cut image (default on)
+    const removeBorders = (formData.get('removeBorders') as string) !== 'false';
     
     if (!files || files.length === 0) {
       return NextResponse.json(
@@ -130,18 +161,23 @@ export async function POST(request: NextRequest) {
           if (extractWidth < 1 || extractHeight < 1) continue;
           
           // Extract the detected region
-          let segment = sharp(buffer).extract({
+          const extractedBuffer = await sharp(buffer).extract({
             left,
             top,
             width: extractWidth,
             height: extractHeight
-          });
-          
+          }).toBuffer();
+
+          // Remove any uniform-colour borders/gutters so the cut image is clean
+          const cleanBuffer = removeBorders ? await trimUniformBorders(extractedBuffer) : extractedBuffer;
+          const cleanMeta = await sharp(cleanBuffer).metadata();
+          const cleanWidth = cleanMeta.width || extractWidth;
+
           // Step 1: Crop to target aspect ratio and materialize to buffer
-          const outputWidth = extractWidth;
-          const outputHeight = Math.round(extractWidth / targetAspectRatio);
+          const outputWidth = cleanWidth;
+          const outputHeight = Math.round(cleanWidth / targetAspectRatio);
           
-          const croppedBuffer = await segment.resize({
+          const croppedBuffer = await sharp(cleanBuffer).resize({
             width: outputWidth,
             height: outputHeight,
             fit: 'cover',
@@ -186,18 +222,23 @@ export async function POST(request: NextRequest) {
             const extractWidth = (col === cols - 1) ? imgWidth - left : cellWidth;
             const extractHeight = (row === rows - 1) ? imgHeight - top : cellHeight;
             
-            let segment = sharp(buffer).extract({
+            const extractedBuffer = await sharp(buffer).extract({
               left,
               top,
               width: extractWidth,
               height: extractHeight
-            });
-            
-            const outputWidth = extractWidth;
-            const outputHeight = Math.round(extractWidth / targetAspectRatio);
+            }).toBuffer();
+
+            // Remove any uniform-colour borders/gutters so the cut image is clean
+            const cleanBuffer = removeBorders ? await trimUniformBorders(extractedBuffer) : extractedBuffer;
+            const cleanMeta = await sharp(cleanBuffer).metadata();
+            const cleanWidth = cleanMeta.width || extractWidth;
+
+            const outputWidth = cleanWidth;
+            const outputHeight = Math.round(cleanWidth / targetAspectRatio);
             
             // Step 1: Crop to target aspect ratio and materialize to buffer
-            const croppedBuffer = await segment.resize({
+            const croppedBuffer = await sharp(cleanBuffer).resize({
               width: outputWidth,
               height: outputHeight,
               fit: 'cover',

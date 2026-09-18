@@ -58,6 +58,7 @@ export default function ImageGridCutter({ isOpen, onClose }: ImageGridCutterProp
   const [rows, setRows] = useState(2);
   const [cols, setCols] = useState(2);
   const [outputFormat, setOutputFormat] = useState('jpg');
+  const [removeBorders, setRemoveBorders] = useState(true);
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -182,6 +183,7 @@ export default function ImageGridCutter({ isOpen, onClose }: ImageGridCutterProp
       formData.append('aspectRatio', aspectRatio);
       formData.append('outputFormat', outputFormat);
       formData.append('mode', cutMode);
+      formData.append('removeBorders', String(removeBorders));
 
       if (cutMode === 'auto') {
         formData.append('regions', JSON.stringify(detectedRegions.map(r => ({
@@ -374,6 +376,31 @@ export default function ImageGridCutter({ isOpen, onClose }: ImageGridCutterProp
                     </select>
                   </div>
                 </div>
+
+                {/* Remove Borders toggle */}
+                <button
+                  type="button"
+                  onClick={() => setRemoveBorders(v => !v)}
+                  className="w-full flex items-start gap-3 text-left bg-slate-800/50 hover:bg-slate-800 border border-slate-700 rounded-xl p-3 transition-colors"
+                >
+                  <span
+                    className={`mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded border transition-colors ${
+                      removeBorders
+                        ? 'bg-amber-500 border-amber-500 text-slate-900'
+                        : 'border-slate-600 bg-slate-700'
+                    }`}
+                  >
+                    {removeBorders && (
+                      <svg viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5">
+                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                      </svg>
+                    )}
+                  </span>
+                  <span>
+                    <span className="block text-sm font-medium text-white">Remove borders from cut images</span>
+                    <span className="block text-xs text-slate-500 mt-0.5">Automatically trims any solid-colour frame, gutter, or seam (black/white/etc.) off the edges so you get clean images.</span>
+                  </span>
+                </button>
 
                 {/* Grid Preview (grid mode) */}
                 {cutMode === 'grid' && (
