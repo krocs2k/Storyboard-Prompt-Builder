@@ -10,6 +10,11 @@ eslint: {
     ignoreBuildErrors: false,
   },
   images: { unoptimized: true },
+  // Dev chunk URLs are not content-hashed, so a cached copy outlives an edit.
+  async headers() {
+    if (process.env.NODE_ENV !== 'development') return [];
+    return [{ source: '/_next/static/:path*', headers: [{ key: 'Cache-Control', value: 'no-store, must-revalidate' }] }];
+  },
   webpack: (config, { dev, isServer }) => {
     if (!isServer) {
       // Content hashes only exist in a production compilation. `next dev` builds chunks on
@@ -18,6 +23,9 @@ eslint: {
       if (!dev) {
         config.output.filename = 'static/chunks/[name]-[contenthash:8].js';
         config.output.chunkFilename = 'static/chunks/[contenthash:16].js';
+      } else {
+        // Hashed entry names give every edit a new URL; the dev Pages Router loads pages/* by name.
+        config.output.filename = ({ chunk }) => (chunk.name || '').startsWith('pages/') ? 'static/chunks/[name].js' : 'static/chunks/[name]-[contenthash:8].js';
       }
       if (process.env.NEXT_OUTPUT_MODE === 'standalone') {
         try {

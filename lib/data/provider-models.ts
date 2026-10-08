@@ -45,9 +45,17 @@ export interface ProviderInfo {
 // ── Gemini Models (via @google/genai SDK + OpenAI-compatible endpoint) ──
 const GEMINI_MODELS: ProviderModel[] = [
   // LLM
-  { id: 'gemini-2.5-pro-preview-06-05', name: 'Gemini 2.5 Pro', description: 'Most capable Gemini model', cost: '$1.25/$10 per 1M tok', functions: ['llm_ideas', 'llm_screenplay'] },
-  { id: 'gemini-2.5-flash-preview-05-20', name: 'Gemini 2.5 Flash', description: 'Fast and efficient', cost: '$0.15/$3.50 per 1M tok', functions: ['llm_ideas', 'llm_screenplay'] },
-  { id: 'gemini-3-flash-preview', name: 'Gemini 3 Flash', description: 'Latest Gemini flash model', cost: '$0.10/$0.40 per 1M tok', functions: ['llm_ideas', 'llm_screenplay'] },
+  // Model names aligned with the October 2026 Gemini lineup (pricing per 1M tokens, input/output)
+  { id: 'gemini-3.8-flash', name: 'Gemini 3.8 Flash', description: 'Latest Gemini Flash', cost: '$0.75/$3.75 per 1M tok', functions: ['llm_ideas', 'llm_screenplay'] },
+  { id: 'gemini-3.7-flash', name: 'Gemini 3.7 Flash', description: 'Fast Gemini 3.7', cost: '$0.75/$3.75 per 1M tok', functions: ['llm_ideas', 'llm_screenplay'] },
+  { id: 'gemini-3.6-flash', name: 'Gemini 3.6 Flash', description: 'Fast Gemini 3.6', cost: '$0.75/$3.75 per 1M tok', functions: ['llm_ideas', 'llm_screenplay'] },
+  { id: 'gemini-3.5-flash', name: 'Gemini 3.5 Flash', description: 'Gemini 3.5 Flash', cost: '$1.50/$9 per 1M tok', functions: ['llm_ideas', 'llm_screenplay'] },
+  { id: 'gemini-3.5-flash-lite', name: 'Gemini 3.5 Flash Lite', description: 'Lightweight Gemini 3.5', cost: '$0.30/$2.50 per 1M tok', functions: ['llm_ideas', 'llm_screenplay'] },
+  { id: 'gemini-3.1-pro-preview', name: 'Gemini 3.1 Pro', description: 'Pro-tier Gemini', cost: '$2/$12 per 1M tok', functions: ['llm_ideas', 'llm_screenplay'] },
+  { id: 'gemini-3.1-flash-lite', name: 'Gemini 3.1 Flash Lite', description: 'Ultra-lightweight Gemini', cost: '$0.25/$1.50 per 1M tok', functions: ['llm_ideas', 'llm_screenplay'] },
+  { id: 'gemini-3-flash-preview', name: 'Gemini 3 Flash', description: 'Fast, cost-efficient (default)', cost: '$0.50/$3 per 1M tok', functions: ['llm_ideas', 'llm_screenplay'] },
+  { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', description: 'High-quality Gemini reasoning', cost: '$1.25/$10 per 1M tok', functions: ['llm_ideas', 'llm_screenplay'] },
+  { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', description: 'Fast Gemini 2.5', cost: '$0.30/$2.50 per 1M tok', functions: ['llm_ideas', 'llm_screenplay'] },
   // Image (Gemini-native "Nano Banana" via generateContent — the Imagen 3/4 families were retired on the Gemini API)
   { id: 'gemini-2.5-flash-image', name: 'Nano Banana', description: 'Native image gen with text (recommended default)', cost: 'Multimodal pricing', functions: ['image'], supportsRefImage: true },
   { id: 'gemini-3.1-flash-image-preview', name: 'Nano Banana 2', description: 'Native image gen with text', cost: 'Multimodal pricing', functions: ['image'], supportsRefImage: true },
@@ -61,14 +69,31 @@ const GEMINI_MODELS: ProviderModel[] = [
 // ── OpenAI Models (via api.openai.com) ──
 const OPENAI_MODELS: ProviderModel[] = [
   // LLM
-  { id: 'gpt-4.1', name: 'GPT-4.1', description: 'Latest GPT-4 variant', cost: '$2/$8 per 1M tok', functions: ['llm_ideas', 'llm_screenplay'] },
+  // Synced against the live api.openai.com /v1/models catalog — October 2026 (pricing per 1M tokens, input/output)
+  { id: 'gpt-6.1-sol', name: 'GPT-6.1 Sol', description: 'Newest GPT-6.1 flagship', cost: '$2/$10 per 1M tok', functions: ['llm_ideas', 'llm_screenplay'] },
+  { id: 'gpt-6-astra', name: 'GPT-6 Astra', description: 'Top-tier GPT-6 (premium)', cost: '$10/$50 per 1M tok', functions: ['llm_ideas', 'llm_screenplay'] },
+  { id: 'gpt-6-sol', name: 'GPT-6 Sol', description: 'Balanced GPT-6', cost: '$2/$10 per 1M tok', functions: ['llm_ideas', 'llm_screenplay'] },
+  { id: 'gpt-6-luna', name: 'GPT-6 Luna', description: 'Fast, ultra-low-cost GPT-6', cost: '$0.10/$0.50 per 1M tok', functions: ['llm_ideas', 'llm_screenplay'] },
+  { id: 'gpt-5.6-sol', name: 'GPT-5.6 Sol', description: 'High-capability GPT-5.6', cost: '$4/$20 per 1M tok', functions: ['llm_ideas', 'llm_screenplay'] },
+  { id: 'gpt-5.6-terra', name: 'GPT-5.6 Terra', description: 'Balanced GPT-5.6', cost: '$2/$12 per 1M tok', functions: ['llm_ideas', 'llm_screenplay'] },
+  { id: 'gpt-5.6-luna', name: 'GPT-5.6 Luna', description: 'Low-cost GPT-5.6', cost: '$0.20/$1.20 per 1M tok', functions: ['llm_ideas', 'llm_screenplay'] },
+  { id: 'gpt-5.5', name: 'GPT-5.5', description: 'GPT-5.5 flagship', cost: '$5/$30 per 1M tok', functions: ['llm_ideas', 'llm_screenplay'] },
+  { id: 'gpt-5.4', name: 'GPT-5.4', description: 'GPT-5.4 flagship', cost: '$2.50/$15 per 1M tok', functions: ['llm_ideas', 'llm_screenplay'] },
+  { id: 'gpt-5.4-mini', name: 'GPT-5.4 Mini', description: 'Compact GPT-5.4', cost: '$0.75/$4.50 per 1M tok', functions: ['llm_ideas', 'llm_screenplay'] },
+  { id: 'gpt-5.4-nano', name: 'GPT-5.4 Nano', description: 'Ultra-light GPT-5.4', cost: '$0.20/$1.25 per 1M tok', functions: ['llm_ideas', 'llm_screenplay'] },
+  { id: 'gpt-5.2', name: 'GPT-5.2', description: 'GPT-5.2 reasoning model', cost: '$1.75/$14 per 1M tok', functions: ['llm_ideas', 'llm_screenplay'] },
+  { id: 'gpt-5.1', name: 'GPT-5.1', description: 'GPT-5.1 reasoning model', cost: '$1.25/$10 per 1M tok', functions: ['llm_ideas', 'llm_screenplay'] },
+  { id: 'gpt-5', name: 'GPT-5', description: 'GPT-5 reasoning model', cost: '$1.25/$10 per 1M tok', functions: ['llm_ideas', 'llm_screenplay'] },
+  { id: 'gpt-5-mini', name: 'GPT-5 Mini', description: 'Compact GPT-5', cost: '$0.25/$2 per 1M tok', functions: ['llm_ideas', 'llm_screenplay'] },
+  { id: 'gpt-5-nano', name: 'GPT-5 Nano', description: 'Ultra-light GPT-5', cost: '$0.05/$0.40 per 1M tok', functions: ['llm_ideas', 'llm_screenplay'] },
+  { id: 'gpt-4.1', name: 'GPT-4.1', description: 'Reliable long-context GPT-4.1', cost: '$2/$8 per 1M tok', functions: ['llm_ideas', 'llm_screenplay'] },
   { id: 'gpt-4.1-mini', name: 'GPT-4.1 Mini', description: 'Compact and efficient', cost: '$0.40/$1.60 per 1M tok', functions: ['llm_ideas', 'llm_screenplay'] },
   { id: 'gpt-4.1-nano', name: 'GPT-4.1 Nano', description: 'Ultra-lightweight', cost: '$0.10/$0.40 per 1M tok', functions: ['llm_ideas', 'llm_screenplay'] },
-  { id: 'gpt-4o', name: 'GPT-4o', description: 'Multimodal flagship', cost: '$2.50/$10 per 1M tok', functions: ['llm_ideas', 'llm_screenplay'] },
+  { id: 'gpt-4o', name: 'GPT-4o', description: 'Multimodal GPT-4o', cost: '$2.50/$10 per 1M tok', functions: ['llm_ideas', 'llm_screenplay'] },
   { id: 'gpt-4o-mini', name: 'GPT-4o Mini', description: 'Cost-efficient multimodal', cost: '$0.15/$0.60 per 1M tok', functions: ['llm_ideas', 'llm_screenplay'] },
   { id: 'o3', name: 'o3', description: 'Advanced reasoning', cost: '$2/$8 per 1M tok', functions: ['llm_ideas', 'llm_screenplay'] },
-  { id: 'o3-mini', name: 'o3 Mini', description: 'Efficient reasoning', cost: '$1.10/$4.40 per 1M tok', functions: ['llm_ideas', 'llm_screenplay'] },
-  { id: 'o4-mini', name: 'o4 Mini', description: 'Latest reasoning mini', cost: '$1.10/$4.40 per 1M tok', functions: ['llm_ideas', 'llm_screenplay'] },
+  { id: 'o4-mini', name: 'o4 Mini', description: 'Efficient reasoning', cost: '$1.10/$4.40 per 1M tok', functions: ['llm_ideas', 'llm_screenplay'] },
+  { id: 'o3-mini', name: 'o3 Mini', description: 'Efficient reasoning (older)', cost: '$1.10/$4.40 per 1M tok', functions: ['llm_ideas', 'llm_screenplay'] },
   // Image  
   { id: 'gpt-image-1', name: 'GPT Image 1', description: 'Native GPT image generation', cost: '~$0.04/image', functions: ['image'], supportsRefImage: true },
   { id: 'dall-e-3', name: 'DALL-E 3', description: 'High quality image generation', cost: '$0.04–$0.12/image', functions: ['image'] },
