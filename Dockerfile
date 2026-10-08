@@ -29,6 +29,8 @@ WORKDIR /build
 
 COPY package.json ./
 COPY yarn.loc[k] yarn.lock.ba[k] ./
+# Local shim referenced by package.json "resolutions" (replaces deprecated node-domexception)
+COPY shims ./shims
 
 # yarn.lock.bak is the canonical lock file from the backup
 RUN if [ -f yarn.lock.bak ] && [ ! -s yarn.lock ]; then \
@@ -36,7 +38,7 @@ RUN if [ -f yarn.lock.bak ] && [ ! -s yarn.lock ]; then \
     fi
 
 RUN if [ -s yarn.lock ]; then \
-      yarn install --frozen-lockfile --network-timeout 120000 || yarn install --network-timeout 120000; \
+      yarn install --frozen-lockfile --network-timeout 120000; \
     else \
       yarn install --network-timeout 120000; \
     fi

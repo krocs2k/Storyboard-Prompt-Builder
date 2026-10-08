@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import sharp from 'sharp';
-import archiver from 'archiver';
+import JSZip from 'jszip';
 import { promises as fs } from 'fs';
 import path from 'path';
 
@@ -276,32 +276,18 @@ export async function POST(request: NextRequest) {
     
     // Create ZIP file
     const zipFilename = `grid-cut-${sessionId}.zip`;
-    const zipPath = path.join(ZIP_DIR, zipFilename);
-    
-    await new Promise<void>((resolve, reject) => {
-      const output = require('fs').createWriteStream(zipPath);
-      const archive = archiver('zip', { zlib: { level: 9 } });
-      
-      output.on('close', resolve);
-      archive.on('error', reject);
-      
-      archive.pipe(output);
-      
-      for (const img of cutImages) {
-        archive.append(img.buffer, { name: img.filename });
-      }
-      
-      archive.finalize();
+    const zip = new JSZip();
+    for (const img of cutImages) {
+      zip.file(img.filename, img.buffer);
+    }
+    const zipBuffer = await zip.generateAsync({
+      type: 'nodebuffer',
+      compression: 'DEFLATE',
+      compressionOptions: { level: 9 },
     });
     
     // Clean up session directory
     await fs.rm(sessionDir, { recursive: true, force: true });
-    
-    // Read ZIP file and return
-    const zipBuffer = await fs.readFile(zipPath);
-    
-    // Delete ZIP file immediately after reading
-    await fs.unlink(zipPath).catch(() => {});
     
     return new Response(zipBuffer, {
       headers: {

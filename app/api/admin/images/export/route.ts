@@ -6,7 +6,7 @@ import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import * as fs from 'fs';
 import * as path from 'path';
-import archiver from 'archiver';
+import JSZip from 'jszip';
 
 /**
  * GET - Export ALL images under public/images/ as a ZIP file.
@@ -129,29 +129,24 @@ export async function GET() {
   }
 
   // Create ZIP archive
-  const archive = archiver('zip', { zlib: { level: 6 } });
-  const chunks: Buffer[] = [];
+  const zip = new JSZip();
 
-  await new Promise<void>((resolve, reject) => {
-    archive.on('data', (chunk: Buffer) => chunks.push(chunk));
-    archive.on('end', resolve);
-    archive.on('error', reject);
+  // Add manifest
+  zip.file('manifest.json', JSON.stringify(manifest, null, 2));
 
-    // Add manifest
-    archive.append(JSON.stringify(manifest, null, 2), { name: 'manifest.json' });
+  // Add overrides database snapshot
+  zip.file('overrides.json', JSON.stringify(overridesData, null, 2));
 
-    // Add overrides database snapshot
-    archive.append(JSON.stringify(overridesData, null, 2), { name: 'overrides.json' });
+  // Add ALL image files, preserving subdirectory structure (streamed from disk)
+  for (const { fullPath, zipPath } of allImageFiles) {
+    zip.file(`images/${zipPath}`, fs.createReadStream(fullPath));
+  }
 
-    // Add ALL image files, preserving subdirectory structure
-    for (const { fullPath, zipPath } of allImageFiles) {
-      archive.file(fullPath, { name: `images/${zipPath}` });
-    }
-
-    archive.finalize();
+  const zipBuffer = await zip.generateAsync({
+    type: 'nodebuffer',
+    compression: 'DEFLATE',
+    compressionOptions: { level: 6 },
   });
-
-  const zipBuffer = Buffer.concat(chunks);
 
   return new Response(zipBuffer, {
     headers: {
