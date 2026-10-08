@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getLLMConfig } from '@/lib/llm';
+import { getLLMConfig, llmFetch } from '@/lib/llm';
 import { storyGenres } from '@/lib/data/story-genres';
 import { trackUsage } from '@/lib/usage-tracker';
 import { withSonnetSoul } from '@/lib/sonnet-soul-protocol';
@@ -88,7 +88,7 @@ Respond in JSON format:
 Respond with raw JSON only. Do not include code blocks, markdown, or any other formatting.`;
 
     const llm = await getLLMConfig('ideas');
-    const response = await fetch(llm.baseUrl, {
+    const response = await llmFetch(llm, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

@@ -1,6 +1,6 @@
 export const dynamic = 'force-dynamic';
 
-import { getLLMConfig } from '@/lib/llm';
+import { getLLMConfig, llmFetch } from '@/lib/llm';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import mammoth from 'mammoth';
@@ -110,7 +110,7 @@ export async function POST(request: Request) {
         // For PDF, use LLM with base64
         const base64String = buffer.toString('base64');
         const llm = await getLLMConfig();
-        const extractResponse = await fetch(llm.baseUrl, {
+        const extractResponse = await llmFetch(llm, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -210,7 +210,7 @@ For EACH location in the screenplay:
 
     const llm = await getLLMConfig('screenplay');
     const useStream = llm.supportsStreaming;
-    const response = await fetch(llm.baseUrl, {
+    const response = await llmFetch(llm, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

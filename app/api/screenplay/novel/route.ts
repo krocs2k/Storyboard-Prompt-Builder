@@ -1,6 +1,6 @@
 export const dynamic = 'force-dynamic';
 
-import { getLLMConfig } from '@/lib/llm';
+import { getLLMConfig, llmFetch } from '@/lib/llm';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { trackUsage } from '@/lib/usage-tracker';
@@ -117,7 +117,7 @@ Write the COMPLETE novel now. Do not summarize, outline, or abbreviate. Write ev
 
     const llm = await getLLMConfig('screenplay');
     const useStream = llm.supportsStreaming;
-    const response = await fetch(llm.baseUrl, {
+    const response = await llmFetch(llm, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

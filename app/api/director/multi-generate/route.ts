@@ -8,7 +8,7 @@ import sharp from 'sharp';
 import * as fs from 'fs';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
-import { getLLMConfig } from '@/lib/llm';
+import { getLLMConfig, llmFetch } from '@/lib/llm';
 import { mirrorToBunnyFromApiPath } from '@/lib/bunny-storage';
 
 const DATA_DIR = process.env.DATA_DIR || path.join(process.cwd(), 'data');
@@ -79,7 +79,7 @@ async function detectRegions(buffer: Buffer, mimeType: string, gridSize: number)
     const base64Image = llmBuffer.toString('base64');
     const llm = await getLLMConfig();
 
-    const response = await fetch(llm.baseUrl, {
+    const response = await llmFetch(llm, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${llm.apiKey}` },
       body: JSON.stringify({

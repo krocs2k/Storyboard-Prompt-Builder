@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { getLLMConfig } from '@/lib/llm';
+import { getLLMConfig, llmFetch } from '@/lib/llm';
 import { trackUsage } from '@/lib/usage-tracker';
 import { withSonnetSoul } from '@/lib/sonnet-soul-protocol';
 import { buildShotLevelOptions } from '@/lib/auto-select-helpers';
@@ -145,7 +145,7 @@ export async function POST(request: NextRequest) {
 
     const llm = await getLLMConfig();
     const useStream = llm.supportsStreaming;
-    const response = await fetch(llm.baseUrl, {
+    const response = await llmFetch(llm, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

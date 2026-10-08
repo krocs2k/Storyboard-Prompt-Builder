@@ -232,6 +232,51 @@ export async function getLLMConfig(purpose: LLMPurpose = 'default'): Promise<LLM
 
   throw new Error('No LLM API key configured. Set your API key in Admin > API Configuration.');
 }
+/** OpenAI reasoning-family models (GPT-5+, o-series) — reject max_tokens/temperature and spend tokens on hidden reasoning. */
+function isOpenAIReasoningModel(model: string): boolean {
+  return /^(gpt-[5-9]|o\d)/i.test(model);
+}
+
+/**
+ * Adapt a chat-completions request body to the target provider's parameter rules.
+ * Native OpenAI: `max_tokens` is deprecated and REJECTED by newer models → send `max_completion_tokens`
+ * (accepted by every current OpenAI chat model). Reasoning models also only accept the default
+ * temperature, and their hidden reasoning counts against the limit, so give them headroom.
+ * Gemini / Abacus bodies are passed through unchanged.
+ */
+export function adaptLLMBody(llm: Pick<LLMConfig, 'provider' | 'baseUrl' | 'model'>, body: Record<string, unknown>): Record<string, unknown> {
+  const isOpenAI = llm.provider === 'openai' || /api\.openai\.com/i.test(llm.baseUrl);
+  if (!isOpenAI) return body;
+  const out: Record<string, unknown> = { ...body };
+  const model = String(out.model || llm.model || '');
+  if (out.max_tokens !== undefined) {
+    if (out.max_completion_tokens === undefined) out.max_completion_tokens = out.max_tokens;
+    delete out.max_tokens;
+  }
+  if (isOpenAIReasoningModel(model)) {
+    delete out.temperature;
+    delete out.top_p;
+    if (typeof out.max_completion_tokens === 'number' && out.max_completion_tokens < 16000) {
+      out.max_completion_tokens = 16000;
+    }
+  }
+  return out;
+}
+
+/** fetch() wrapper for chat-completions calls — applies provider-specific body adaptation. */
+export function llmFetch(llm: LLMConfig, init: RequestInit): Promise<Response> {
+  if (typeof init.body === 'string') {
+    try {
+      const parsed = JSON.parse(init.body);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        init = { ...init, body: JSON.stringify(adaptLLMBody(llm, parsed)) };
+      }
+    } catch {
+      // non-JSON body — send as-is
+    }
+  }
+  return fetch(llm.baseUrl, init);
+}
 
 export async function callLLM(options: {
   messages: Array<{ role: string; content: string }>;
@@ -251,7 +296,7 @@ export async function callLLM(options: {
   if (options.maxTokens) body.max_tokens = options.maxTokens;
   if (options.responseFormat) body.response_format = options.responseFormat;
 
-  const response = await fetch(config.baseUrl, {
+  const response = await llmFetch(config, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

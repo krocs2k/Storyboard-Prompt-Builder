@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import sharp from 'sharp';
-import { getLLMConfig } from '@/lib/llm';
+import { getLLMConfig, llmFetch } from '@/lib/llm';
 import { trackUsage } from '@/lib/usage-tracker';
 
 export const dynamic = 'force-dynamic';
@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
 
     const llm = await getLLMConfig();
 
-    const response = await fetch(llm.baseUrl, {
+    const response = await llmFetch(llm, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

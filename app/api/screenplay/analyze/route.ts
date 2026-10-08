@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import mammoth from 'mammoth';
 import WordExtractor from 'word-extractor';
-import { getLLMConfig } from '@/lib/llm';
+import { getLLMConfig, llmFetch } from '@/lib/llm';
 import { trackUsage } from '@/lib/usage-tracker';
 import { withSonnetSoul } from '@/lib/sonnet-soul-protocol';
 import { repairJSON } from '@/lib/repair-json';
@@ -73,7 +73,7 @@ export async function POST(request: NextRequest) {
 
     // Analyze the screenplay and generate recommendations
     const llm = await getLLMConfig();
-    const analysisResponse = await fetch(llm.baseUrl, {
+    const analysisResponse = await llmFetch(llm, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -169,7 +169,7 @@ Respond with raw JSON only.`
     }
     
     // Extract dialogue with delivery instructions
-    const dialogueResponse = await fetch(llm.baseUrl, {
+    const dialogueResponse = await llmFetch(llm, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

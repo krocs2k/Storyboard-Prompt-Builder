@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getLLMConfig } from '@/lib/llm';
+import { getLLMConfig, llmFetch } from '@/lib/llm';
 import { trackUsage } from '@/lib/usage-tracker';
 import { mapIdsToSelections, type AutoSelectionIds } from '@/lib/auto-select-helpers';
 import { repairJSON } from '@/lib/repair-json';
@@ -71,7 +71,7 @@ Return JSON: {"imageType":"<id>","camera":"<id>","focalLength":"<id>","lensType"
     const timeout = setTimeout(() => controller.abort(), 30000); // 30s timeout
 
     try {
-      const response = await fetch(config.baseUrl, {
+      const response = await llmFetch(config, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
